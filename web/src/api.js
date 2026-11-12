@@ -99,9 +99,14 @@ export const api = {
   /**
    * 파일 올리기. 파일마다 별 1개. → { created: Star[], skipped: [{ file_name, reason }] }
    * onProgress(pct)는 0~100 정수. 글자 칸을 파일보다 먼저 붙인다(서버가 그 순서로 읽는다).
+   * signal(AbortSignal)로 멈추면 ApiError(0, 'aborted')로 끝난다(연결 끊김으로 알리지 않는다).
    */
-  uploadStars({ planet_id, memo, files, titles } = {}, onProgress) {
+  uploadStars({ planet_id, memo, files, titles } = {}, onProgress, { signal } = {}) {
     return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new ApiError(0, 'aborted'));
+        return;
+      }
       const form = new FormData();
       form.append('planet_id', String(planet_id ?? ''));
       form.append('memo', memo ?? '');
@@ -130,6 +135,11 @@ export const api = {
       };
       xhr.ontimeout = () => reject(offline());
       xhr.onabort = () => reject(new ApiError(0, 'aborted'));
+      if (signal) {
+        const stop = () => xhr.abort();
+        signal.addEventListener('abort', stop, { once: true });
+        xhr.onloadend = () => signal.removeEventListener('abort', stop);
+      }
       xhr.send(form);
     });
   },

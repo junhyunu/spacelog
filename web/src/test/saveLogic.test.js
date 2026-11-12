@@ -3,6 +3,8 @@ import {
   FILE_MAX,
   FILES_MAX,
   canSubmit,
+  clampPlanetName,
+  classifyDrop,
   classifyPaste,
   cleanPlanetName,
   dedupeFiles,
@@ -11,6 +13,8 @@ import {
   partitionBySize,
   pastedTitle,
   planetNameLength,
+  remainingAfterUpload,
+  remainingMessage,
   resultToast,
   saveError,
   splitDropped,
@@ -264,10 +268,184 @@ describe('saveError', () => {
     expect(saveError(E(400, 'invalid_name'))).toBe('행성 이름은 1~20자로 써 주세요');
     expect(saveError(E(400, 'empty_body'))).toBe('내용을 입력해 주세요');
     expect(saveError(E(400, 'no_files'))).toBe('담긴 파일이 없어요');
+    expect(saveError(E(0, 'aborted'), 'file')).toBe('올리기를 멈췄어요');
   });
   test('anything else is the general line', () => {
     expect(saveError(E(500, 'server_error'))).toBe('저장하지 못했어요. 다시 눌러 주세요');
     expect(saveError(new Error('x'))).toBe('저장하지 못했어요. 다시 눌러 주세요');
     expect(saveError(null)).toBe('저장하지 못했어요. 다시 눌러 주세요');
+  });
+});
+
+describe('classifyPaste: text beside rendered images (Excel · Word · PowerPoint)', () => {
+  const img = (name = 'image.png') => ({ name, size: 10, lastModified: 1, type: 'image/png' });
+  test('text + image files → the text wins', () => {
+    expect(classifyPaste({ files: [img()], text: '이름\t점수\n가\t10' })).toEqual({ tab: 'text', text: '이름\t점수\n가\t10' });
+    expect(classifyPaste({ files: [img(), img('b.png')], text: ' https://a.com/x ' })).toEqual({ tab: 'link', url: 'https://a.com/x' });
+  });
+  test('image without text, or blank text → files', () => {
+    const f = img();
+    expect(classifyPaste({ files: [f], text: '' })).toEqual({ tab: 'file', files: [f] });
+    expect(classifyPaste({ files: [f], text: '  \n' })).toEqual({ tab: 'file', files: [f] });
+    expect(classifyPaste({ files: [f] })).toEqual({ tab: 'file', files: [f] });
+  });
+  test('text + a file that is not an image → files', () => {
+    const pdf = { name: 'a.pdf', size: 1, lastModified: 1, type: 'application/pdf' };
+    const f = img();
+    expect(classifyPaste({ files: [f, pdf], text: 'x' })).toEqual({ tab: 'file', files: [f, pdf] });
+    expect(classifyPaste({ files: [file('a.txt')], text: 'x' }).tab).toBe('file');
+  });
+});
+
+describe('classifyDrop', () => {
+  test('uri-list: first http(s) address, comment lines skipped', () => {
+    expect(
+      classifyDrop({ types: ['text/uri-list', 'text/plain'], uriList: '# 설명\r\nhttps://a.com/x\r\nhttps://b.com', text: 'https://a.com/x' }),
+    ).toEqual({ tab: 'link', url: 'https://a.com/x' });
+    expect(classifyDrop({ types: ['text/uri-list'], uriList: 'HTTP://A.com/\n' })).toEqual({ tab: 'link', url: 'HTTP://A.com/' });
+  });
+  test('uri-list without an http address falls back to the text', () => {
+    expect(classifyDrop({ types: ['text/uri-list', 'text/plain'], uriList: 'javascript:alert(1)', text: 'https://a.com' })).toEqual({
+      tab: 'link',
+      url: 'https://a.com',
+    });
+    expect(classifyDrop({ types: ['text/uri-list'], uriList: 'file:///C:/a.txt\nmailto:a@b.c' })).toBeNull();
+    expect(classifyDrop({ types: ['text/uri-list', 'text/plain'], uriList: 'javascript:alert(1)', text: 'javascript:alert(1)' })).toEqual({
+      tab: 'text',
+      text: 'javascript:alert(1)',
+    });
+  });
+  test('plain text: one address → link, anything else → text', () => {
+    expect(classifyDrop({ types: ['text/plain'], text: ' https://a.com/x\n' })).toEqual({ tab: 'link', url: 'https://a.com/x' });
+    expect(classifyDrop({ types: ['text/plain'], text: '끌어온 글 https://a.com' })).toEqual({ tab: 'text', text: '끌어온 글 https://a.com' });
+  });
+  test('files win over text', () => {
+    const f = file('a.txt');
+    expect(classifyDrop({ types: ['Files', 'text/uri-list'], uriList: 'https://a.com', files: [f] })).toEqual({ tab: 'file', files: [f] });
+  });
+  test('nothing usable → null', () => {
+    expect(classifyDrop({ types: ['text/plain'], text: '  ' })).toBeNull();
+    expect(classifyDrop({ types: ['text/html'] })).toBeNull();
+    expect(classifyDrop({})).toBeNull();
+    expect(classifyDrop()).toBeNull();
+  });
+});
+
+describe('remainingAfterUpload', () => {
+  const item = (name) => ({ id: name, file: { name } });
+  const names = (list) => list.map((it) => it.file.name);
+  const star = (file_name) => ({ id: file_name, file_name });
+  test('failed files stay, saved and final skips go', () => {
+    const items = ['a.txt', 'b.txt', 'c.txt', 'd.txt'].map(item);
+    const out = remainingAfterUpload(items, {
+      created: [star('a.txt'), star('d.txt')],
+      skipped: [
+        { file_name: 'b.txt', reason: 'failed' },
+        { file_name: 'c.txt', reason: 'duplicate' },
+      ],
+    });
+    expect(names(out)).toEqual(['b.txt']);
+    expect(out[0]).toBe(items[1]);
+  });
+  test('same name twice is matched in order', () => {
+    const items = ['a.txt', 'a.txt', 'a.txt'].map(item);
+    const out = remainingAfterUpload(items, {
+      created: [star('a.txt')],
+      skipped: [
+        { file_name: 'a.txt', reason: 'failed' },
+        { file_name: 'a.txt', reason: 'too_large' },
+      ],
+    });
+    expect(out).toEqual([items[1]]);
+    expect(out[0]).toBe(items[1]);
+  });
+  test('too_many (no name): everything after the last accounted file stays', () => {
+    const items = ['a.txt', 'b.txt', 'c.txt', 'd.txt', 'e.txt'].map(item);
+    const out = remainingAfterUpload(items, {
+      created: [star('a.txt'), star('c.txt')],
+      skipped: [
+        { file_name: 'b.txt', reason: 'duplicate' },
+        { file_name: null, reason: 'too_many' },
+      ],
+    });
+    expect(names(out)).toEqual(['d.txt', 'e.txt']);
+  });
+  test('request cut short (failed, no name) keeps named failures and the tail', () => {
+    const items = ['a.txt', 'b.txt', 'c.txt', 'd.txt'].map(item);
+    const out = remainingAfterUpload(items, {
+      created: [star('b.txt')],
+      skipped: [
+        { file_name: 'a.txt', reason: 'failed' },
+        { file_name: null, reason: 'failed' },
+      ],
+    });
+    expect(names(out)).toEqual(['a.txt', 'c.txt', 'd.txt']);
+  });
+  test('nameless skip with nothing accounted keeps everything', () => {
+    const items = ['a.txt', 'b.txt'].map(item);
+    expect(remainingAfterUpload(items, { created: [], skipped: [{ file_name: null, reason: 'failed' }] })).toEqual(items);
+  });
+  test('names are compared the way the server stores them (NFC)', () => {
+    const items = [item('가나.txt'.normalize('NFD')), item('b.txt')];
+    const out = remainingAfterUpload(items, {
+      created: [star('b.txt')],
+      skipped: [{ file_name: '가나.txt'.normalize('NFC'), reason: 'failed' }],
+    });
+    expect(out).toEqual([items[0]]);
+  });
+  test('unknown reasons count as failed; nothing to keep → empty; inputs untouched', () => {
+    const items = ['a.txt', 'b.txt'].map(item);
+    const copy = [...items];
+    expect(remainingAfterUpload(items, { created: [star('a.txt')], skipped: [{ file_name: 'b.txt', reason: 'weird' }] })).toEqual([items[1]]);
+    expect(remainingAfterUpload(items, { created: [star('a.txt'), star('b.txt')], skipped: [] })).toEqual([]);
+    expect(remainingAfterUpload(items, { created: [star('a.txt')], skipped: [{ file_name: 'b.txt', reason: 'duplicate' }] })).toEqual([]);
+    expect(remainingAfterUpload(items)).toEqual([]);
+    expect(remainingAfterUpload()).toEqual([]);
+    expect(items).toEqual(copy);
+  });
+});
+
+test('remainingMessage', () => {
+  expect(remainingMessage(2, [{ reason: 'failed' }])).toBe('2개는 저장하지 못했어요. 다시 눌러 주세요');
+  expect(remainingMessage(1200, [{ reason: 'duplicate' }, { reason: 'too_many' }])).toBe(
+    '한 번에 500개까지 띄울 수 있어요. 남은 1,200개를 이어서 띄워 주세요',
+  );
+});
+
+describe('clampPlanetName', () => {
+  const nfd = (s) => s.normalize('NFD');
+  const twentyHangul = '가나다라마바사아자차카타파하거너더러머버';
+  test('decomposed Hangul is counted after NFC: 20 syllables are not cut', () => {
+    expect([...nfd(twentyHangul)].length).toBeGreaterThan(20);
+    expect(clampPlanetName(nfd(twentyHangul))).toBe(nfd(twentyHangul));
+    expect(clampPlanetName(nfd(twentyHangul + '서'))).toBe(twentyHangul);
+  });
+  test('invisible characters are not counted', () => {
+    const twenty = 'abcdefghijklmnopqrst';
+    expect(clampPlanetName('\u200b' + twenty)).toBe('\u200b' + twenty);
+    expect(clampPlanetName('\u200b' + twenty + 'u')).toBe(twenty);
+  });
+  test('over 20 code points is cut to 20; short names are returned as typed', () => {
+    expect(clampPlanetName('a'.repeat(25))).toBe('a'.repeat(20));
+    expect([...clampPlanetName('𝒜'.repeat(21))].length).toBe(20);
+    expect(clampPlanetName('공부 ')).toBe('공부 ');
+    expect(clampPlanetName('  ' + 'a'.repeat(20))).toBe('  ' + 'a'.repeat(20));
+    expect(clampPlanetName(null)).toBe('');
+  });
+});
+
+describe('review additions', () => {
+  test('uppercase HTTP:// is accepted', () => {
+    expect(urlError('HTTP://a.com/x')).toBeNull();
+    expect(canSubmit({ tab: 'link', url: 'HTTP://A.COM', planetId: '1' })).toBe(true);
+    expect(classifyPaste({ text: 'HTTPS://A.COM/Path' })).toEqual({ tab: 'link', url: 'HTTPS://A.COM/Path' });
+  });
+  test('NFD planet names are cleaned and counted as NFC', () => {
+    const name = '공부하는 행성';
+    const twenty = '가나다라마바사아자차카타파하거너더러머버'.normalize('NFD');
+    expect(cleanPlanetName(name.normalize('NFD'))).toBe(name);
+    expect(planetNameLength(name.normalize('NFD'))).toBe(7);
+    expect(canSubmit({ tab: 'text', text: 'x', planetId: 'new', newPlanetName: twenty })).toBe(true);
+    expect(canSubmit({ tab: 'text', text: 'x', planetId: 'new', newPlanetName: twenty + '서'.normalize('NFD') })).toBe(false);
   });
 });
