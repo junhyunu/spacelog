@@ -8,8 +8,8 @@ import './styles/app.css';
 
 import { api } from './api.js';
 import { store } from './store.js';
-import { syncUniverse } from './three/planets.js';
 import { initHome } from './ui/home.js';
+import { initHud } from './ui/hud.js';
 import { toast } from './ui/toast.js';
 import { enterWorld, leaveWorld } from './ui/transition.js';
 
@@ -98,11 +98,7 @@ store.on('reachable', () => {
 initHome({ enter: enterWorld });
 $('goHome').addEventListener('click', () => leaveWorld());
 
-// 우주 안에서 데이터가 바뀌면 3D를 맞춘다.
-// TODO(Task 8): initHud()가 이 일을 맡으면(재발견 guestStar 포함) 이 줄은 지운다.
-store.on('data', () => {
-  if (!store.state.inWorld) return;
-  syncUniverse({ planets: store.state.planets, stars: store.state.stars, guestStarId: store.state.guestStarId });
-});
+// W-01 조작 UI. 우주 안에서 'data'가 올 때마다 다시 그리고 3D를 맞춘다(손님 별 포함).
+initHud();
 
 checkConnection();
