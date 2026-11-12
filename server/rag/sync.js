@@ -1,6 +1,7 @@
 // 챗봇 색인 맞추기(스펙 4장). 별이 바뀌면 파이썬 색인에 하나씩 다시 보낸다.
 // 원칙: 챗봇이 꺼져 있으면 파이썬에 아무 요청도 보내지 않는다. 빼 둔 행성의 별은 색인하지 않는다.
 // 상태는 rag_status 표에, 지워야 할 별 id 는 meta 'rag_removals' 에(별 행이 지워지면 rag_status 도 사라지므로) 남긴다.
+// 지울 목록은 별을 지우는 트랜잭션 안에서 적는다(recordRemovals). 커밋 뒤 서버가 꺼져도 잃지 않는다.
 import crypto from 'node:crypto';
 import path from 'node:path';
 
@@ -59,6 +60,41 @@ export function readUsage(db, now = Date.now) {
   const raw = readJson(db, 'chat_usage');
   if (raw && raw.month === month && Number.isInteger(raw.requests) && raw.requests >= 0) return { month, requests: raw.requests };
   return { month, requests: 0 };
+}
+
+// --- 지울 별 목록(meta 'rag_removals') ---
+// 색인에 보낸 적이 있는 별만 담는다. 그래도 한없이 커지지 않게 오래된 것부터 버린다.
+export const REMOVALS_MAX = 10_000;
+
+export function readRemovals(db) {
+  const v = readJson(db, 'rag_removals');
+  return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+}
+
+export function addRemovals(db, ids, log = console) {
+  if (!ids.length) return;
+  const set = new Set(readRemovals(db));
+  for (const id of ids) set.add(id);
+  let list = [...set];
+  if (list.length > REMOVALS_MAX) {
+    const dropped = list.length - REMOVALS_MAX;
+    list = list.slice(dropped);
+    log.warn?.(`[rag-sync] rag_removals over ${REMOVALS_MAX}: dropped the ${dropped} oldest id(s)`);
+  }
+  writeMeta(db, 'rag_removals', JSON.stringify(list));
+}
+
+// 색인에 보낸 적이 있는가: done · failed 행이 있거나, 지금 보내는 중인 별.
+export function wasSent(db, id, inFlight = null) {
+  if (id === inFlight) return true;
+  const row = db.prepare('SELECT status FROM rag_status WHERE star_id = ?').get(id);
+  return row?.status === 'done' || row?.status === 'failed';
+}
+
+// 별을 지우는 트랜잭션 안에서(별 행이 지워져 rag_status 가 사라지기 전에) 부른다.
+// 커밋 뒤 서버가 꺼져도 지울 목록이 남는다. inFlight = app.ragSync?.inFlight().
+export function recordRemovals(db, ids, inFlight = null) {
+  addRemovals(db, ids.filter((id) => wasSent(db, id, inFlight)));
 }
 
 // --- 별 → 파이썬에 보낼 모양 ---
@@ -151,6 +187,8 @@ export function createSync({
   let lastState = null;
   let pollTimer = null;
   let waiters = [];
+  let removeFailures = 0; // /remove 가 잇달아 실패한 수
+  let removeRetryAt = null; // 이 시각(ms) 전에는 /remove 를 다시 보내지 않는다
 
   const q = {
     row: db.prepare('SELECT * FROM rag_status WHERE star_id = ?'),
@@ -181,15 +219,7 @@ export function createSync({
   }
 
   // --- 지울 별 목록(meta) ---
-  const removals = () => {
-    const v = readJson(db, 'rag_removals');
-    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
-  };
-  function addRemovals(ids) {
-    const set = new Set(removals());
-    for (const id of ids) set.add(id);
-    writeMeta(db, 'rag_removals', JSON.stringify([...set]));
-  }
+  const removals = () => readRemovals(db);
   function dropRemovals(ids) {
     const done = new Set(ids);
     const rest = removals().filter((id) => !done.has(id));
@@ -247,44 +277,49 @@ export function createSync({
     }
   }
 
-  // 지울 별을 한 번에 지운다. → false 면 파이썬에 닿지 않았다.
+  // 지울 별을 한 번에 지운다. → false 면 지우지 못했다(목록은 그대로 두고, 1분 · 5분 · 30분 뒤 tick 에서 다시).
+  // 실패의 종류(storage_error · 4xx · 시간 초과 · 연결 안 됨)와 상관없이 기다린다. 성공하면 기다림을 푼다.
   async function flushRemovals() {
     const excluded = new Set(readSettings(db).excluded_planets);
     const all = removals();
     const ids = all.filter((id) => stillRemovable(id, excluded));
     if (ids.length < all.length) dropRemovals(all.filter((id) => !ids.includes(id)));
     if (!ids.length) return true;
+    if (removeRetryAt !== null && now() < removeRetryAt) return false;
     try {
-      await client().removeStars(ids);
+      await withTimeout(client().removeStars(ids));
     } catch (err) {
+      removeFailures += 1;
+      removeRetryAt = now() + RETRY_DELAYS_MS[Math.min(removeFailures, RETRY_DELAYS_MS.length) - 1];
       log.error?.(`[rag-sync] remove failed: ${err?.code ?? err?.message}`);
-      return !isUnavailable(err);
+      return false;
     }
+    removeFailures = 0;
+    removeRetryAt = null;
     dropRemovals(ids);
     return true;
   }
 
   // 별 하나를 처리한다. → 'stop' 이면 파이썬에 닿지 않았으니 그 별을 대기열 앞에 다시 두고 멈춘다.
   async function processOne(id) {
+    // 기다릴 일(/health)은 먼저 다 한다. 그 뒤로는 indexStar 를 부를 때까지 await 가 없으므로,
+    // 아래에서 읽는 설정 · 행성은 보내는 순간의 값이다(기다리는 사이에 빼거나 꺼도 보내지 않는다).
+    if (!keyBlocked && q.exists.get(id) !== undefined) await ensureEmbedKey();
+    if (!running || !db.open || !ready()) return 'stop'; // 파이썬이 내려갔다: 대기열 앞에 다시 두고 멈춘다
+    if (!enabled()) return 'ok'; // 꺼졌다: 보내지 않는다(켤 때 reconcile 이 다시 본다)
+
     const settings = readSettings(db);
     const excluded = new Set(settings.excluded_planets);
     const planet = q.planetOf.get(id);
 
-    // 지워진 별 → 색인에서 지운다.
-    // markStars 가 지울 목록에 넣어 두었다. 목록에 없으면 앞의 한 번에 이미 지워졌다.
-    if (!planet) {
-      if (!removals().includes(id)) return 'ok';
-      return (await flushRemovals()) ? 'ok' : 'stop';
-    }
+    // 지워진 별: 지울 목록은 지우는 트랜잭션이 남겼다. 대기열이 비면 pump 가 한 번에 지운다.
+    if (!planet) return 'ok';
 
     const row = q.row.get(id);
 
-    // 빼 둔 행성 → 색인에 있었을 수 있으면 지우고 skipped.
+    // 빼 둔 행성 → 색인에 있었을 수 있으면 지울 목록에 넣고 skipped(지우기는 pump 가 한 번에).
     if (excluded.has(planet.planet_id)) {
-      if (row && row.status !== 'skipped') {
-        addRemovals([id]);
-        if (!(await flushRemovals())) return 'stop';
-      }
+      if (wasSent(db, id)) addRemovals(db, [id], log);
       write(id, { status: 'skipped', content_hash: null, attempts: 0, notes: null });
       return 'ok';
     }
@@ -299,13 +334,24 @@ export function createSync({
     }
 
     const gen = generation;
-    await ensureEmbedKey();
     try {
       const res = await withTimeout(client().indexStar(built.payload, { timeout: indexTimeoutMs }));
       if (gen !== generation) {
         // 그사이 색인을 비웠다. 다시 보낸다.
         write(id, { status: 'pending', content_hash: null });
         dirty.add(id);
+        return 'ok';
+      }
+      if (res?.discarded === true) {
+        // 색인하는 사이 파이썬이 이 별의 /remove 를 받아 결과를 버렸다. 색인에 없다.
+        // 지금도 빼 둔 행성이면 skipped 그대로, 아니면 pending 으로 두고(켜져 있으면) 다시 보낸다.
+        const p = q.planetOf.get(id);
+        if (p && new Set(readSettings(db).excluded_planets).has(p.planet_id)) {
+          write(id, { status: 'skipped', content_hash: null, attempts: 0, notes: null });
+        } else {
+          write(id, { status: 'pending', content_hash: null, attempts: 0 });
+          if (enabled()) dirty.add(id);
+        }
         return 'ok';
       }
       write(id, {
@@ -507,11 +553,10 @@ export function createSync({
     pollTimer?.unref?.();
   }
 
-  // 별(들)이 바뀌었다. 꺼져 있으면 아무것도 보내지 않는다(지워진 별만 기억해 두었다가 켤 때 지운다).
+  // 별(들)이 바뀌었다. 꺼져 있으면 아무것도 보내지 않는다.
+  // 지워진 별은 지우는 트랜잭션이 recordRemovals 로 이미 목록에 남겼다. 여기서는 일정만 잡는다.
   function markStars(ids, _reason) {
     const list = (Array.isArray(ids) ? ids : [ids]).filter((x) => typeof x === 'string');
-    const gone = list.filter((id) => q.exists.get(id) === undefined);
-    if (gone.length) addRemovals(gone);
     if (!enabled()) return;
     for (const id of list) enqueue(id);
     kick();
@@ -519,6 +564,8 @@ export function createSync({
 
   return {
     markStars,
+    // 지금 파이썬에 보내는 중인 별 id(없으면 null). 별을 지우는 트랜잭션이 recordRemovals 에 넘긴다.
+    inFlight: () => current,
     markPlanet(planetId) {
       markStars(db.prepare('SELECT id FROM stars WHERE planet_id = ?').all(planetId).map((r) => r.id), 'planet');
     },
@@ -529,11 +576,7 @@ export function createSync({
         .prepare('SELECT id FROM stars WHERE planet_id IN (SELECT value FROM json_each(?))')
         .all(JSON.stringify(planetIds))
         .map((r) => r.id);
-      const indexed = stars.filter((id) => {
-        const row = q.row.get(id);
-        return row && row.status !== 'skipped';
-      });
-      if (indexed.length) addRemovals(indexed);
+      addRemovals(db, stars.filter((id) => wasSent(db, id, current)), log);
       for (const id of stars) {
         write(id, { status: 'skipped', content_hash: null, attempts: 0, notes: null });
         if (id === current) dirty.add(id); // 색인 중이던 별은 끝난 뒤 다시 보고 지운다

@@ -334,6 +334,33 @@ test('v1 → v2: re-opening is a no-op and an existing bak-2 is never overwritte
   expect(fs.readdirSync(dataDir).filter((n) => n.includes('bak')).sort()).toEqual(after);
 });
 
+test('v1 → v2 that fails and is retried reuses the bak-2 of the same version instead of making another', () => {
+  const dataDir = tempDir();
+  makeV1(dataDir);
+  // 옮기기가 실패하게 한다: conversation_id 칸이 없는 messages 표 → 색인 만들기가 실패한다.
+  const raw = new Database(path.join(dataDir, 'spacelog.db'));
+  raw.exec('CREATE TABLE messages (id TEXT PRIMARY KEY)');
+  raw.close();
+  const baks = () => fs.readdirSync(dataDir).filter((n) => n.includes('bak')).sort();
+
+  expect(() => openDb(dataDir)).toThrow();
+  expect(baks()).toEqual(['spacelog.db.bak-2']);
+  expect(() => openDb(dataDir)).toThrow();
+  expect(() => openDb(dataDir)).toThrow();
+  expect(baks()).toEqual(['spacelog.db.bak-2']);
+
+  const fix = new Database(path.join(dataDir, 'spacelog.db'));
+  fix.exec('DROP TABLE messages');
+  fix.close();
+  const db = openDb(dataDir);
+  expect(db.pragma('user_version', { simple: true })).toBe(2);
+  db.close();
+  expect(baks()).toEqual(['spacelog.db.bak-2']);
+  const bak = new Database(path.join(dataDir, 'spacelog.db.bak-2'), { readonly: true });
+  expect(bak.pragma('user_version', { simple: true })).toBe(1);
+  bak.close();
+});
+
 test('v0 straight to v2 makes one backup (bak-1) and has the chatbot tables', async () => {
   const dataDir = tempDir();
   (await makeOldData(dataDir)).close();

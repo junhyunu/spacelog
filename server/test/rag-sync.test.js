@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { RagError } from '../rag/client.js';
 import { insertStar } from '../stars.js';
 import { cleanup, makeApp } from './helpers.js';
@@ -17,17 +17,25 @@ function fakeRag({ state = 'ready', embed = 'emb-a', key = true } = {}) {
     calls,
     indexed,
     onIndex: null, // (payload) => 결과 | throw
+    onHealth: null, // () => 기다릴 것 | throw
+    onRemove: null, // (ids) => throw
+    healthCalls: 0,
     status: () => rag.st,
     client: {
-      health: async () => ({ ok: true, key, model: 'm', embed_model: rag.embed, fake: true }),
+      health: async () => {
+        rag.healthCalls += 1;
+        if (rag.onHealth) await rag.onHealth();
+        return { ok: true, key, model: 'm', embed_model: rag.embed, fake: true };
+      },
       indexStar: async (payload) => {
         calls.push(['index', payload.id, payload]);
         const res = rag.onIndex ? await rag.onIndex(payload) : { chunks: 1, notes: [] };
-        indexed.add(payload.id);
+        if (!res?.discarded) indexed.add(payload.id);
         return res;
       },
       removeStars: async (ids) => {
         calls.push(['remove', [...ids]]);
+        if (rag.onRemove) await rag.onRemove(ids);
         for (const id of ids) indexed.delete(id);
         return { removed: ids.length };
       },
@@ -103,8 +111,12 @@ describe('nothing leaves while the chatbot is off', () => {
     await s.tick();
     expect(s.rag.calls).toEqual([]);
     const settings = (await s.api('GET', '/api/chat/settings')).body;
-    expect(settings).toMatchObject({ enabled: false, consented: false, excluded_planets: [], key: true });
+    // 동의 전에는 파이썬의 /health 도 부르지 않는다(key 는 null).
+    expect(settings).toMatchObject({ enabled: false, consented: false, excluded_planets: [], key: null });
     expect(settings.rag).toEqual({ state: 'ready', reason: null });
+    expect(s.rag.healthCalls).toBe(0);
+    const after = (await s.api('PUT', '/api/chat/settings', { consented: true })).body;
+    expect(after.key).toBe(true);
   });
 
   test('turning it off stops the queue but keeps statuses; turning it on again resumes', async () => {
@@ -564,5 +576,255 @@ describe('reconcile', () => {
       total: 3, done: 1, failed: 1, pending: 0, skipped: 1, indexing: false,
       last_indexed_at: s.row(a).indexed_at,
     });
+  });
+});
+
+describe('review fixes', () => {
+  const removals = (s) => {
+    const v = s.app.db.prepare("SELECT value FROM meta WHERE key = 'rag_removals'").get();
+    return v ? JSON.parse(v.value) : [];
+  };
+  const removeCalls = (s) => s.rag.calls.filter((c) => c[0] === 'remove');
+  const chatSettings = (s) => JSON.parse(s.app.db.prepare("SELECT value FROM meta WHERE key = 'chat'").get().value);
+
+  test('/remove failing (500) → one call, then retried only after the 1 min / 5 min backoff; reset on success', async () => {
+    const s = await setup();
+    const p = await s.planet('일기');
+    const a = await s.star(p, 'a');
+    await s.enable();
+    s.rag.reset();
+    let n = 0;
+    s.rag.onRemove = async () => {
+      n += 1;
+      if (n > 20) s.rag.st = { state: 'off' }; // 끝없이 돌면 멈추게 하는 안전장치
+      throw new RagError('rag_error', { status: 500, detail: 'storage_error' });
+    };
+    await s.api('DELETE', `/api/stars/${a}`);
+    await s.app.ragSync.idle();
+    expect(removeCalls(s)).toHaveLength(1);
+    expect(removals(s)).toEqual([a]);
+    s.clock.t = T0 + 30_000;
+    await s.tick();
+    await s.tick();
+    expect(removeCalls(s)).toHaveLength(1);
+    s.clock.t = T0 + 60_000;
+    await s.tick();
+    expect(removeCalls(s)).toHaveLength(2);
+    s.clock.t = T0 + 60_000 + 4 * 60_000;
+    await s.tick();
+    expect(removeCalls(s)).toHaveLength(2);
+    s.rag.onRemove = null;
+    s.clock.t = T0 + 60_000 + 5 * 60_000;
+    await s.tick();
+    expect(removeCalls(s)).toHaveLength(3);
+    expect(removals(s)).toEqual([]);
+  });
+
+  test('/remove unavailable also backs off and keeps the removal', async () => {
+    const s = await setup();
+    const p = await s.planet('일기');
+    const a = await s.star(p, 'a');
+    await s.enable();
+    s.rag.reset();
+    s.rag.onRemove = async () => {
+      throw new RagError('unavailable', { detail: 'ECONNREFUSED' });
+    };
+    await s.api('DELETE', `/api/stars/${a}`);
+    await s.app.ragSync.idle();
+    await s.tick();
+    expect(removeCalls(s)).toHaveLength(1);
+    expect(removals(s)).toEqual([a]);
+  });
+
+  test('a /remove failure does not hold up indexing of other stars', async () => {
+    const s = await setup();
+    const p = await s.planet('일기');
+    const a = await s.star(p, 'a');
+    await s.enable();
+    s.rag.onRemove = async () => {
+      throw new RagError('rag_error', { status: 500, detail: 'storage_error' });
+    };
+    await s.api('DELETE', `/api/stars/${a}`);
+    await s.app.ragSync.idle();
+    s.rag.reset();
+    const b = await s.star(p, 'b');
+    await s.app.ragSync.idle();
+    expect(s.rag.indexCalls()).toEqual([b]);
+    expect(s.row(b).status).toBe('done');
+  });
+
+  test('discarded: excluded and included again while being indexed → indexed again, ends done', async () => {
+    const s = await setup();
+    const p = await s.planet('일기');
+    await s.enable();
+    const gate = deferred();
+    s.rag.onIndex = async () => gate.promise;
+    const a = await s.star(p, 'a'); // 색인 중(막힘)
+    await s.api('PUT', '/api/chat/settings', { excluded_planets: [p] });
+    await s.api('PUT', '/api/chat/settings', { excluded_planets: [] });
+    s.rag.onIndex = null;
+    gate.resolve({ chunks: 0, notes: [], discarded: true });
+    await s.app.ragSync.idle();
+    expect(s.rag.indexCalls()).toEqual([a, a]);
+    expect(s.row(a)).toMatchObject({ status: 'done' });
+    expect(s.rag.indexed.has(a)).toBe(true);
+  });
+
+  test('discarded while the planet is still excluded → stays skipped, not sent again', async () => {
+    const s = await setup();
+    const p = await s.planet('일기');
+    await s.enable();
+    const gate = deferred();
+    s.rag.onIndex = async () => gate.promise;
+    const a = await s.star(p, 'a');
+    await s.api('PUT', '/api/chat/settings', { excluded_planets: [p] });
+    gate.resolve({ chunks: 0, notes: [], discarded: true });
+    await s.app.ragSync.idle();
+    expect(s.rag.indexCalls()).toEqual([a]);
+    expect(s.row(a)).toMatchObject({ status: 'skipped', content_hash: null });
+  });
+
+  test('a discarded result is recorded as pending with no hash, never as done', async () => {
+    const s = await setup();
+    const p = await s.planet('일기');
+    await s.enable();
+    let first = true;
+    const seen = [];
+    s.rag.onIndex = async (payload) => {
+      if (first) {
+        first = false;
+        return { chunks: 0, notes: [], discarded: true };
+      }
+      seen.push(s.row(payload.id));
+      return { chunks: 1, notes: [] };
+    };
+    const a = await s.star(p, 'a');
+    await s.app.ragSync.idle();
+    expect(seen[0]).toMatchObject({ status: 'pending', content_hash: null });
+    expect(s.row(a).status).toBe('done');
+  });
+
+  test('excluding the planet during the awaited health check → no /index call', async () => {
+    const s = await setup();
+    const p = await s.planet('일기');
+    await s.enable();
+    // 파이썬이 다시 켜졌는데 /health 가 실패 → embedKey 가 비어 있다
+    s.rag.onHealth = async () => {
+      throw new RagError('unavailable', { detail: 'ECONNREFUSED' });
+    };
+    s.rag.st = { state: 'starting' };
+    await s.tick();
+    s.rag.st = { state: 'ready' };
+    await s.tick();
+    const gate = deferred();
+    s.rag.onHealth = () => gate.promise;
+    s.rag.reset();
+    const a = await s.star(p, 'a'); // /health 를 기다리는 중
+    // 설정 응답도 /health 를 기다리므로, 설정이 적힌 것을 본 뒤 /health 를 풀어 준다.
+    const put = s.api('PUT', '/api/chat/settings', { excluded_planets: [p] });
+    await vi.waitFor(() => expect(chatSettings(s).excluded_planets).toEqual([p]));
+    gate.resolve();
+    await put;
+    await s.app.ragSync.idle();
+    expect(s.rag.indexCalls()).toEqual([]);
+    expect(s.row(a).status).toBe('skipped');
+  });
+
+  test('turning the chatbot off during the awaited health check → no /index call', async () => {
+    const s = await setup();
+    const p = await s.planet('일기');
+    await s.enable();
+    s.rag.onHealth = async () => {
+      throw new RagError('unavailable', { detail: 'ECONNREFUSED' });
+    };
+    s.rag.st = { state: 'starting' };
+    await s.tick();
+    s.rag.st = { state: 'ready' };
+    await s.tick();
+    const gate = deferred();
+    s.rag.onHealth = () => gate.promise;
+    s.rag.reset();
+    await s.star(p, 'a');
+    const put = s.api('PUT', '/api/chat/settings', { enabled: false });
+    await vi.waitFor(() => expect(chatSettings(s).enabled).toBe(false));
+    gate.resolve();
+    await put;
+    await s.app.ragSync.idle();
+    expect(s.rag.indexCalls()).toEqual([]);
+  });
+
+  test('star delete records the removal in the same transaction (lost notification still removes it)', async () => {
+    const s = await setup();
+    const p = await s.planet('일기');
+    const a = await s.star(p, 'a');
+    await s.enable();
+    const mark = s.app.ragSync.markStars;
+    s.app.ragSync.markStars = () => {}; // 커밋 뒤 알림 전에 꺼졌다
+    await s.api('DELETE', `/api/stars/${a}`);
+    s.app.ragSync.markStars = mark;
+    expect(removals(s)).toEqual([a]);
+    s.rag.reset();
+    await s.tick();
+    expect(s.rag.calls).toEqual([['remove', [a]]]);
+    expect(removals(s)).toEqual([]);
+  });
+
+  test('planet ?stars=delete records only stars that were sent to the index', async () => {
+    const s = await setup();
+    const p = await s.planet('일기');
+    const a = await s.star(p, 'a');
+    await s.enable();
+    await s.api('PUT', '/api/chat/settings', { enabled: false });
+    await s.star(p, 'b'); // 꺼져 있는 동안 만든 별: 보낸 적 없다
+    const mark = s.app.ragSync.markStars;
+    s.app.ragSync.markStars = () => {};
+    expect((await s.api('DELETE', `/api/planets/${p}?stars=delete`)).code).toBe(204);
+    s.app.ragSync.markStars = mark;
+    expect(removals(s)).toEqual([a]);
+  });
+
+  test('a never-indexed star leaves nothing in rag_removals; an in-flight one does', async () => {
+    const s = await setup();
+    const p = await s.planet('일기');
+    const off = await s.star(p, 'off');
+    await s.api('DELETE', `/api/stars/${off}`);
+    expect(removals(s)).toEqual([]);
+    await s.enable();
+    const gate = deferred();
+    s.rag.onIndex = async () => gate.promise;
+    const a = await s.star(p, 'a'); // 색인 중
+    s.rag.onRemove = async () => {
+      throw new RagError('rag_error', { status: 500, detail: 'storage_error' });
+    };
+    await s.api('DELETE', `/api/stars/${a}`);
+    expect(removals(s)).toEqual([a]);
+    gate.resolve({ chunks: 1, notes: [] });
+    await s.app.ragSync.idle();
+  });
+
+  test('rag_removals is capped at 10,000 ids (oldest dropped with a warning)', async () => {
+    const s = await setup();
+    const p = await s.planet('일기');
+    const a = await s.star(p, 'a');
+    await s.enable();
+    const old = Array.from({ length: 10_000 }, (_, i) => `old-${i}`);
+    s.app.db.prepare("INSERT INTO meta (key, value) VALUES ('rag_removals', ?)").run(JSON.stringify(old));
+    s.rag.onRemove = async () => {
+      throw new RagError('rag_error', { status: 500, detail: 'storage_error' });
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const mark = s.app.ragSync.markStars;
+      s.app.ragSync.markStars = () => {};
+      await s.api('DELETE', `/api/stars/${a}`);
+      s.app.ragSync.markStars = mark;
+      const list = removals(s);
+      expect(list).toHaveLength(10_000);
+      expect(list[0]).toBe('old-1');
+      expect(list.at(-1)).toBe(a);
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

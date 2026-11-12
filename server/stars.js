@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { recordRemovals } from './rag/sync.js';
 
 const TITLE_FROM_BODY_MAX = 40;
 const TITLE_MAX = 200;
@@ -246,10 +247,13 @@ export function registerStars(app) {
 
   app.delete('/api/stars/:id', async (req, reply) => {
     // 첨부 행은 별과 함께(ON DELETE CASCADE) 지워지므로 지우기 전에 읽어 둔다.
+    const inFlight = app.ragSync?.inFlight?.() ?? null;
     const row = db.transaction(() => {
       const found = getRow(db, req.params.id);
       if (!found) return null;
       found.attachments = attachmentsOf(db, found.id);
+      // 챗봇 색인에서 지울 목록도 같은 트랜잭션에서(rag_status 행이 함께 지워지기 전에) 적는다.
+      recordRemovals(db, [found.id], inFlight);
       db.prepare('DELETE FROM stars WHERE id = ?').run(found.id);
       return found;
     })();

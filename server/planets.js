@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { recordRemovals } from './rag/sync.js';
 import { attachmentsByStar } from './stars.js';
 
 export const DECOS = ['town', 'crystal', 'forest', 'rock', 'ice', 'volcano', 'mushroom', 'cactus', 'flower', 'cloud'];
@@ -247,11 +248,14 @@ export function registerPlanets(app) {
       }
 
       if (mode === 'delete') {
+        const inFlight = app.ragSync?.inFlight?.() ?? null;
         const removed = db.transaction(() => {
           const rows = db.prepare('SELECT * FROM stars WHERE planet_id = ?').all(id);
           // 첨부 행은 별과 함께 지워지므로 먼저 한 번에 읽어 둔다.
           const atts = attachmentsByStar(db, rows.map((r) => r.id));
           for (const row of rows) row.attachments = atts.get(row.id);
+          // 챗봇 색인에서 지울 목록도 같은 트랜잭션에서(rag_status 행이 함께 지워지기 전에) 적는다.
+          recordRemovals(db, rows.map((r) => r.id), inFlight);
           db.prepare('DELETE FROM stars WHERE planet_id = ?').run(id);
           db.prepare('DELETE FROM planets WHERE id = ?').run(id);
           return rows;

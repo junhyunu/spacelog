@@ -34,7 +34,8 @@ export function registerChat(app) {
       enabled: s.enabled,
       consented: s.consented,
       excluded_planets: s.excluded_planets,
-      key: await keyPresence(app, rag.state),
+      // 동의 전에는 파이썬의 /health 도 부르지 않는다.
+      key: s.consented ? await keyPresence(app, rag.state) : null,
       rag,
       index: app.ragSync ? app.ragSync.status() : indexCounts(db),
       usage: readUsage(db),

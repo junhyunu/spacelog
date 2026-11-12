@@ -120,8 +120,28 @@ function migrateTo1(db) {
 
 // 옮기기 전의 DB 를 spacelog.db.bak-<판> 으로 남긴다. VACUUM INTO 는 WAL 에만 있는 쓰기까지 담은 한 파일을 만든다.
 // 임시 이름으로 만든 뒤 바꿔 달아, 복사가 중간에 끊겨도 반쪽짜리 백업이 남지 않게 한다.
-// 옮기기는 한 트랜잭션이라 실패하면 DB 가 그대로 남으므로, 다시 켤 때 백업을 새로 만들어도 같은 내용이다.
-function backup(db, dbPath, version) {
+// 옮기기는 한 트랜잭션이라 실패하면 DB 가 그대로 남으므로, 다시 켤 때는 같은 판의 백업을 그대로 쓴다.
+// 백업 파일의 user_version. DB 가 아니거나 열 수 없으면 null.
+function backupVersion(file) {
+  let bak;
+  try {
+    bak = new Database(file, { readonly: true, fileMustExist: true });
+    return bak.pragma('user_version', { simple: true });
+  } catch {
+    return null;
+  } finally {
+    bak?.close();
+  }
+}
+
+function backup(db, dbPath, version, fromVersion) {
+  // 옮기기가 실패해 다시 켤 때: 같은 판(fromVersion)의 백업이 이미 있으면 그것을 쓴다(켤 때마다 하나씩 쌓이지 않게).
+  const dir = path.dirname(dbPath);
+  const prefix = `${path.basename(dbPath)}.bak-${version}`;
+  const existing = fs.readdirSync(dir)
+    .filter((n) => (n === prefix || n.startsWith(`${prefix}-`)) && !n.endsWith('.tmp'))
+    .sort();
+  if (existing.some((n) => backupVersion(path.join(dir, n)) === fromVersion)) return;
   // 이미 있는 백업은 덮어쓰지 않는다(사용자가 되돌려 둔 옛 DB 의 진짜 백업일 수 있다).
   let bak = `${dbPath}.bak-${version}`;
   if (fs.existsSync(bak)) bak = `${bak}-${new Date().toISOString().replace(/[:.]/g, '-')}`;
@@ -147,7 +167,7 @@ export function openDb(dataDir) {
       // 별 표가 없으면 방금 만든 빈 DB 다. 옮길 것도, 백업할 것도 없다.
       const fresh = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'stars'").get() === undefined;
       // 백업 이름은 처음 밟는 판이다(0 → bak-1, 1 → bak-2). 0 에서 바로 2 로 가도 백업은 하나다.
-      if (!fresh) backup(db, dbPath, version + 1);
+      if (!fresh) backup(db, dbPath, version + 1, version);
       db.transaction(() => {
         db.exec(SCHEMA);
         if (!fresh && version < 1) migrateTo1(db);
