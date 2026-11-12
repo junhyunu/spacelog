@@ -22,6 +22,8 @@ DEFAULT_EMBED_MODEL = "text-embedding-3-small"
 DEFAULT_SEARCH_K = 8
 DEFAULT_MIN_SCORE = 0.25
 DEFAULT_FAKE_MIN_SCORE = 0.6
+# 긴 요약의 묶음(모델 호출) 수 상한. 넘으면 모델을 부르지 않고 too_broad. SPACELOG_RAG_SUM_MAX_BATCHES 로 바꾼다.
+DEFAULT_SUM_MAX_BATCHES = 12
 
 
 class ConfigError(Exception):
@@ -40,6 +42,7 @@ class Config:
     api_key: str = field(repr=False, default="")
     search_k: int = DEFAULT_SEARCH_K
     min_score: float = DEFAULT_MIN_SCORE
+    sum_max_batches: int = DEFAULT_SUM_MAX_BATCHES
 
 
 def _truthy(value) -> bool:
@@ -79,6 +82,14 @@ def load_config(environ=None, env_file=ENV_FILE) -> Config:
     if search_k < 1 or not -1.0 <= min_score <= 1.0:
         raise ConfigError("SPACELOG_RAG_K must be >= 1 and SPACELOG_RAG_MIN_SCORE within [-1, 1]")
 
+    batches_raw = str(values.get("SPACELOG_RAG_SUM_MAX_BATCHES") or "").strip()
+    try:
+        sum_max_batches = int(batches_raw) if batches_raw else DEFAULT_SUM_MAX_BATCHES
+    except ValueError as err:
+        raise ConfigError("SPACELOG_RAG_SUM_MAX_BATCHES must be an integer") from err
+    if sum_max_batches < 1:
+        raise ConfigError("SPACELOG_RAG_SUM_MAX_BATCHES must be >= 1")
+
     return Config(
         data_dir=data_dir.resolve(),
         port=port,
@@ -90,4 +101,5 @@ def load_config(environ=None, env_file=ENV_FILE) -> Config:
         api_key=api_key,
         search_k=search_k,
         min_score=min_score,
+        sum_max_batches=sum_max_batches,
     )

@@ -9,7 +9,7 @@
   {"type":"done","not_found":bool}  또는  {"type":"error","code":..,"message":..}
 
 출처는 코드가 붙인다: ask 는 모델이 마지막 줄 "사용한 조각: 1, 3" 으로 낸 번호 중 실제로 준 번호만,
-find 는 찾은 조각의 별, summarize 는 대상 별. 마지막 줄은 흘려 보내는 중에도 밖으로 내보내지 않는다.
+find 는 찾은 조각의 별, summarize 는 대상 별. 첫 "사용한 조각" 줄부터는 흘려 보내는 중에도 밖으로 내보내지 않는다.
 """
 
 import json
@@ -22,6 +22,7 @@ from datetime import date, datetime, timedelta, timezone
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 import prompts
+from config import DEFAULT_SUM_MAX_BATCHES
 
 INTENTS = ("find", "ask", "summarize", "chat")
 MAX_QUESTION = 2000
@@ -214,8 +215,23 @@ def _local_midnight(d, req):
     return datetime(d.year, d.month, d.day, tzinfo=req.tz).isoformat()
 
 
-_THIS_PLANET = re.compile(r"이\s*행성")
-_THIS_STAR = re.compile(r"이\s*(별|기록)(?!들)")
+# 계획의 "this" 가 없을 때만 쓰는 대비책. 낱말 경계를 요구해 "목성이 행성이야", "기록이 별로", "이별" 을 거른다.
+# "이별"(낱말) 때문에 별은 "이" 와 사이에 공백이 있어야 한다.
+_THIS_WORD_END = r"(?=$|[\s을를은는이가에의도만,.?!\"')])"
+_THIS_PLANET = re.compile(r"(?:^|[\s\"'(])이\s*행성" + _THIS_WORD_END)
+_THIS_STAR = re.compile(r"(?:^|[\s\"'(])이\s+별" + _THIS_WORD_END)
+
+
+def _this_target(data, question):
+    """"this" 가 가리키는 것: "planet" · "star" · None. 계획이 값을 냈으면(null 포함) 그 값만 따른다."""
+    if "this" in data:
+        this = data.get("this")
+        return this if this in ("planet", "star") else None
+    if _THIS_PLANET.search(question):
+        return "planet"
+    if _THIS_STAR.search(question):
+        return "star"
+    return None
 
 
 def build_plan(data, req, index=None):
@@ -231,7 +247,7 @@ def build_plan(data, req, index=None):
     # 기간: 모델은 현지 날짜(둘 다 포함)를 낸다 → [from 자정, to 다음 날 자정)
     d_from, d_to = _plan_date(data.get("from")), _plan_date(data.get("to"))
     if d_from and d_to and d_from > d_to:
-        d_from = d_to = None
+        d_from, d_to = d_to, d_from
     try:
         plan.start = _local_midnight(d_from, req) if d_from else None
         plan.end = _local_midnight(d_to + timedelta(days=1), req) if d_to else None
@@ -242,23 +258,21 @@ def build_plan(data, req, index=None):
     excluded = set(req.excluded_planets)
     allowed = {pid: name for pid, name in req.planets if pid not in excluded}
     by_name = {name: pid for pid, name in allowed.items() if name}
-    this = data.get("this")
+    this = _this_target(data, req.question)
+    ctx_open = _open_context(req)
     raw_planet = data.get("planet_id")
     planet_id = None
     if isinstance(raw_planet, str):
         planet_id = raw_planet if raw_planet in allowed else by_name.get(raw_planet.strip())
-    if this == "planet" or _THIS_PLANET.search(req.question):
-        ctx_planet = req.context.get("planet_id")
-        if ctx_planet in allowed:
-            planet_id = ctx_planet
+    if this == "planet" and ctx_open.get("planet_id") in allowed:
+        planet_id = ctx_open["planet_id"]
     plan.planet_id = planet_id
 
     # 별: 색인에 있고 빼 둔 행성이 아닌 것만(준 순서 유지).
     raw_stars = data.get("star_ids")
     ids = [s for s in raw_stars if isinstance(s, str) and s] if isinstance(raw_stars, list) else []
-    if this == "star" or _THIS_STAR.search(req.question):
-        if req.context.get("star_id"):
-            ids.insert(0, req.context["star_id"])
+    if this == "star" and ctx_open.get("star_id"):
+        ids.insert(0, ctx_open["star_id"])
     ids = list(dict.fromkeys(ids))[:MAX_PLAN_STARS]
     if ids and index is not None:
         known = set(index.stars_matching({"star_ids": ids, "excluded_planets": list(excluded)}))
@@ -286,13 +300,22 @@ def _week_info(today):
     }
 
 
+def _open_context(req):
+    """지금 열린 행성 · 별. 열린 행성을 빼 두었으면 그 행성과 (그 안의) 열린 별 모두 없는 것으로 본다."""
+    ctx = req.context
+    if ctx.get("planet_id") and ctx["planet_id"] in set(req.excluded_planets):
+        return {}
+    return ctx
+
+
 def _context_text(req):
+    ctx = _open_context(req)
     parts = []
-    if req.context.get("planet_id"):
-        name = req.context.get("planet_name") or ""
-        parts.append(f"열린 행성 {req.context['planet_id']}" + (f"({name})" if name else ""))
-    if req.context.get("star_id"):
-        parts.append(f"열린 별 {req.context['star_id']}")
+    if ctx.get("planet_id"):
+        name = ctx.get("planet_name") or ""
+        parts.append(f"열린 행성 {ctx['planet_id']}" + (f"({name})" if name else ""))
+    if ctx.get("star_id"):
+        parts.append(f"열린 별 {ctx['star_id']}")
     return ", ".join(parts) or "없음"
 
 
@@ -358,46 +381,56 @@ def _stream(chat, messages):
 
 # ---------- "사용한 조각" 줄 떼어 내기 ----------
 
-_DECOR = r"[ \t*_`>#\-]"
-_MARKER = re.compile(_DECOR + r"*사\s*용\s*한\s*조\s*각")
-_MARKER_LINE = re.compile(_DECOR + r"*사\s*용\s*한\s*조\s*각[ \t*_`]*[:：]?(?P<rest>[^\n]*)")
-_MARKER_KEY = "사용한조각"
-_TAIL_WINDOW = 16
+# 마커 줄: 줄 맨 앞(공백만 허용) + 정확히 "사용한 조각" + ':' 또는 '：' + 번호 · 구분자(, ，、 및 공백) 또는 "없음".
+# 이 모양이 아닌 줄(문장 속 "사용한 조각 3개", "- 사용한 조각: 1", "**사용한 조각**: 1")은 보통 답 글이다.
+_MARKER_PREFIX = "사용한 조각"
+_MARKER_LINE = re.compile(r"[ \t]*사용한 조각[ \t]*[:：][ \t]*(?P<rest>없음|[0-9,，、및 \t]*)[ \t\r]*")
+# 마커 앞부분 뒤에 올 수 있는 글(아직 다 오지 않은 마커 줄인지 판단용). _MARKER_LINE 의 모든 앞부분을 받아야 한다.
+_MARKER_REST_PARTIAL = re.compile(r"[ \t]*(?:[:：][ \t]*(?:없음?|[0-9,，、및 \t]*)[ \t\r]*)?")
 
 
-def _could_start_marker(s):
-    key = re.sub(r"[\s*_`>#\-]", "", s)
-    return _MARKER_KEY.startswith(key)
+def _could_be_marker(line):
+    """아직 끝나지 않은 줄이 이어서 마커 줄이 될 수 있는가."""
+    lead = line.lstrip(" \t")
+    if len(lead) <= len(_MARKER_PREFIX):
+        return _MARKER_PREFIX.startswith(lead)
+    return lead.startswith(_MARKER_PREFIX) and _MARKER_REST_PARTIAL.fullmatch(lead, len(_MARKER_PREFIX)) is not None
 
 
 class UsedLineFilter:
-    """흘러오는 답에서 마지막 줄 "사용한 조각: …" 이 될 수 있는 글은 붙잡아 둔다.
+    """흘러오는 답에서 "사용한 조각: …" 줄과 그 뒤를 밖으로 내보내지 않는다.
 
-    feed() 는 지금 내보내도 되는 글을 돌려준다. 마커가 한 번 보이면 그 뒤는 끝까지 붙잡는다.
-    줄 끝(꼬리)이 마커의 앞부분일 수 있으면 그 자리부터 붙잡는다. 끝의 공백 · 줄바꿈도 붙잡는다.
+    - 처음 나온 (올바른) 마커 줄부터가 숨긴 꼬리다. 그 줄부터는 끝까지 아무것도 내보내지 않는다
+      (모델이 줄을 두 번 써도 새지 않는다).
+    - 번호는 꼬리의 마지막 마커 줄에서, 그 줄이 전체 글의 마지막 (빈 줄이 아닌) 줄일 때만 읽는다.
+      마커 줄 뒤에 다른 글이 이어지면 형식을 어긴 것으로 보고 번호 없음 → 호출한 쪽이 "찾지 못함"으로 바꾼다.
+    - 아직 끝나지 않은 줄이 마커의 앞부분일 수 있으면 그 줄 시작부터 붙잡고, 아니라고 밝혀지면 내보낸다.
+      끝의 공백 · 줄바꿈도 다음 글이 올 때까지 붙잡는다.
     """
 
     def __init__(self):
         self.text = ""
         self.sent = 0
-        self.hold_at = None
+        self.tail_at = None  # 첫 마커 줄의 시작
+        self.line_at = 0  # 아직 마커인지 보지 않은 줄의 시작
 
     def feed(self, piece):
         self.text += piece
         text = self.text
-        if self.hold_at is None:
-            m = _MARKER.search(text, self.sent)
-            if m:
-                self.hold_at = m.start()
-        if self.hold_at is not None:
-            end = self.hold_at
+        while self.tail_at is None:
+            nl = text.find("\n", self.line_at)
+            if nl == -1:
+                break
+            if _MARKER_LINE.fullmatch(text, self.line_at, nl):
+                self.tail_at = self.line_at
+            else:
+                self.line_at = nl + 1
+        if self.tail_at is not None:
+            end = self.tail_at
+        elif _could_be_marker(text[self.line_at:]):
+            end = self.line_at
         else:
             end = len(text)
-            line_start = text.rfind("\n") + 1
-            for i in range(max(self.sent, line_start, len(text) - _TAIL_WINDOW), len(text)):
-                if _could_start_marker(text[i:]):
-                    end = i
-                    break
         while end > self.sent and text[end - 1] in " \t\r\n":
             end -= 1
         out = text[self.sent:end]
@@ -405,14 +438,19 @@ class UsedLineFilter:
         return out
 
     def finish(self):
-        """(화면 글, 쓴 번호 목록). 마지막 마커 줄과 그 뒤는 버린다. 마커가 없으면 번호 없음."""
-        matches = list(_MARKER_LINE.finditer(self.text))
-        if not matches:
+        """(화면 글, 쓴 번호 목록). 첫 마커 줄부터는 버린다. 마커가 없거나 마지막 줄이 아니면 번호 없음."""
+        first, last, pos = None, "", 0
+        for line in self.text.split("\n"):
+            if first is None and _MARKER_LINE.fullmatch(line):
+                first = pos
+            if line.strip():
+                last = line
+            pos += len(line) + 1
+        if first is None:
             return self.text.rstrip(), []
-        m = matches[-1]
-        body = self.text[: m.start()].rstrip()
-        nums = [int(n) for n in re.findall(r"\d+", m.group("rest"))]
-        return body, nums
+        m = _MARKER_LINE.fullmatch(last)
+        nums = [int(n) for n in re.findall(r"[0-9]+", m.group("rest"))] if m else []
+        return self.text[:first].rstrip(), nums
 
 
 # ---------- 공통 ----------
@@ -481,13 +519,34 @@ def _header(doc, titles, req):
     return " · ".join(parts)
 
 
+def _escape(text, attr=False):
+    text = str(text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return text.replace('"', "&quot;") if attr else text
+
+
+def _chunk_block(no, doc, titles, req):
+    """묻기 프롬프트의 조각 하나: <조각 번호=".." 별=".." 날짜=".." 파일="..">본문</조각>.
+
+    기록 글은 데이터일 뿐이다. 안의 <, > 를 바꿔 두어 기록이 조각 경계나 번호를 꾸며 낼 수 없게 한다.
+    """
+    md = doc.metadata
+    attrs = [f'번호="{no}"', f'별="{_escape(titles.get(md.get("star_id")) or "(제목 없음)", True)}"']
+    day = _local_date(md.get("created_at"), req)
+    if day:
+        attrs.append(f'날짜="{day}"')
+    if md.get("file_name"):
+        attrs.append(f'파일="{_escape(md["file_name"], True)}"')
+    return f"<조각 {' '.join(attrs)}>\n{_escape(doc.page_content)}\n</조각>"
+
+
 class Ctx:
-    def __init__(self, req, chat, index, k, min_score):
+    def __init__(self, req, chat, index, k, min_score, max_batches=DEFAULT_SUM_MAX_BATCHES):
         self.req = req
         self.chat = chat
         self.index = index
         self.k = k
         self.min_score = min_score
+        self.max_batches = max_batches
         self.excluded = set(req.excluded_planets)
 
     def allowed(self, doc):
@@ -540,7 +599,7 @@ def run_ask(plan, ctx):
         return
     docs = [d for d, _ in hits]
     titles = _star_titles(ctx.index, [d.metadata.get("star_id") for d in docs])
-    numbered = "\n\n".join(f"[{i}] {_header(d, titles, req)}\n{d.page_content}" for i, d in enumerate(docs, 1))
+    numbered = "\n\n".join(_chunk_block(i, d, titles, req) for i, d in enumerate(docs, 1))
     messages = [
         SystemMessage(content=prompts.ASK_SYSTEM),
         HumanMessage(content=prompts.ASK_USER.format(chunks=numbered, question=req.question)),
@@ -618,14 +677,18 @@ def run_summarize(plan, ctx):
     titles = _star_titles(ctx.index, targets)
     blocks = [f"[{_header(d, titles, req)}]\n{d.page_content}" for d in docs]
     total = sum(len(b) + 2 for b in blocks)
+    batches = [] if total <= SUMMARY_ONE_CALL else _batches(blocks, SUMMARY_BATCH)
+    # 모델을 부르기 전에 묶음 수(=호출 수)를 센다. 상한을 넘으면 한 번도 부르지 않는다(비용 상한).
+    if len(batches) > ctx.max_batches:
+        yield _ev_error("too_broad", TOO_BROAD)
+        return
 
-    if total <= SUMMARY_ONE_CALL:
+    if not batches:
         messages = [
             SystemMessage(content=prompts.SUMMARY_SYSTEM),
             HumanMessage(content=prompts.SUMMARY_USER.format(question=req.question, chunks="\n\n".join(blocks))),
         ]
     else:
-        batches = _batches(blocks, SUMMARY_BATCH)
         partials = []
         for i, batch in enumerate(batches, 1):
             partials.append(
@@ -679,12 +742,15 @@ def run_chat(plan, ctx):
 RUNNERS = {"find": run_find, "ask": run_ask, "summarize": run_summarize, "chat": run_chat}
 
 
-def answer_events(req, *, chat, index, k=8, min_score=0.25):
-    """질문 하나의 이벤트 전부. 받는 쪽이 close() 하면 그 자리에서 멈춘다(모델을 더 부르지 않는다)."""
+def answer_events(req, *, chat, index, k=8, min_score=0.25, max_batches=DEFAULT_SUM_MAX_BATCHES):
+    """질문 하나의 이벤트 전부. 받는 쪽이 close() 하면 그 자리에서 멈춘다(모델을 더 부르지 않는다).
+
+    max_batches: 긴 요약의 묶음 수 상한(config.sum_max_batches).
+    """
     try:
         plan = plan_question(chat, req, index)
         yield plan.event()
-        yield from RUNNERS[plan.intent](plan, Ctx(req, chat, index, k, min_score))
+        yield from RUNNERS[plan.intent](plan, Ctx(req, chat, index, k, min_score, max_batches))
     except ModelError as err:
         _log(f"model call failed ({err})")
         yield _ev_error("openai_error")
