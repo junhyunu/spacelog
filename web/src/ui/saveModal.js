@@ -16,7 +16,10 @@ import {
   TOO_BIG_TOAST,
   TOO_MANY_TOAST,
   URL_ERROR,
+  URL_REFUSED,
+  addToast,
   autoTitle,
+  badLinks,
   canSubmit,
   clampPlanetName,
   cleanPlanetName,
@@ -24,6 +27,7 @@ import {
   httpUrl,
   matchSkipped,
   nothingToast,
+  pendingLink,
   planAdd,
   resultToast,
   saveError,
@@ -40,21 +44,26 @@ const THUMB_MAX = 30 * 1024 * 1024; // 이보다 큰 이미지는 칩 미리보�
 const SLOW_MS = 15000; // 파일 없는 저장이 이보다 오래 걸리면 취소를 다시 열어 준다
 const TITLE_EMPTY = '비워 두면 글의 첫 줄을 써요';
 const aborted = () => Object.assign(new Error('aborted'), { code: 'aborted' });
+const LATE_FAIL = '저장하지 못했어요. 기록하기를 다시 누르면 쓰던 내용이 돌아와요';
 
 // 열려 있는 동안의 상태. 글 · 제목 · 주소 · 새 행성 이름은 입력칸이 들고 있다.
 let S = null;
 let wired = false;
 let itemSeq = 0;
+// "기다리지 않고 닫기"로 닫은 창의 저장이 뒤늦게 실패했을 때 그 창의 내용. 다음에 빈 창을 열면 되돌려 놓는다.
+let stash = null;
 
 function fresh() {
   return {
-    items: [], // { id, kind: 'file', file, thumb, hint, skip } | { id, kind: 'link', url }
+    items: [], // { id, kind: 'file', file, thumb, hint, skip } | { id, kind: 'link', url, bad }
     planet: 'new',
     pick: false, // 고른 행성이 사라져 다시 골라야 하는 동안(선택 상자 맨 위에 "행성을 골라 주세요"가 생긴다)
     extra: [], // 이 창에서 만들었지만 아직 store에 없는 행성
     busy: false,
     abort: null, // 저장하는 동안의 AbortController. 파일을 올릴 때만 "올리기 멈추기"로 쓴다
     files: false, // 지금 저장에 파일이 있는지
+    uploaded: false, // 파일을 다 보냈는지(그 뒤로는 서버가 어차피 저장하므로 멈출 수 없다)
+    snapshot: null, // 기다리지 않고 닫을 때 남겨 둔 내용(뒤늦게 실패하면 stash로 옮긴다)
     slow: false, // 파일 없는 저장의 응답이 늦어져 취소를 다시 열어 둔 동안
     pct: null,
     asking: false,
@@ -129,9 +138,10 @@ function rebuildPlanets(wanted) {
 
 function chipHtml(it) {
   if (it.kind === 'link') {
+    const bad = it.bad ? `<small>${esc(URL_REFUSED)}</small>` : '';
     return (
-      `<li class="chip link" data-id="${it.id}"><span class="th" aria-hidden="true">${ico('link', 16)}</span>` +
-      `<span class="cm"><span class="cn" title="${esc(it.url)}">${esc(it.url)}</span></span>` +
+      `<li class="chip link${it.bad ? ' bad' : ''}" data-id="${it.id}"><span class="th" aria-hidden="true">${ico('link', 16)}</span>` +
+      `<span class="cm"><span class="cn" title="${esc(it.url)}">${esc(it.url)}</span>${bad}</span>` +
       `<button type="button" class="btn x" data-rm aria-label="${esc(`링크 ${it.url} 빼기`)}">${ico('x', 14)}</button></li>`
     );
   }
@@ -176,9 +186,8 @@ function addFiles(files, hints) {
     }
     S.items.push({ id: ++itemSeq, kind: 'file', file, thumb, hint: hintOf.get(file) || null, skip: null });
   }
-  if (plan.overflow) toast(TOO_MANY_TOAST);
-  else if (plan.tooBig) toast(TOO_BIG_TOAST);
-  else if (plan.repeated && !plan.add.length) toast('이미 담긴 파일이에요');
+  const note = addToast(plan); // 여러 한도에 걸리면 한 줄에 이유마다 적는다
+  if (note) toast(note);
   if (plan.add.length) changed();
   return plan.add.length;
 }
@@ -199,7 +208,7 @@ function addLink(raw) {
     toast('이미 담긴 링크예요');
     return false;
   }
-  S.items.push({ id: ++itemSeq, kind: 'link', url });
+  S.items.push({ id: ++itemSeq, kind: 'link', url, bad: false });
   changed();
   return true;
 }
@@ -258,9 +267,11 @@ function paintTitleHint() {
 function paintSubmit() {
   if (!S) return;
   const yes = $('svYes');
+  // 주소 칸에 쳐 두고 아직 더하지 않은 링크도 내용으로 센다(저장할 때 칩으로 더하거나, 틀렸으면 알린다)
+  const typed = $('svUrl').value.trim() !== '' ? 1 : 0;
   const ready = canSubmit({
     text: $('svText').value,
-    count: S.items.length,
+    count: Math.min(ATTACH_MAX, S.items.length + typed),
     planetId: S.planet,
     newPlanetName: $('svNewName').value,
   });
@@ -271,13 +282,15 @@ function paintSubmit() {
 }
 
 // 취소 · ✕: 파일을 올리는 동안에는 "올리기 멈추기"로 살아 있고, 파일 없는 저장은 응답이 늦어질 때만 다시 열린다.
+// 파일을 다 보낸 뒤에는 서버가 어차피 저장하므로 "마무리하는 중…"으로 잠근다.
 function paintCancel() {
   if (!S) return;
-  const stoppable = S.busy && S.files;
+  const finishing = S.busy && S.files && S.uploaded;
+  const stoppable = S.busy && S.files && !S.uploaded;
   const off = S.busy && !stoppable && !S.slow;
   $('svNo').disabled = off;
   $('svX').disabled = off;
-  $('svNo').textContent = stoppable ? '올리기 멈추기' : '취소';
+  $('svNo').textContent = finishing ? '마무리하는 중…' : stoppable ? '올리기 멈추기' : '취소';
 }
 
 // 글 칸은 쓰는 만큼 늘어난다(최대 높이는 CSS, 그 뒤로는 칸 안에서 스크롤)
@@ -311,6 +324,7 @@ function setBusy(on, pct = null) {
   if (!on) {
     S.abort = null;
     S.files = false;
+    S.uploaded = false;
     S.slow = false;
   }
   paintCancel();
@@ -359,24 +373,74 @@ function close() {
   if (prev && typeof prev.focus === 'function' && document.contains(prev)) prev.focus();
 }
 
+// 닫기 전에 창의 내용을 남긴다(미리보기 주소는 닫을 때 풀리므로 남기지 않는다)
+function snapshot(c) {
+  return {
+    text: $('svText').value,
+    title: $('svTitle').value,
+    url: $('svUrl').value,
+    newName: $('svNewName').value,
+    planet: c.planet,
+    extra: [...c.extra],
+    items: c.items.map((it) => (it.kind === 'file' ? { kind: 'file', file: it.file, hint: it.hint } : { kind: 'link', url: it.url })),
+  };
+}
+
+// 남겨 둔 내용을 막 연 빈 창에 되돌린다
+function restore(snap) {
+  for (const it of snap.items) {
+    if (it.kind === 'link') {
+      S.items.push({ id: ++itemSeq, kind: 'link', url: it.url, bad: false });
+      continue;
+    }
+    let thumb = null;
+    if (THUMB_TYPE.test(it.file.type) && it.file.size <= THUMB_MAX) {
+      try {
+        thumb = URL.createObjectURL(it.file);
+      } catch {
+        thumb = null;
+      }
+    }
+    S.items.push({ id: ++itemSeq, kind: 'file', file: it.file, thumb, hint: it.hint, skip: null });
+  }
+  $('svText').value = snap.text;
+  $('svTitle').value = snap.title;
+  $('svUrl').value = snap.url;
+  $('svNewName').value = snap.newName;
+  S.extra = snap.extra.filter((p) => !store.state.planets.some((q) => String(q.id) === String(p.id)));
+  const known = snap.planet === 'new' || planetList().some((p) => String(p.id) === String(snap.planet));
+  if (!known) {
+    // 그 사이 행성이 사라졌으면 조용히 바꾸지 않고 다시 고르게 한다
+    S.pick = true;
+    S.planet = '';
+  }
+  rebuildPlanets(known ? snap.planet : '');
+  if (snap.url.trim()) setLinkRow(true);
+}
+
 // 취소 · ✕ · Esc · 바깥 클릭. 쓰던 것이 있으면 먼저 묻는다.
 // 파일을 올리는 중이면 멈출지 묻고(멈춰도 창과 내용은 남는다), 파일 없는 저장 중에는 응답이 늦어질 때만 닫을 수 있다.
 function requestClose() {
   const c = S;
   if (!c || c.asking) return;
   if (c.busy) {
+    if (c.uploaded) return; // 다 올라가 마무리하는 중: 멈출 수 없다
     if (c.files && c.abort) {
       const ctl = c.abort;
       c.asking = true;
       ask({ title: '올리기를 멈출까요?', desc: '쓴 글과 담은 첨부는 창에 그대로 남아요.', confirmLabel: '멈추기', confirmKind: 'pink' }).then((yes) => {
         c.asking = false;
-        if (yes && S === c && c.abort === ctl) ctl.abort(); // 뒤처리는 submit의 catch가 한다
+        // 그 사이 다 올라갔으면 멈추지 않는다(서버가 저장한다). 뒤처리는 submit의 catch가 한다
+        if (yes && S === c && c.abort === ctl && !c.uploaded) ctl.abort();
       });
     } else if (c.slow) {
       c.asking = true;
       ask({ title: '기다리지 않고 닫을까요?', desc: '저장이 뒤늦게 끝나면 별은 그대로 남아요.', confirmLabel: '닫기', confirmKind: 'pink' }).then((yes) => {
         c.asking = false;
-        if (yes && S === c && c.busy && c.slow) close(); // 늦게 온 결과는 submit이 받아 알린다
+        if (yes && S === c && c.busy && c.slow) {
+          c.snapshot = snapshot(c); // 뒤늦게 실패하면 다음에 열 때 되돌려 놓는다
+          close(); // 늦게 온 결과는 submit이 받아 알린다
+        }
       });
     }
     return;
@@ -420,9 +484,34 @@ function focusAfterSave() {
   (yes.disabled ? $('svNo') : yes).focus();
 }
 
+// 주소 칸에 쳐 두고 더하지 않은 링크: 주소면 칩으로 더하고 저장을 이어 간다(true).
+// 주소가 아니거나 더할 수 없으면 칸 아래에 알리고 칸으로 초점을 옮긴다(false). 칸의 글은 지우지 않는다.
+function takeTypedLink() {
+  const input = $('svUrl');
+  const p = pendingLink(input.value, linkItems().map((it) => it.url));
+  if (!p) return true;
+  const fail = () => {
+    setLinkRow(true);
+    input.focus();
+    return false;
+  };
+  if (p.error) {
+    setLinkRow(true);
+    showUrlError(p.error);
+    return fail();
+  }
+  if (!p.dup && !addLink(p.url)) return fail();
+  input.value = '';
+  showUrlError('');
+  paintSubmit();
+  return true;
+}
+
 async function submit() {
   const c = S;
-  if (!c || c.busy || $('svYes').disabled) return;
+  if (!c || c.busy) return;
+  if (!takeTypedLink()) return;
+  if ($('svYes').disabled) return;
   const files = fileItems();
   const links = linkItems().map((it) => it.url);
   const body = $('svText').value;
@@ -430,6 +519,7 @@ async function submit() {
   showError('');
   // 지난번에 서버가 뺀 표시는 지운다(이번 결과로 다시 표시한다)
   for (const it of files) it.skip = null;
+  for (const it of linkItems()) it.bad = false;
   renderChips();
   const ctl = new AbortController();
   c.abort = ctl;
@@ -469,7 +559,16 @@ async function submit() {
         c.pct = pct;
         paintSubmit();
       },
-      { signal: ctl.signal },
+      {
+        signal: ctl.signal,
+        // 파일을 다 보냈다: 이제 서버가 저장하므로 "올리기 멈추기"를 "마무리하는 중…"으로 잠그고, 묻던 것은 거둔다
+        onUploaded: () => {
+          if (S !== c || !c.busy) return;
+          c.uploaded = true;
+          if (c.asking) closeAsk();
+          paintCancel();
+        },
+      },
     );
     clearTimeout(slowTimer);
     // 멈출지 · 닫을지 묻는 사이에 끝났으면 그 물음은 거둔다
@@ -481,6 +580,16 @@ async function submit() {
     if (c.asking && c.busy) closeAsk();
     if (S !== c) {
       if (madePlanet) store.reload().catch(() => {});
+      if (c.snapshot) {
+        // 기다리지 않고 닫은 저장이 뒤늦게 실패했다: 내용을 들고 있다가 다음에 빈 창을 열면 되돌린다
+        stash = c.snapshot;
+        if (madePlanet) {
+          stash.planet = planetId; // 행성은 만들어졌으니 다시 만들지 않는다
+          stash.newName = '';
+          stash.extra = [...c.extra];
+        }
+        toast(LATE_FAIL);
+      }
       return;
     }
     setBusy(false);
@@ -513,6 +622,15 @@ async function submit() {
       }
       return;
     }
+    if (err?.code === 'invalid_url' || err?.code === 'invalid_links') {
+      // 서버가 받지 않은 링크: 짚을 수 있는 칩을 표시한다
+      const bad = new Set(badLinks(links));
+      linkItems().forEach((it, i) => {
+        it.bad = bad.has(i);
+      });
+      renderChips();
+    }
+    if (err?.code === 'stop_late') store.reload().catch(() => {}); // 저장됐을 수 있다
     showError(saveError(err, files.length > 0));
     if (madePlanet) store.reload().catch(() => {});
     if (S === c && !c.busy) focusAfterSave();
@@ -607,7 +725,7 @@ function wire() {
     const v = $('svUrl').value.trim().toLowerCase();
     const typing = 'https://'.startsWith(v) || 'http://'.startsWith(v);
     showUrlError(typing ? null : urlError(v));
-    syncUnload();
+    paintSubmit(); // 쳐 둔 링크도 내용이다
   });
   $('svUrl').addEventListener('blur', () => {
     if ($('svUrl').value.trim()) showUrlError(urlError($('svUrl').value));
@@ -716,6 +834,12 @@ export function openSave({ text, url, files, hints } = {}) {
   showError('');
   setBusy(false);
   rebuildPlanets(null);
+  // 기다리지 않고 닫은 저장이 실패했으면 그 내용을 되돌린다(담아 온 것 없이 빈 창을 열 때만)
+  if (stash && !hasText && !hasUrl && !list.length) {
+    const snap = stash;
+    stash = null;
+    restore(snap);
+  }
   if (list.length) addFiles(list, hints);
   if (hasUrl) addLink(url);
   renderChips();

@@ -9,6 +9,7 @@ export const TITLE_FROM_BODY_MAX = 40;
 export const PLANET_NAME_MAX = 20;
 
 export const URL_ERROR = '주소는 http로 시작해야 해요';
+export const URL_REFUSED = '링크 주소를 다시 확인해 주세요';
 export const TOO_BIG_TOAST = '500MB보다 큰 파일은 담을 수 없어요';
 export const TOO_MANY_TOAST = '첨부는 50개까지 담을 수 있어요';
 export const FOLDER_TOAST = '폴더는 담을 수 없어요. 파일만 놓아 주세요';
@@ -17,20 +18,29 @@ export const PASTED_IMAGE = '붙여넣은 이미지';
 
 const num = (v) => (Number(v) || 0).toLocaleString('ko-KR');
 const str = (v) => (typeof v === 'string' ? v : '');
-// 공백 없는 http(s) 주소 하나. 호스트가 한 글자는 있어야 한다.
-const HTTP_URL = /^https?:\/\/[^\s/]\S*$/i;
-
-/** 공백 없는 http(s) 주소 하나면 앞뒤 공백을 뗀 주소, 아니면 null. */
+/**
+ * 서버(server/stars.js isHttpUrl)와 똑같이 검사한 http(s) 주소: 앞뒤 공백을 떼고(String.prototype.trim),
+ * http:// · https://로 시작하며 new URL()로 읽히고 호스트가 비어 있지 않으면 뗀 주소, 아니면 null.
+ */
 export function httpUrl(url) {
   const u = str(url).trim();
-  return u && HTTP_URL.test(u) ? u : null;
+  if (!/^https?:\/\//i.test(u)) return null;
+  try {
+    const parsed = new URL(u);
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.hostname ? u : null;
+  } catch {
+    return null;
+  }
 }
+
+// 붙여넣기 · 끌어다 놓기에서 "주소 하나"로 볼 글: 공백 없이 주소만 있을 때(주소로 시작하는 문장은 글이다)
+const linkOnly = (s) => (/\s/.test(str(s).trim()) ? null : httpUrl(s));
 
 // 글 하나를 link(전체가 주소 하나) · text(그 밖의 비어 있지 않은 글) · null로 가른다.
 function classifyText(text) {
   const raw = str(text);
   if (!raw.trim()) return null;
-  const url = httpUrl(raw);
+  const url = linkOnly(raw);
   return url ? { kind: 'link', url } : { kind: 'text', text: raw };
 }
 
@@ -57,7 +67,7 @@ export function classifyDrop({ types, uriList, text, files } = {}) {
   if (kinds.includes('text/uri-list')) {
     for (const line of str(uriList).split(/\r?\n/)) {
       const url = line.trim();
-      if (url && !url.startsWith('#') && HTTP_URL.test(url)) return { kind: 'link', url };
+      if (url && !url.startsWith('#') && linkOnly(url)) return { kind: 'link', url };
     }
   }
   if (kinds.includes('text/plain')) return classifyText(text);
@@ -68,6 +78,26 @@ export function classifyDrop({ types, uriList, text, files } = {}) {
 export function urlError(url) {
   if (!str(url).trim()) return null;
   return httpUrl(url) ? null : URL_ERROR;
+}
+
+/**
+ * 주소 칸에 쳐 두고 아직 칩으로 더하지 않은 것. 저장하기 전에 본다.
+ * 비어 있으면 null, 주소면 { url, dup }(dup: 이미 칩으로 있음), 아니면 { error }.
+ */
+export function pendingLink(raw, existing) {
+  if (!str(raw).trim()) return null;
+  const url = httpUrl(raw);
+  if (!url) return { error: URL_ERROR };
+  return { url, dup: Array.from(existing ?? []).includes(url) };
+}
+
+/** 서버가 받지 않을(400 invalid_url) 링크의 자리. */
+export function badLinks(urls) {
+  const out = [];
+  Array.from(urls ?? []).forEach((u, i) => {
+    if (!httpUrl(u)) out.push(i);
+  });
+  return out;
 }
 
 const INVISIBLE = /[\u0000-\u001f\u007f​-‍⁠﻿]/g;
@@ -208,6 +238,23 @@ export function planAdd({ existing, incoming, room = ATTACH_MAX } = {}) {
 }
 
 /**
+ * 파일을 담을 때 빠진 것을 알리는 토스트 한 줄(planAdd의 결과). 알릴 것이 없으면 null.
+ * 이유가 하나면 그 문구, 여럿이면 한 줄에 이유마다 개수를 적는다. 일부를 담았을 때 이미 담긴 파일만 빠진 것은 알리지 않는다.
+ */
+export function addToast(plan) {
+  const { add = [], tooBig = 0, repeated = 0, overflow = 0 } = plan ?? {};
+  const parts = [];
+  if (tooBig) parts.push(`500MB보다 큰 파일 ${num(tooBig)}개`);
+  if (repeated) parts.push(`이미 담긴 파일 ${num(repeated)}개`);
+  if (overflow) parts.push(`${ATTACH_MAX}개를 넘은 파일 ${num(overflow)}개`);
+  if (parts.length > 1) return `${add.length ? '일부만 담았어요' : '담지 못했어요'}. ${parts.join(' · ')}`;
+  if (overflow) return TOO_MANY_TOAST;
+  if (tooBig) return TOO_BIG_TOAST;
+  if (repeated && !add.length) return '이미 담긴 파일이에요';
+  return null;
+}
+
+/**
  * 놓은 것에서 파일만 꺼낸다. 폴더(webkitGetAsEntry()?.isDirectory)는 빼고 센다.
  * drop 이벤트 처리 안에서 바로 불러야 한다(끝나면 목록이 비워진다).
  */
@@ -254,17 +301,32 @@ export function nothingToast(skipped) {
   return '이미 있는 별이에요';
 }
 
-// 서버가 파일 이름을 다듬는 방식에 가깝게: NFC, 제어 · 방향 문자 제거, 경로의 마지막 조각
-function serverName(name) {
-  return (
-    str(name)
-      .normalize('NFC')
-      .replace(/[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g, '')
+const FILE_NAME_MAX = 200;
+
+/**
+ * 서버가 저장하는 파일 이름(server/files.js parseFileName의 fileName과 같다): NFC, 제어 · 방향 문자 제거,
+ * 경로의 마지막 조각, 비면 'untitled', 200자(코드 포인트)를 넘으면 확장자([a-z0-9]{1,10})를 남기고 자른다.
+ */
+export function serverFileName(raw) {
+  const cleaned = str(raw)
+    .normalize('NFC')
+    .replace(/[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g, '');
+  let name =
+    cleaned
       .split(/[\\/]/)
       .map((s) => s.trim())
       .filter((s) => s !== '')
-      .pop() ?? ''
-  );
+      .pop() ?? '';
+  if (name === '') name = 'untitled';
+  let dot = name.lastIndexOf('.');
+  if (!/^[a-z0-9]{1,10}$/.test(dot >= 0 ? name.slice(dot + 1).toLowerCase() : '')) dot = -1;
+  const chars = [...name];
+  if (chars.length <= FILE_NAME_MAX) return name;
+  if (dot > 0) {
+    const suffix = name.slice(dot);
+    return [...name.slice(0, dot)].slice(0, FILE_NAME_MAX - [...suffix].length).join('') + suffix;
+  }
+  return chars.slice(0, FILE_NAME_MAX).join('');
 }
 
 /**
@@ -276,8 +338,8 @@ export function matchSkipped(items, skipped) {
   const out = list.map(() => null);
   for (const skip of Array.from(skipped ?? [])) {
     if (typeof skip?.file_name !== 'string') continue;
-    const want = serverName(skip.file_name);
-    const at = list.findIndex((it, i) => out[i] === null && it?.kind === 'file' && serverName(it.file?.name) === want);
+    const want = serverFileName(skip.file_name);
+    const at = list.findIndex((it, i) => out[i] === null && it?.kind === 'file' && serverFileName(it.file?.name) === want);
     if (at >= 0) out[at] = typeof skip.reason === 'string' ? skip.reason : 'failed';
   }
   return out;
@@ -297,6 +359,8 @@ export function saveError(err, hasFiles = false) {
       return '서버와 연결이 끊겨서 저장하지 못했어요. 서버를 켠 뒤 다시 눌러 주세요';
     case 'aborted':
       return '올리기를 멈췄어요';
+    case 'stop_late':
+      return '멈추기 전에 다 올라갔을 수 있어요. 목록을 확인해 주세요';
     case 'upload_failed':
       return '읽을 수 없는 파일이 있어요. 폴더는 담을 수 없어요';
     case 'upload_incomplete':
@@ -309,7 +373,7 @@ export function saveError(err, hasFiles = false) {
       return '글이 너무 길어요';
     case 'invalid_url':
     case 'invalid_links':
-      return URL_ERROR;
+      return URL_REFUSED;
     case 'too_many_attachments':
       return TOO_MANY_TOAST;
     case 'invalid_name':

@@ -105,9 +105,12 @@ export const api = {
    * 파일이 있으면 multipart(XHR, 진행률 · 멈추기). 글 칸을 파일보다 먼저 붙인다(서버가 그 순서로 읽는다).
    * 파일이 없으면 JSON. onProgress(pct)는 0~100 정수(파일이 있을 때만).
    * signal(AbortSignal)로 멈추면 ApiError(0, 'aborted')로 끝난다(연결 끊김으로 알리지 않는다).
+   * onUploaded()는 파일 요청의 본문을 다 보낸 순간(xhr.upload.onload) 한 번 불린다. 그 뒤로는 서버가 어차피 저장하므로
+   * signal을 더 듣지 않는다(멈추지 않고 응답을 기다린다). 다 보낸 바이트가 서버에 닿은 뒤 onload 직전에 멈춘 드문 경우는
+   * 저장됐을 수 있으므로 'aborted'가 아니라 ApiError(0, 'stop_late')로 끝난다.
    * 남는 것이 없으면(같은 파일뿐) ApiError(409, 'nothing_to_save'), err.data.skipped에 뺀 파일이 있다.
    */
-  createStar({ planet_id, title, body, links, files } = {}, onProgress, { signal } = {}) {
+  createStar({ planet_id, title, body, links, files } = {}, onProgress, { signal, onUploaded } = {}) {
     const list = Array.from(files ?? []);
     const fields = {
       planet_id: String(planet_id ?? ''),
@@ -134,11 +137,21 @@ export const api = {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/stars');
       xhr.setRequestHeader('Accept', 'application/json');
-      if (typeof onProgress === 'function') {
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable && e.total > 0) onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)));
-        };
-      }
+      let sentAll = false; // 본문의 마지막 바이트까지 보냈는지
+      let uploaded = false; // xhr.upload.onload가 왔는지
+      let stop = null;
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && e.total > 0 && e.loaded >= e.total) sentAll = true;
+        if (typeof onProgress === 'function' && e.lengthComputable && e.total > 0) {
+          onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)));
+        }
+      };
+      xhr.upload.onload = () => {
+        sentAll = true;
+        uploaded = true;
+        if (signal && stop) signal.removeEventListener('abort', stop); // 이제 멈추지 않는다
+        if (typeof onUploaded === 'function') onUploaded();
+      };
       xhr.onload = () => {
         try {
           if (xhr.status >= 200 && xhr.status < 300) {
@@ -154,9 +167,11 @@ export const api = {
         request('GET', '/health').then(() => reject(new ApiError(0, 'upload_failed')), reject);
       };
       xhr.ontimeout = () => reject(offline());
-      xhr.onabort = () => reject(new ApiError(0, 'aborted'));
+      xhr.onabort = () => reject(new ApiError(0, sentAll ? 'stop_late' : 'aborted'));
       if (signal) {
-        const stop = () => xhr.abort();
+        stop = () => {
+          if (!uploaded) xhr.abort();
+        };
         signal.addEventListener('abort', stop, { once: true });
         xhr.onloadend = () => signal.removeEventListener('abort', stop);
       }

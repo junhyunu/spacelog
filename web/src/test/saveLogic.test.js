@@ -1,8 +1,12 @@
 import { describe, expect, test } from 'vitest';
+import { parseFileName } from '../../../server/files.js';
+import { isHttpUrl } from '../../../server/stars.js';
 import {
   ATTACH_MAX,
   FILE_MAX,
+  addToast,
   autoTitle,
+  badLinks,
   canSubmit,
   clampPlanetName,
   classifyDrop,
@@ -16,10 +20,12 @@ import {
   nothingToast,
   partitionBySize,
   pastedHint,
+  pendingLink,
   planAdd,
   planetNameLength,
   resultToast,
   saveError,
+  serverFileName,
   skipNote,
   splitDropped,
   submitTitle,
@@ -91,6 +97,83 @@ describe('classifyDrop', () => {
     expect(classifyDrop({ types: ['text/plain'], text: '  ' })).toBeNull();
     expect(classifyDrop({ types: ['text/html'] })).toBeNull();
     expect(classifyDrop()).toBeNull();
+  });
+});
+
+// 서버(server/stars.js isHttpUrl)와 같은 표로 검사한다. 서버는 앞뒤 공백을 뗀 뒤 검사한다.
+describe('httpUrl mirrors the server isHttpUrl', () => {
+  const table = [
+    ['https://a.com', 'https://a.com'],
+    ['HTTP://A.COM', 'HTTP://A.COM'],
+    ['  https://a.com  ', 'https://a.com'],
+    ['　https://a.com ', 'https://a.com'],
+    ['https://例え.jp', 'https://例え.jp'],
+    ['https://a.com/x y', 'https://a.com/x y'],
+    ['http://a.com:8080/p?q=1#h', 'http://a.com:8080/p?q=1#h'],
+    ['http://:80', null],
+    ['http://%zz', null],
+    ['http://[x', null],
+    ['https://', null],
+    ['https://a b.com', null],
+    ['http:/a.com', null],
+    ['javascript:alert(1)', null],
+    ['ftp://a.com', null],
+    ['naver.com', null],
+    ['', null],
+    ['   ', null],
+  ];
+  test.each(table)('%j → %j', (raw, want) => {
+    expect(httpUrl(raw)).toBe(want);
+    expect(isHttpUrl(raw.trim())).toBe(want !== null);
+  });
+  test('non-strings', () => {
+    expect(httpUrl(null)).toBeNull();
+    expect(httpUrl(undefined)).toBeNull();
+    expect(httpUrl(42)).toBeNull();
+  });
+});
+
+describe('pendingLink (typed but not yet added)', () => {
+  test('empty → null', () => {
+    expect(pendingLink('', [])).toBeNull();
+    expect(pendingLink('  ', [])).toBeNull();
+    expect(pendingLink(undefined)).toBeNull();
+  });
+  test('valid → url to add, already there → dup', () => {
+    expect(pendingLink(' https://a.com ', [])).toEqual({ url: 'https://a.com', dup: false });
+    expect(pendingLink('https://a.com', ['https://a.com'])).toEqual({ url: 'https://a.com', dup: true });
+  });
+  test('invalid → the url error', () => {
+    expect(pendingLink('naver.com', [])).toEqual({ error: '주소는 http로 시작해야 해요' });
+    expect(pendingLink('http://[x', [])).toEqual({ error: '주소는 http로 시작해야 해요' });
+  });
+});
+
+test('badLinks: indexes the server would refuse', () => {
+  expect(badLinks(['https://a.com', 'http://[x', 'ftp://b'])).toEqual([1, 2]);
+  expect(badLinks([])).toEqual([]);
+  expect(badLinks()).toEqual([]);
+});
+
+describe('addToast (files left out when adding)', () => {
+  const plan = (o) => ({ add: [], tooBig: 0, repeated: 0, overflow: 0, ...o });
+  test('nothing left out → null', () => {
+    expect(addToast(plan({ add: [1] }))).toBeNull();
+    expect(addToast(plan({}))).toBeNull();
+  });
+  test('one reason keeps its own line', () => {
+    expect(addToast(plan({ overflow: 2 }))).toBe('첨부는 50개까지 담을 수 있어요');
+    expect(addToast(plan({ tooBig: 1 }))).toBe('500MB보다 큰 파일은 담을 수 없어요');
+    expect(addToast(plan({ repeated: 1 }))).toBe('이미 담긴 파일이에요');
+    expect(addToast(plan({ add: [1], repeated: 1 }))).toBeNull();
+  });
+  test('several reasons → one line listing each', () => {
+    expect(addToast(plan({ add: [1], tooBig: 1, overflow: 2 }))).toBe(
+      '일부만 담았어요. 500MB보다 큰 파일 1개 · 50개를 넘은 파일 2개',
+    );
+    expect(addToast(plan({ tooBig: 1, repeated: 3, overflow: 1 }))).toBe(
+      '담지 못했어요. 500MB보다 큰 파일 1개 · 이미 담긴 파일 3개 · 50개를 넘은 파일 1개',
+    );
   });
 });
 
@@ -211,6 +294,29 @@ describe('matchSkipped', () => {
       'duplicate',
     ]);
   });
+  test('long names are cut like the server (200 code points, extension kept)', () => {
+    const long = `${'가'.repeat(250)}.pdf`;
+    const stored = parseFileName(long).fileName;
+    expect(matchSkipped([item(long)], [{ file_name: stored, reason: 'duplicate' }])).toEqual(['duplicate']);
+    expect(matchSkipped([item('')], [{ file_name: 'untitled', reason: 'duplicate' }])).toEqual(['duplicate']);
+  });
+  test('serverFileName matches the server parseFileName', () => {
+    const names = [
+      'a.txt',
+      'C:\\x\\b.txt',
+      '/x/y/',
+      '',
+      '   ',
+      '가나.txt'.normalize('NFD'),
+      'evil\u202Etxt.exe',
+      'tab\there.txt',
+      `${'가'.repeat(250)}.pdf`,
+      `${'😀'.repeat(210)}`,
+      `${'a'.repeat(300)}.verylongextension`,
+      `.${'b'.repeat(250)}`,
+    ];
+    for (const n of names) expect(serverFileName(n)).toBe(parseFileName(n).fileName);
+  });
   test('nameless skips mark nothing', () => {
     expect(matchSkipped([item('a')], [{ file_name: null, reason: 'duplicate' }])).toEqual([null]);
     expect(matchSkipped(undefined, undefined)).toEqual([]);
@@ -251,8 +357,9 @@ describe('saveError', () => {
     expect(saveError(E(413, 'too_large'))).toBe('글이 너무 길어요');
     expect(saveError(E(413, 'too_large'), true)).toBe('500MB보다 큰 파일은 담을 수 없어요');
     expect(saveError(E(400, 'invalid_body'))).toBe('글이 너무 길어요');
-    expect(saveError(E(400, 'invalid_url'))).toBe('주소는 http로 시작해야 해요');
-    expect(saveError(E(400, 'invalid_links'))).toBe('주소는 http로 시작해야 해요');
+    expect(saveError(E(400, 'invalid_url'))).toBe('링크 주소를 다시 확인해 주세요');
+    expect(saveError(E(400, 'invalid_links'))).toBe('링크 주소를 다시 확인해 주세요');
+    expect(saveError(E(0, 'stop_late'))).toBe('멈추기 전에 다 올라갔을 수 있어요. 목록을 확인해 주세요');
     expect(saveError(E(400, 'too_many_attachments'))).toBe('첨부는 50개까지 담을 수 있어요');
     expect(saveError(E(400, 'empty_star'))).toBe('내용을 입력해 주세요');
     expect(saveError(E(400, 'upload_incomplete'))).toBe('파일을 다 받지 못했어요. 다시 눌러 주세요');

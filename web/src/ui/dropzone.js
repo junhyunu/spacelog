@@ -12,6 +12,7 @@ import { isSaveBusy, isSaveOpen, openSave } from './saveModal.js';
 import { toast } from './toast.js';
 import { isTransitioning } from './transition.js';
 
+const BUSY_TOAST = '올리는 중에는 담을 수 없어요';
 const IDLE_MS = 1200; // dragover가 이만큼 오지 않으면 끌기가 끝난 것으로 본다(막이 남지 않게)
 const TEXT_INPUT = /^(text|search|url|tel|email|password|number|)$/i;
 
@@ -23,7 +24,10 @@ let internal = false; // 이 화면 안에서 시작한 끌기인지(dragstart ~
 const veil = () => document.getElementById('dropveil');
 
 // 확인 창 · 행성 꾸미기 창 · 행성 삭제 창이 떠 있거나, 전환 중이거나, 저장하는 중이면 받지 않는다
-const blocked = () => isAskOpen() || isPlanetFormOpen() || isPlanetDeleteOpen() || isTransitioning() || isSaveBusy();
+const otherBlocked = () => isAskOpen() || isPlanetFormOpen() || isPlanetDeleteOpen() || isTransitioning();
+const blocked = () => otherBlocked() || isSaveBusy();
+// 저장하는 중에 놓거나 붙여넣은 것은 받지 않고 알린다(다른 창이 막고 있으면 조용히 둔다)
+const busyOnly = () => isSaveBusy() && !otherBlocked();
 
 // 끌려온 것의 종류: 'files' | 'text'(링크 · 글) | null(우리가 다루지 않는 것)
 function kindOf(e) {
@@ -104,7 +108,11 @@ function onDrop(e) {
   reset();
   if (leaveAlone(e, kind)) return;
   e.preventDefault();
-  if (mine || blocked()) return;
+  if (mine) return;
+  if (blocked()) {
+    if (busyOnly()) toast(BUSY_TOAST);
+    return;
+  }
   // 목록은 이 처리가 끝나면 비워지므로 여기서 바로 꺼낸다
   const dt = e.dataTransfer;
   if (kind === 'files') {
@@ -128,18 +136,28 @@ function isField(target) {
 }
 
 function onPaste(e) {
-  if (blocked()) return;
+  if (otherBlocked()) return;
   const data = e.clipboardData;
   if (!data) return;
   const files = [...(data.files ?? [])];
   const text = data.getData('text/plain');
   if (isField(e.target)) {
+    // 저장하는 동안 잠긴 기록하기 창의 칸에 붙여넣은 것도 알린다
+    if (isSaveBusy() && e.target.closest?.('#save') && (files.length || text.trim())) {
+      e.preventDefault();
+      toast(BUSY_TOAST);
+      return;
+    }
     // 칸 안의 붙여넣기는 브라우저에 맡긴다. 기록하기 창 안에서 글 없이 파일만 붙여넣은 것만 칩으로 받는다
     if (!(isSaveOpen() && e.target.closest?.('#save') && files.length && !text.trim())) return;
   }
   const found = classifyPaste({ files, text });
   if (!found) return;
   e.preventDefault();
+  if (isSaveBusy()) {
+    toast(BUSY_TOAST);
+    return;
+  }
   if (found.kind === 'files') {
     // 클립보드 그림은 이름이 늘 image.png라 제목 힌트를 붙인다
     openSave({ files: found.files, hints: found.files.map(pastedHint) });

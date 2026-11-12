@@ -53,6 +53,9 @@
 #save .chip.skip{background:var(--panel-2);border-style:dashed}
 #save .chip.skip .cn{text-decoration:line-through;color:var(--mute)}
 #save .chip.skip small{color:var(--danger-text);font-family:var(--f-body);font-weight:700}
+/* 서버가 받지 않은 링크(400 invalid_url) */
+#save .chip.bad{border-style:dashed;border-color:var(--danger-text)}
+#save .chip.bad small{color:var(--danger-text);font-family:var(--f-body);font-weight:700}
 
 /* 행성 선택: 색 점 + 선택 상자, 바로 아래 새 행성 이름 칸 */
 #save .psel{display:flex;align-items:center;gap:var(--gap-2);min-width:0}
