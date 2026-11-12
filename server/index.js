@@ -42,7 +42,7 @@ try {
   process.exit(1);
 }
 
-// Node 가 끝날 때 자기가 띄운 파이썬만 끈다. 'exit' 에서는 기다릴 수 없으므로 kill 만 보낸다.
+// Node 가 끝날 때 자기가 띄운 파이썬만 끈다. 'exit' 에서는 기다릴 수 없으므로 stdin 만 닫는다(파이썬이 색인을 저장하고 스스로 끝난다).
 process.on('exit', () => {
   rag.stop();
 });
