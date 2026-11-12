@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<title>spaceLog · 캐릭터 확인용(개발 전용)</title>
+<link rel="icon" href="data:,">
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#15103a}
+  #labels{position:fixed;inset:0;z-index:3;pointer-events:none}
+  #labels .tag{position:absolute;transform:translate(-50%,0);text-align:center;white-space:nowrap;padding:5px 12px;border-radius:12px;font:600 13px var(--f-body)}
+  #labels .tag b{display:block;font-family:var(--f-display);font-weight:400;font-size:16px}
+  #labels .tag small{font:500 11px var(--f-mono);color:var(--mute)}
+  #devBar{position:fixed;z-index:4;left:16px;top:16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;max-width:calc(100vw - 32px);box-sizing:border-box}
+  #devBar b{font-family:var(--f-display);font-weight:400;font-size:15px;margin-right:6px}
+</style>
+</head>
+<body>
+<!--
+  개발 전용 확인 화면(스펙 6-10의 캐릭터 6종). index.html에서 연결하지 않고, 빌드(dist)에도 들어가지 않는다.
+  `npm run dev` 뒤 http://localhost:5173/dev-characters.html 로 연다. API는 부르지 않는다.
+  윗줄 = 기본 색, 아랫줄 = 몸 색 · 포인트 색 · 불꽃을 바꾼 예.
+  주소 뒤에 붙일 수 있는 것: ?yaw=180(뒤에서 보기, 도) &spin=0(돌지 않기) &k=0.6(비행 자세 0~1) &only=cat(한 종류만 크게)
+-->
+<div id="stage"></div>
+<div id="labels"></div>
+<div id="devBar" class="card"><b>개발 전용 · 캐릭터 6종</b></div>
+<script type="module" src="/src/three/dev-characters.js"></script>
+</body>
+</html>
