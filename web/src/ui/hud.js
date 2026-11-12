@@ -231,6 +231,13 @@ function markNear() {
   for (const b of document.querySelectorAll('#dock button[data-planet]')) b.classList.toggle('here', same(b.dataset.planet, nearId));
 }
 
+// "+ 새 행성"을 목록 항목과 같은 폭으로: 목록에 스크롤 막대가 생기면 그 폭만큼 줄인다(스펙 6-10)
+function syncNewPlanetWidth() {
+  const dock = $('dock');
+  const bar = dock.hidden ? 0 : Math.max(0, dock.offsetWidth - dock.clientWidth);
+  $('wNewPlanet').style.setProperty('--dock-sbw', `${bar}px`);
+}
+
 // 바로 날아가기 목록: 색 점 · 이름 · 이 기간 별 개수. "+ 새 행성"(#wNewPlanet)은 목록 위에 고정돼 있어
 // 여기서 그리지 않는다(행성이 없어도 보인다, 스펙 6-6). 이 목록만 세로로 스크롤한다.
 function paintDock() {
@@ -251,6 +258,7 @@ function paintDock() {
     dock.dataset.html = html;
   }
   dock.hidden = store.state.planets.length === 0;
+  syncNewPlanetWidth();
   markNear();
   // 다시 그리기 전에 초점이 있던 버튼으로 되돌린다
   if (focusPlanet !== undefined && !dock.contains(document.activeElement)) {
@@ -478,6 +486,7 @@ export function initHud() {
     const ro = new ResizeObserver(updateLayoutVars);
     ro.observe($('period'));
     ro.observe($('wHint'));
+    new ResizeObserver(syncNewPlanetWidth).observe($('dock'));
   }
   addEventListener('resize', updateLayoutVars);
 

@@ -84,7 +84,6 @@ function listHtml(planet, stars) {
     `<button type="button" class="btn x" data-act="close" data-focus="close" aria-label="닫기">${ico('x')}</button></header>` +
     (menuOpen
       ? '<div class="menu" id="pMenu">' +
-        '<button type="button" data-m="new" data-focus="m:new">새 행성 만들기</button>' +
         '<button type="button" data-m="edit" data-focus="m:edit">행성 꾸미기</button>' +
         `<button type="button" data-m="merge" data-focus="m:merge"${only ? ' disabled' : ''}>다른 행성과 합치기</button>` +
         '<button type="button" data-m="del" data-focus="m:del">행성 삭제</button></div>'
@@ -328,8 +327,7 @@ function menuAct(act, planet) {
   // 창을 열기 전에 초점을 ⋯ 버튼에 둔다: 창이 닫히면 거기로 돌아온다(메뉴 항목은 사라진다)
   closeMenu({ focus: true });
   if (menuButton() !== document.activeElement) menuButton()?.focus({ preventScroll: true });
-  if (act === 'new') openPlanetForm({});
-  else if (act === 'edit') openPlanetForm({ planet });
+  if (act === 'edit') openPlanetForm({ planet });
   else if (act === 'merge') merge(planet);
   else if (act === 'del') {
     confirmDeletePlanet(
