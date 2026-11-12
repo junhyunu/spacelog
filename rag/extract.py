@@ -1,0 +1,320 @@
+"""첨부 파일에서 글 뽑기.
+
+extract_text(path, ext, limit) -> (text, note)
+  note: None | 'partial' | 'no_text' | 'unsupported' | 'error:<짧은 이유>'
+
+이유는 정해 둔 짧은 낱말만 쓴다(missing · unreadable · encrypted · corrupt · too_large · failed).
+예외 메시지나 파일 내용은 note 에도 로그에도 넣지 않는다.
+"""
+
+import codecs
+import logging
+import os
+import re
+import zipfile
+from xml.etree import ElementTree
+
+DEFAULT_LIMIT = 200_000
+# docx · pptx · xlsx · hwpx 는 zip 이다. 읽을 항목의 압축 푼 크기 합이 이것을 넘으면 읽지 않는다(zip 폭탄).
+MAX_ZIP_BYTES = 50 * 1024 * 1024
+# zip 이 아닌 형식(pdf)의 파일 크기 한도.
+MAX_FILE_BYTES = 200 * 1024 * 1024
+# PDF 에서 공백을 뺀 글자가 이보다 적으면 스캔(이미지) PDF 로 본다.
+MIN_PDF_CHARS = 20
+
+TEXT_EXTS = {"txt", "md", "csv", "json", "log"}
+ZIP_EXTS = {"docx", "xlsx", "pptx", "hwpx"}
+
+# pypdf 는 깨진 PDF 에서 경고를 많이 찍는다. 오류만 남긴다.
+logging.getLogger("pypdf").setLevel(logging.ERROR)
+
+
+class _TooLarge(Exception):
+    pass
+
+
+class _Encrypted(Exception):
+    pass
+
+
+class _Full(Exception):
+    """글자 한도를 채웠다(더 읽지 않는다)."""
+
+
+class _Collector:
+    """조각을 모으다가 limit 를 넘으면 _Full 을 던져 읽기를 멈춘다."""
+
+    def __init__(self, limit):
+        self.limit = limit
+        self.parts = []
+        self.size = 0
+
+    def add(self, text):
+        if not text:
+            return
+        self.parts.append(text)
+        self.size += len(text)
+        if self.size > self.limit:
+            raise _Full
+
+    def line(self, text):
+        self.add(text + "\n")
+
+
+def normalize_ext(ext, path=""):
+    e = str(ext or "").strip().lower().lstrip(".")
+    if not e and path:
+        e = os.path.splitext(str(path))[1].lower().lstrip(".")
+    return e
+
+
+def extract_text(path, ext, limit=DEFAULT_LIMIT):
+    e = normalize_ext(ext)
+    if e in TEXT_EXTS:
+        reader = _read_text
+    elif e == "pdf":
+        reader = _read_pdf
+    elif e == "docx":
+        reader = _read_docx
+    elif e == "xlsx":
+        reader = _read_xlsx
+    elif e == "pptx":
+        reader = _read_pptx
+    elif e == "hwpx":
+        reader = _read_hwpx
+    else:
+        return "", "unsupported"
+
+    try:
+        path = os.fspath(path)
+        if not os.path.isfile(path):
+            return "", "error:missing"
+        if e == "pdf" and os.path.getsize(path) > MAX_FILE_BYTES:
+            return "", "error:too_large"
+        if e in ZIP_EXTS and not zipfile.is_zipfile(path):
+            return "", "error:corrupt"
+        collector = _Collector(limit)
+        try:
+            special = reader(path, collector)
+        except _Full:
+            special = None
+        if special:
+            return "", special
+        text = "".join(collector.parts).strip()
+    except _TooLarge:
+        return "", "error:too_large"
+    except _Encrypted:
+        return "", "error:encrypted"
+    except FileNotFoundError:
+        return "", "error:missing"
+    except PermissionError:
+        return "", "error:unreadable"
+    except (zipfile.BadZipFile, ElementTree.ParseError, KeyError, EOFError):
+        return "", "error:corrupt"
+    except MemoryError:
+        return "", "error:too_large"
+    except Exception as err:  # noqa: BLE001 — 어떤 파일도 서버를 죽이지 않는다
+        return "", "error:corrupt" if _looks_corrupt(err) else "error:failed"
+
+    if len(text) > limit:
+        return text[:limit], "partial"
+    return text, None
+
+
+def _looks_corrupt(err):
+    name = type(err).__name__
+    return name in ("PdfReadError", "PdfStreamError", "PackageNotFoundError", "InvalidFileException") or (
+        isinstance(err, ValueError)
+    )
+
+
+# ---------- 글자 파일 ----------
+
+
+def _read_text(path, out):
+    # 한 글자는 utf-8 에서 최대 4바이트. 한도보다 조금 더 읽어 partial 여부를 안다.
+    cap = out.limit * 4 + 4
+    with open(path, "rb") as f:
+        raw = f.read(cap + 1)
+    truncated = len(raw) > cap
+    if truncated:
+        raw = raw[:cap]
+    text = None
+    for encoding in ("utf-8-sig", "cp949"):
+        try:
+            # final=False 면 잘린 끝의 반쪽 글자는 버린다(오류로 보지 않는다).
+            text = codecs.getincrementaldecoder(encoding)().decode(raw, final=not truncated)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        text = raw.decode("utf-8", errors="replace")
+    out.add(text)
+
+
+# ---------- PDF ----------
+
+
+def _read_pdf(path, out):
+    from pypdf import PdfReader
+
+    reader = PdfReader(path)
+    if reader.is_encrypted:
+        try:
+            ok = reader.decrypt("")
+        except Exception as err:  # noqa: BLE001
+            raise _Encrypted from err
+        if not ok:
+            raise _Encrypted
+    seen = 0
+    for page in reader.pages:
+        try:
+            text = page.extract_text() or ""
+        except Exception:  # noqa: BLE001 — 한 쪽이 깨져도 나머지는 읽는다
+            text = ""
+        seen += len(re.sub(r"\s+", "", text))
+        if text.strip():
+            out.line(text.strip())
+    if seen < MIN_PDF_CHARS:
+        return "no_text"
+    return None
+
+
+# ---------- zip 형식 공통 ----------
+
+
+def _check_zip(zf, names):
+    total = 0
+    for name in names:
+        total += zf.getinfo(name).file_size
+        if total > MAX_ZIP_BYTES:
+            raise _TooLarge
+
+
+def _check_whole_zip(path):
+    with zipfile.ZipFile(path) as zf:
+        _check_zip(zf, zf.namelist())
+
+
+# ---------- docx ----------
+
+
+def _read_docx(path, out):
+    _check_whole_zip(path)
+    from docx import Document
+    from docx.table import Table
+
+    doc = Document(path)
+    for block in doc.iter_inner_content():
+        if isinstance(block, Table):
+            _docx_table(block, out)
+        else:
+            out.line(block.text)
+
+
+def _docx_table(table, out):
+    for row in table.rows:
+        cells = []
+        last = None
+        for cell in row.cells:
+            if last is not None and cell._tc is last:  # 합친 칸은 한 번만
+                continue
+            last = cell._tc
+            text = cell.text.strip()
+            if text:
+                cells.append(text)
+        if cells:
+            out.line(" | ".join(cells))
+
+
+# ---------- xlsx ----------
+
+
+def _read_xlsx(path, out):
+    _check_whole_zip(path)
+    from openpyxl import load_workbook
+
+    wb = load_workbook(path, read_only=True, data_only=True)
+    try:
+        for ws in wb.worksheets:
+            out.line(f"## {ws.title}")
+            # 파일이 적어 둔 크기를 믿지 않는다(빈 칸으로 채운 거대한 행을 만들지 않게).
+            ws.reset_dimensions()
+            for row in ws.iter_rows(values_only=True):
+                cells = [str(v).strip() for v in row if v is not None and str(v).strip()]
+                if cells:
+                    out.line(" | ".join(cells))
+            out.add("\n")
+    finally:
+        wb.close()
+
+
+# ---------- pptx ----------
+
+
+def _read_pptx(path, out):
+    _check_whole_zip(path)
+    from pptx import Presentation
+
+    prs = Presentation(path)
+    for n, slide in enumerate(prs.slides, start=1):
+        out.line(f"## 슬라이드 {n}")
+        for shape in slide.shapes:
+            _pptx_shape(shape, out)
+        if slide.has_notes_slide:
+            notes = slide.notes_slide.notes_text_frame
+            if notes is not None and notes.text.strip():
+                out.line(notes.text.strip())
+        out.add("\n")
+
+
+def _pptx_shape(shape, out):
+    if getattr(shape, "shapes", None) is not None and shape.shape_type == 6:  # 그룹
+        for child in shape.shapes:
+            _pptx_shape(child, out)
+        return
+    if getattr(shape, "has_text_frame", False) and shape.has_text_frame:
+        text = shape.text_frame.text.strip()
+        if text:
+            out.line(text)
+    if getattr(shape, "has_table", False) and shape.has_table:
+        for row in shape.table.rows:
+            cells = [c.text.strip() for c in row.cells if c.text.strip()]
+            if cells:
+                out.line(" | ".join(cells))
+
+
+# ---------- hwpx ----------
+
+_SECTION = re.compile(r"^Contents/section(\d+)\.xml$", re.IGNORECASE)
+
+
+def _local(tag):
+    return tag.rsplit("}", 1)[-1] if isinstance(tag, str) else ""
+
+
+def _read_hwpx(path, out):
+    with zipfile.ZipFile(path) as zf:
+        sections = sorted(
+            (int(m.group(1)), name) for name in zf.namelist() if (m := _SECTION.match(name))
+        )
+        names = [name for _, name in sections]
+        if not names:
+            raise KeyError("no section")
+        _check_zip(zf, names)
+        for name in names:
+            with zf.open(name) as f:
+                line = []
+                for event, elem in ElementTree.iterparse(f, events=("end",)):
+                    tag = _local(elem.tag)
+                    if tag == "t":
+                        line.append("".join(elem.itertext()))
+                    elif tag == "p":
+                        text = "".join(line).strip()
+                        line = []
+                        if text:
+                            out.line(text)
+                        elem.clear()
+                text = "".join(line).strip()
+                if text:
+                    out.line(text)

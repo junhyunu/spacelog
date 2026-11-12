@@ -2,14 +2,17 @@
 
 import hmac
 import sys
+import threading
 from pathlib import Path
 
 from flask import Flask, jsonify, request
+from langchain_core.embeddings import Embeddings
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config import load_config  # noqa: E402
+from index import BadStar, StarIndex  # noqa: E402
 from models import get_chat, get_embeddings  # noqa: E402
 
 TOKEN_HEADER = "X-Spacelog-Token"
@@ -39,7 +42,115 @@ def create_app(cfg, *, embeddings=None, chat=None):
             fake=cfg.fake,
         )
 
+    register_index_routes(app)
+    app.extensions["spacelog"]["shutdown"].append(lambda: close_index(app))
     return app
+
+
+# ---------- 색인 ----------
+
+# 별 하나의 요청 본문(경로 · 글)은 작다. 이보다 크면 413.
+MAX_BODY_BYTES = 8 * 1024 * 1024
+
+
+class KeyMissingError(Exception):
+    pass
+
+
+class _NoKeyEmbeddings(Embeddings):
+    """키가 없을 때 쓰는 자리 표시. 지우기 · 통계는 되고, 임베딩이 필요하면 KeyMissingError."""
+
+    def embed_documents(self, texts):
+        raise KeyMissingError
+
+    def embed_query(self, text):
+        raise KeyMissingError
+
+
+def app_index(app):
+    """StarIndex 를 처음 쓸 때 만든다(<data_dir>/rag/index.json 을 불러온다)."""
+    ext = app.extensions["spacelog"]
+    with ext["index_lock"]:
+        if ext.get("index") is None:
+            cfg = app.config["RAG"]
+            if ext["embeddings"] is None and not cfg.fake and not cfg.key_present:
+                embeddings = _NoKeyEmbeddings()
+            else:
+                embeddings = app_embeddings(app)
+            ext["index"] = StarIndex(cfg.data_dir, embeddings)
+        return ext["index"]
+
+
+def close_index(app):
+    index = app.extensions["spacelog"].get("index")
+    if index is not None:
+        index.close()
+
+
+def register_index_routes(app):
+    app.config["MAX_CONTENT_LENGTH"] = MAX_BODY_BYTES
+    app.extensions["spacelog"]["index_lock"] = threading.Lock()
+
+    def fail(status, code, err=None):
+        if err is not None:
+            # 예외 종류만 남긴다(메시지에 글이나 경로가 들어 있을 수 있다).
+            print(f"rag {request.path} failed: {code} ({type(err).__name__})", file=sys.stderr, flush=True)
+        return jsonify(error=code), status
+
+    def body():
+        data = request.get_json(silent=True)
+        return data if isinstance(data, dict) else None
+
+    @app.errorhandler(413)
+    def too_large(_err):
+        return jsonify(error="too_large"), 413
+
+    @app.post("/index")
+    def index_star():
+        star = body()
+        if star is None:
+            return fail(400, "bad_request")
+        try:
+            index = app_index(app)
+            return jsonify(index.upsert(star))
+        except BadStar:
+            return fail(400, "bad_request")
+        except KeyMissingError:
+            return fail(503, "key_missing")
+        except OSError as err:
+            return fail(500, "storage_error", err)
+        except Exception as err:  # noqa: BLE001 — OpenAI 오류 등
+            return fail(502, "embed_failed", err)
+
+    @app.post("/remove")
+    def remove_stars():
+        data = body()
+        ids = data.get("star_ids") if data else None
+        if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+            return fail(400, "bad_request")
+        try:
+            return jsonify(removed=app_index(app).remove(ids))
+        except OSError as err:
+            return fail(500, "storage_error", err)
+
+    @app.post("/reset")
+    def reset_index():
+        try:
+            app_index(app).reset()
+            return jsonify(ok=True)
+        except OSError as err:
+            return fail(500, "storage_error", err)
+
+    @app.get("/stats")
+    def stats():
+        return jsonify(app_index(app).stats())
+
+    @app.post("/flush")
+    def flush():
+        try:
+            return jsonify(ok=True, saved=app_index(app).flush())
+        except OSError as err:
+            return fail(500, "storage_error", err)
 
 
 def app_embeddings(app):
