@@ -108,6 +108,23 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 .hlist{display:flex;flex-direction:column;gap:7px}
 .pdot{width:16px;height:16px;border-radius:50%;border:2.5px solid var(--ink);flex:none}
 .rec .n2{margin-left:auto;font-family:var(--f-display);font-size:12px;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px;font-variant-numeric:tabular-nums}
+.hlist .rec{min-height:44px}
+.btn.sm{font-size:13px;padding:6px 10px;gap:6px;position:relative}
+.btn.sm::after{content:"";position:absolute;inset:-6px}
+.hcard .btn{max-width:100%}
+.hcard .btn .t{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.hcard h3{overflow-wrap:anywhere}
+#hRedis h3,#hRedis p{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+#hRedis h3{-webkit-line-clamp:2;line-clamp:2}
+#hRedis p{-webkit-line-clamp:3;line-clamp:3;white-space:pre-line}
+.hrow{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap}
+/* 카드가 3개보다 적을 때(재발견 없음 · 별 없는 행성만 있음) */
+@media (min-width:761px){
+  .home-grid[data-n="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .home-grid[data-n="1"]{grid-template-columns:minmax(0,460px);justify-content:center}
+}
+/* 전환 4 ~ 5단계: 조작 UI는 우주가 다 열린 뒤 페이드 인한다(transition.js) */
+body.world-entering :is(#brand,#help,#dock,#period,#wLog,#redis,#worldMsg,#near){opacity:0;pointer-events:none}
 
 /* transition veil */
 #veil{position:fixed;inset:0;background:var(--ink);z-index:30;display:grid;place-items:center}
