@@ -124,7 +124,7 @@ store.on('newPlanet', () => openPlanetForm({}));
 store.on('openSave', (o) => openSave(o ?? { tab: 'text' }));
 // 끌어다 놓기 · 붙여넣기(W-00 · W-01 어디서나)
 initDropzone();
-// 우주에서 나갈 때는 열려 있는 창을 모두 닫는다(패널은 panel.js가 닫는다)
+// 우주에서 나갈 때 패널 · 행성 창은 닫는다. 저장 창은 비어 있고 한가할 때만 스스로 닫힌다(쓰던 글을 지키려고).
 store.on('leavingWorld', () => {
   closePlanetForm();
   closePlanetDelete();
