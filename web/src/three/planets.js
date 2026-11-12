@@ -32,6 +32,7 @@ const stars = new Map(); // id → S
 const flying = []; // { S, t, from }
 let selectedId = null;
 let guestId = null;
+const warnedGuests = new Set(); // 찾지 못해 이미 경고한 재발견 별 id
 let capMode = false;
 let layoutVer = 0;
 
@@ -536,6 +537,7 @@ export function syncUniverse({ planets: planetList = [], stars: starList = [], g
   const totalInPeriod = Math.max(starList.length, planetList.reduce((a, d) => a + countOf(d), 0));
   capMode = totalInPeriod > STAR_CAP;
   guestId = guestStarId === null || guestStarId === undefined ? null : key(guestStarId);
+  const hadSelected = selectedId !== null && stars.has(selectedId);
 
   // --- 행성 ---
   const seen = new Set();
@@ -592,6 +594,10 @@ export function syncUniverse({ planets: planetList = [], stars: starList = [], g
   if (guestId !== null) {
     const g = starList.find((s) => key(s.id) === guestId) || (guestStar && key(guestStar.id) === guestId ? guestStar : null);
     if (g && planets.has(key(g.planet_id))) wanted.set(guestId, key(g.planet_id));
+    else if (!g && !warnedGuests.has(guestId)) {
+      warnedGuests.add(guestId);
+      console.warn(`[planets] guestStarId ${guestId}를 stars에서도 guestStar에서도 찾지 못해 그리지 않습니다.`);
+    }
   }
   for (const S of [...stars.values()]) {
     const pid = wanted.get(S.id);
@@ -605,6 +611,7 @@ export function syncUniverse({ planets: planetList = [], stars: starList = [], g
     }
   }
   for (const [id, pid] of wanted) if (!stars.has(id)) createStar(id, planets.get(pid), null);
+  if (hadSelected && !stars.has(selectedId)) selectedId = null; // 고른 별이 사라졌다
   paintStars();
 }
 
@@ -637,10 +644,24 @@ export function setSelectedStar(id) {
   paintStars();
 }
 
-/** 행성 정보 { id, name, position(Vector3, 읽기만), radius(지금 보이는 반지름) }. 없으면 null. */
-export function planetInfo(id) {
+/**
+ * 행성 정보 { id, name, position(Vector3, 읽기만), radius(지금 보이는 반지름) }. 없으면 null.
+ * out을 주면 새 객체를 만들지 않고 거기에 채워 돌려준다(프레임마다 부를 때).
+ */
+export function planetInfo(id, out) {
   const P = planets.get(key(id));
-  return P ? { id: P.id, name: P.name, position: P.group.position, radius: P.r * P.scale } : null;
+  if (!P) return null;
+  const info = out || {};
+  info.id = P.id;
+  info.name = P.name;
+  info.position = P.group.position;
+  info.radius = P.r * P.scale;
+  return info;
+}
+
+/** 그 행성이 지금 장면에 있는지. */
+export function hasPlanet(id) {
+  return planets.has(key(id));
 }
 
 /** 모든 행성에 대해 fn(id, position, radius, name)을 부른다. */

@@ -143,10 +143,7 @@ for (const [label, fn] of Object.entries(actions)) {
   b.type = 'button';
   b.className = 'btn ghost';
   b.textContent = label;
-  b.addEventListener('click', (e) => {
-    fn();
-    e.currentTarget.blur(); // Space가 버튼을 다시 누르지 않게
-  });
+  b.addEventListener('click', () => fn());
   box.appendChild(b);
 }
 
