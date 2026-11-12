@@ -1,0 +1,54 @@
+/* W-02 행성 패널 보정 · 행성 꾸미기 창(#planetForm) · 행성 삭제 창(#planetDel). 값은 tokens.css의 토큰만 쓴다. */
+
+/* ---------- W-02 패널 ---------- */
+#panel h2{overflow-wrap:anywhere}
+#panel .rec{width:100%;min-height:44px;box-sizing:border-box}
+#panel .rec:hover{background:color-mix(in srgb,var(--accent) 10%,var(--white))}
+#panel .th img{width:100%;height:100%;object-fit:cover;display:block}
+#panel .menu button{min-height:44px}
+#panel .pname{display:flex;align-items:center;gap:6px;margin:0 0 2px;min-width:0}
+#panel .pname .dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--ink);flex:none}
+#panel .pname .t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#panel .detail{white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* ---------- 두 창이 함께 쓰는 것 ---------- */
+#planetForm,#planetDel{position:fixed;inset:0;z-index:var(--z-planet-form);background:rgba(10,6,30,.6);display:grid;place-items:center;padding:16px;box-sizing:border-box}
+#planetForm[hidden],#planetDel[hidden]{display:none}
+#planetForm .card,#planetDel .card{box-sizing:border-box;display:flex;flex-direction:column;max-height:100%;overflow-y:auto}
+#planetForm h3,#planetDel h3{margin:0;font-size:17px;line-height:1.4;overflow-wrap:anywhere}
+#planetForm .row,#planetDel .row{display:flex;gap:var(--gap-2);justify-content:flex-end;margin-top:4px}
+#planetForm .err,#planetDel .err{margin:0;font-size:13px;font-weight:700;line-height:1.5;color:var(--danger-text)}
+#planetForm input[type="text"],#planetDel select{font:600 14px var(--f-body);border:var(--line-thin) solid var(--ink);border-radius:10px;padding:8px 10px;background:var(--white);color:var(--ink);width:100%;min-height:44px;box-sizing:border-box}
+#planetForm :focus-visible,#planetDel :focus-visible{outline:var(--line) solid var(--sky);outline-offset:2px}
+#planetForm input[type="checkbox"],#planetDel input[type="radio"]{width:20px;height:20px;margin:0;flex:none;accent-color:var(--ink)}
+
+/* ---------- 행성 꾸미기 창 (스펙 6-6) ---------- */
+#planetForm .card{width:min(440px,100%);padding:18px;gap:var(--gap-3)}
+#planetForm header{display:flex;align-items:center;gap:var(--gap-3)}
+#planetForm header h3{flex:1;min-width:0;font-family:var(--f-display);font-weight:400;font-size:20px;line-height:1.2}
+#planetForm header .x{width:34px;height:34px;padding:0;flex:none}
+#planetForm .fld{display:flex;flex-direction:column;gap:var(--gap-1);min-width:0}
+/* 색 원 16개: 8개씩 2줄. 보이는 원은 28px, 누르는 영역은 44px */
+#planetForm .swatches{display:grid;grid-template-columns:repeat(8,minmax(0,44px));justify-content:space-between}
+#planetForm .sw{width:100%;aspect-ratio:1;max-width:44px;padding:0;border:0;background:transparent;display:grid;place-items:center;cursor:pointer;border-radius:50%}
+#planetForm .sw span{width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);box-sizing:border-box}
+#planetForm .sw[aria-checked="true"] span{border-width:var(--line);box-shadow:0 0 0 3px var(--panel),0 0 0 6px var(--sky)}
+#planetForm .sw:focus-visible{outline-offset:-2px}
+/* 장식 칩 10개: 줄바꿈 배치. 고른 칩은 잉크 바탕 노랑 글자 */
+#planetForm .chips{display:flex;flex-wrap:wrap;gap:var(--gap-2)}
+#planetForm .chip{font:600 14px var(--f-body);color:var(--ink);background:var(--white);border:var(--line-thin) solid var(--ink);border-radius:var(--r-pill);padding:0 14px;min-height:44px;min-width:44px;cursor:pointer}
+#planetForm .chip:hover{background:var(--panel-2)}
+#planetForm .chip[aria-checked="true"]{background:var(--ink);color:var(--yellow)}
+#planetForm .chk{display:flex;align-items:center;gap:var(--gap-2);font-size:14px;font-weight:600;min-height:44px;align-self:flex-start;cursor:pointer}
+
+/* ---------- 행성 삭제 창 (스펙 6-7) ---------- */
+#planetDel .card{width:min(400px,100%);padding:18px;gap:10px}
+#planetDel p{margin:0;font-size:13.5px;color:var(--mute);line-height:1.6}
+#planetDel .opts{display:flex;flex-direction:column;gap:var(--gap-1)}
+#planetDel .opt{display:flex;align-items:center;gap:var(--gap-2);font-size:14px;font-weight:600;line-height:1.4;min-height:44px;cursor:pointer}
+#planetDel select:disabled{background:var(--panel-2);color:var(--mute);cursor:not-allowed}
+#planetDel #pdInto,#planetDel #pdWarn{margin-left:28px;width:calc(100% - 28px)}
+
+@media (max-width:420px){
+  #planetForm .card{padding:14px}
+}
