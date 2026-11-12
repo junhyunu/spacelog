@@ -112,7 +112,7 @@ function showDetail(planet) {
   const next = detailKey(detailStar, store.state.planets);
   if (next === shownKey && panelEl().firstChild) return;
   shownKey = next;
-  renderDetail(panelEl(), detailStar, planet, { onBack: backToList, onClose: () => closePanel({ overview: true }) });
+  renderDetail(panelEl(), detailStar, planet, { onBack: backToList, onClose: () => closePanel({ overview: true, keepPosition: true }) });
 }
 
 function setDetail(star) {
@@ -213,10 +213,11 @@ export function openPanel(id, starId) {
 }
 
 /**
- * 패널을 닫는다. overview가 true면(✕ · Esc · 행성 삭제) 손님 별을 숨기고 조망으로 돌아간다.
- * 멀리 날아가서 닫힐 때는 비행을 건드리지 않는다(손님 별은 hud.js가 정리한다).
+ * 패널을 닫는다. overview가 true면 손님 별을 숨기고, keepPosition이 아니면 조망으로 돌아간다.
+ * ✕ · Esc로 닫을 때는 keepPosition: 캐릭터는 그 행성 앞에 그대로 남는다(사용자 결정).
+ * 행성이 지워져 닫힐 때만 조망으로 돌아간다. 멀리 날아가서 닫힐 때는 비행을 건드리지 않는다.
  */
-export function closePanel({ overview = false } = {}) {
+export function closePanel({ overview = false, keepPosition = false } = {}) {
   openSeq += 1; // 받던 별(api.star)이 뒤늦게 와도 다시 열지 않는다
   if (planetId === null) return;
   leaveDetail();
@@ -231,7 +232,7 @@ export function closePanel({ overview = false } = {}) {
   setSelectedStar(null);
   if (overview) {
     clearGuestStar();
-    if (store.state.inWorld) enterOverview();
+    if (store.state.inWorld && !keepPosition) enterOverview();
   }
 }
 
@@ -344,7 +345,7 @@ function onClick(e) {
   }
   const actEl = e.target.closest('[data-act]');
   const act = actEl?.dataset.act;
-  if (act === 'close') closePanel({ overview: true });
+  if (act === 'close') closePanel({ overview: true, keepPosition: true });
   else if (act === 'edit') {
     actEl.focus({ preventScroll: true }); // 창이 닫히면 ✎로 돌아오게(누른 버튼에 초점이 가지 않는 브라우저도 있다)
     openPlanetForm({ planet });
@@ -450,7 +451,7 @@ export function initPanel() {
   registerEscape(20, () => {
     if (planetId === null) return false;
     if (menuOpen) closeMenu({ focus: true });
-    else closePanel({ overview: true });
+    else closePanel({ overview: true, keepPosition: true });
     return true;
   });
 }
