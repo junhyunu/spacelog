@@ -18,7 +18,10 @@
   <div class="home-wrap">
     <header class="home-top">
       <div class="logo card" data-suck>space<span>Log</span></div>
+      <div class="home-acts">
+      <button type="button" class="btn ghost" id="hCharacter" data-suck><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg> 캐릭터</button>
       <button type="button" class="btn" id="hLog" data-suck><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 기록하기</button>
+      </div>
     </header>
     <div class="hero">
       <h2 id="hGreet" data-suck></h2>
@@ -47,6 +50,7 @@
     <div class="sd-sum">
       <div class="stats">이 기간 별<b id="sRec">0</b>개 · 행성<b id="sPlanet">0</b>개</div>
       <button type="button" class="btn ghost" id="goHome"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg> 홈</button>
+      <button type="button" class="btn ghost" id="wCharacter"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg> 캐릭터 꾸미기</button>
     </div>
     <div class="sd-planets">
       <div class="label" id="dockLabel">행성으로 바로 날아가기</div>
@@ -131,6 +135,20 @@
     <label class="chk"><input type="checkbox" id="pfRing"><span>고리 두르기</span></label>
     <p class="err" id="pfErr" role="alert" hidden></p>
     <div class="row"><button type="button" class="btn ghost" id="pfNo">취소</button><button type="submit" class="btn yellow" id="pfYes">만들기</button></div>
+  </form>
+</div>
+
+<!-- 캐릭터 꾸미기 창(스펙 6-10): 미리보기 캔버스 · 칩 · 색 원은 characterForm.js가 채운다 -->
+<div id="charForm" hidden>
+  <form class="card" id="cfForm" role="dialog" aria-modal="true" aria-labelledby="cfTitle" novalidate>
+    <header><h3 id="cfTitle">캐릭터 꾸미기</h3><button type="button" class="btn x ghost" id="cfX" aria-label="닫기"><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></header>
+    <div class="preview" id="cfPreview" role="img" aria-label="미리보기"></div>
+    <div class="fld"><span class="lbl" id="cfKindLbl">종류</span><div class="chips" id="cfKinds" role="radiogroup" aria-labelledby="cfKindLbl"></div></div>
+    <div class="fld"><span class="lbl" id="cfSuitLbl">몸 색</span><div class="swatches" id="cfSuits" role="radiogroup" aria-labelledby="cfSuitLbl"></div></div>
+    <div class="fld"><span class="lbl" id="cfAccentLbl">포인트 색</span><div class="swatches" id="cfAccents" role="radiogroup" aria-labelledby="cfAccentLbl"></div></div>
+    <div class="fld"><span class="lbl" id="cfFlameLbl">불꽃</span><div class="chips" id="cfFlames" role="radiogroup" aria-labelledby="cfFlameLbl"></div></div>
+    <p class="err" id="cfErr" role="alert" hidden></p>
+    <div class="row"><button type="button" class="btn ghost" id="cfNo">취소</button><button type="submit" class="btn yellow" id="cfYes">저장하기</button></div>
   </form>
 </div>
 

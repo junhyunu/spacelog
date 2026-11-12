@@ -95,6 +95,10 @@ export const api = {
   deletePlanet: (planetId, { stars, into } = {}) =>
     request('DELETE', `/planets/${id(planetId)}${qs({ stars, into: stars === 'move' ? into : undefined })}`),
 
+  /** 캐릭터의 모습(스펙 6-10). → { kind, suit, accent, flame } 저장한 적이 없으면 기본값 */
+  character: () => request('GET', '/character'),
+  saveCharacter: ({ kind, suit, accent, flame } = {}) => request('PUT', '/character', { kind, suit, accent, flame }),
+
   stars: ({ from, to, planet_id, limit } = {}) => request('GET', `/stars${qs({ from, to, planet_id, limit })}`),
   star: (starId) => request('GET', `/stars/${id(starId)}`),
   patchStar: (starId, patch) => request('PATCH', `/stars/${id(starId)}`, patch),

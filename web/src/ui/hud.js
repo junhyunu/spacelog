@@ -8,6 +8,7 @@
 //   'openStar'   { planetId, starId }   재발견 "날아가기"로 그 별의 행성에 도착했을 때
 //   'openSave'                          "기록하기"(#wLog · 빈 우주 카드)
 //   'newPlanet'                         "+ 새 행성"(#wNewPlanet, 왼쪽 패널 목록 맨 위)
+//   'openCharacter'                     "캐릭터 꾸미기"(#wCharacter, 왼쪽 패널 요약 줄 아래)
 // store에서 듣는 것:
 //   'data'             우주 안에 있을 때 전부 다시 그리고 3D를 맞춘다
 //   'near'             planetId | null  목록의 노랑 표시
@@ -452,6 +453,10 @@ export function initHud() {
   $('wNewPlanet').addEventListener('click', () => {
     closeDrawer();
     store.emit('newPlanet');
+  });
+  $('wCharacter').addEventListener('click', () => {
+    closeDrawer(); // 좁은 화면: 초점이 펼치기 버튼으로 간다 → 창을 닫으면 거기로 돌아온다
+    store.emit('openCharacter');
   });
   $('redis').addEventListener('click', onRedisClick);
   $('wLog').addEventListener('click', () => store.emit('openSave'));

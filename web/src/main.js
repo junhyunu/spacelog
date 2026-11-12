@@ -6,11 +6,15 @@ import '@fontsource/ibm-plex-mono/400.css';
 import './styles/tokens.css';
 import './styles/app.css';
 import './styles/planet.css';
+import './styles/character.css';
 import './styles/detail.css';
 import './styles/save.css';
 
 import { api } from './api.js';
 import { store } from './store.js';
+import { setCharacterLook } from './three/character.js';
+import { closeCharacterForm, openCharacterForm } from './ui/characterForm.js';
+import { normalizeLook } from './ui/characterLogic.js';
 import { isAskOpen } from './ui/confirm.js';
 import { initDropzone } from './ui/dropzone.js';
 import { setEscapeGuards } from './ui/escape.js';
@@ -43,6 +47,7 @@ export function showOffline() {
     document.querySelector('#home .hero').hidden = true;
     document.querySelector('#home .home-grid').hidden = true;
     $('hLog').hidden = true;
+    $('hCharacter').hidden = true;
   }
   if (other.querySelector('[data-retry]')) other.hidden = true;
   if (!card.querySelector('[data-retry]')) {
@@ -63,6 +68,7 @@ function hideOffline() {
   document.querySelector('#home .hero').hidden = false;
   document.querySelector('#home .home-grid').hidden = false;
   $('hLog').hidden = false;
+  $('hCharacter').hidden = false;
 }
 
 /**
@@ -120,6 +126,8 @@ initPanel();
 // "+ 새 행성"(#hNewPlanet · #wNewPlanet): 행성 꾸미기 창을 만들기로 연다.
 // 저장하면 store.reload() → 'data' → 우주 안이면 3D · 목록, 밖이면 홈의 행성 목록이 다시 그려진다.
 store.on('newPlanet', () => openPlanetForm({}));
+// "캐릭터"(#hCharacter) · "캐릭터 꾸미기"(#wCharacter): 캐릭터 꾸미기 창을 연다(스펙 6-10).
+store.on('openCharacter', () => openCharacterForm());
 // "기록하기"(#hLog · #wLog): 기록하기 창을 연다. 버튼은 home.js · hud.js가 듣고 'openSave'로 알린다.
 store.on('openSave', (o) => openSave(o ?? {}));
 // 끌어다 놓기 · 붙여넣기(W-00 · W-01 어디서나)
@@ -128,6 +136,25 @@ initDropzone();
 store.on('leavingWorld', () => {
   closePlanetForm();
   closePlanetDelete();
+  closeCharacterForm();
 });
+
+// 캐릭터의 모습을 한 번 받는다(스펙 6-10). 못 받으면 기본 모습으로 두고, 다시 연결되면 한 번 더 받는다.
+// 우주를 아직 만들지 않았으면 setCharacterLook은 적어만 둔다(transition.js가 처음 들어갈 때 그 모습으로 만든다).
+async function loadCharacter() {
+  if (store.state.characterLoaded) return;
+  let look;
+  try {
+    look = await api.character();
+  } catch {
+    return; // 연결 끊김은 api.js가 알린다
+  }
+  if (store.state.characterLoaded) return; // 받는 사이 꾸미기 창에서 저장했다: 그쪽이 더 새롭다
+  store.state.character = normalizeLook(look);
+  store.state.characterLoaded = true;
+  setCharacterLook(store.state.character);
+}
+store.on('online', loadCharacter);
+loadCharacter();
 
 checkConnection();

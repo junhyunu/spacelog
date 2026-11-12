@@ -4,6 +4,7 @@
 // store로 알리는 것:
 //   'openSave'                  "기록하기"(상단 줄 · 빈 우주 카드)
 //   'newPlanet'                   "+ 새 행성"(#hNewPlanet)
+//   'openCharacter'               "캐릭터"(#hCharacter, 상단 줄 기록하기 왼쪽)
 // store에서 듣는 것:
 //   'data'      우주 밖에 있을 때만 홈을 다시 그린다(처음 연결 · 다시 연결 · 저장 뒤).
 // 연결 실패 상태는 main.js(showOffline)가 그린다. 여기서는 그 카드를 건드리지 않는다.
@@ -83,6 +84,7 @@ function paint({ summary, planets, recent, redis, now }) {
   grid.dataset.n = String(shown);
   home.querySelector('.hero').hidden = false;
   $('hLog').hidden = false;
+  $('hCharacter').hidden = false;
 
   // 빈 우주 카드
   const st = $('hState');
@@ -240,6 +242,7 @@ function onClick(e) {
   if (!el || !home.contains(el)) return;
   if (el.id === 'enterBtn') onEnter({});
   else if (el.id === 'hLog' || el.dataset.act === 'log') store.emit('openSave');
+  else if (el.id === 'hCharacter') store.emit('openCharacter');
   else if (el.dataset.act === 'newPlanet') store.emit('newPlanet');
   else if (el.dataset.planet) onEnter({ planetId: el.dataset.planet, starId: el.dataset.star || undefined });
 }

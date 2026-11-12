@@ -13,6 +13,7 @@
 // 4단계의 store.reload()가 내는 'data'는 inWorld가 이미 true인 채로 온다.
 import { api } from '../api.js';
 import { store } from '../store.js';
+import { setCharacterLook } from '../three/character.js';
 import { enterOverview, flyTo, setInputBlocked, startLoop, stopFlight } from '../three/controls.js';
 import { initScene } from '../three/scene.js';
 import { renderHome, resumeEmblem, setEmblemSpin } from './home.js';
@@ -196,6 +197,7 @@ async function prepareWorld(token, { planetId, starId }) {
     if (token !== epoch) throw Object.assign(new Error('stale'), { code: 'stale' });
   };
   initScene($('stage')); // 처음 들어올 때만 만든다. WebGL을 못 쓰면 여기서 던진다
+  setCharacterLook(store.state.character); // 고른 모습으로 만든다(스펙 6-10). 같은 모습이면 아무 일도 없다
   startLoop();
   enterOverview();
   let starGone = false;

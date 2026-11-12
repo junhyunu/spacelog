@@ -2,6 +2,7 @@
 // 쓰는 이벤트: 'data'(reload 끝), 'offline'(요청 실패), 'online'(다시 연결됨),
 // 그 밖에 뒤 태스크가 정한 것('land', 'pickStar', 'near', 'leftPanelPlanet', 'openDetail' …).
 import { api } from './api.js';
+import { DEFAULT_LOOK } from './ui/characterLogic.js';
 import { periodRange } from './util.js';
 
 const LAST_PLANET_KEY = 'spacelog.lastPlanet';
@@ -36,6 +37,8 @@ const state = {
   panelPlanetId: null,
   detailStarId: null,
   guestStarId: null,
+  character: { ...DEFAULT_LOOK }, // 캐릭터의 모습 { kind, suit, accent, flame }(스펙 6-10). main.js가 시작할 때 받는다
+  characterLoaded: false, // 서버에서 받는 데 성공했는지
   // 마지막으로 저장한 행성. 넣으면 localStorage에도 남는다
   get lastPlanetId() {
     return lastPlanetId;
