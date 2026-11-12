@@ -2,7 +2,7 @@
 // 시안 934~987행(renderHome · homeStates · drawBH)을 옮겼다. 데이터만 API에서 받는다.
 //
 // store로 알리는 것:
-//   'openSave'  { tab: 'text' }   "기록하기"(상단 줄 · 빈 우주 카드)
+//   'openSave'                  "기록하기"(상단 줄 · 빈 우주 카드)
 //   'newPlanet'                   "+ 새 행성"(#hNewPlanet)
 // store에서 듣는 것:
 //   'data'      우주 밖에 있을 때만 홈을 다시 그린다(처음 연결 · 다시 연결 · 저장 뒤).
@@ -236,7 +236,7 @@ function onClick(e) {
   const el = e.target instanceof Element ? e.target.closest('button') : null;
   if (!el || !home.contains(el)) return;
   if (el.id === 'enterBtn') onEnter({});
-  else if (el.id === 'hLog' || el.dataset.act === 'log') store.emit('openSave', { tab: 'text' });
+  else if (el.id === 'hLog' || el.dataset.act === 'log') store.emit('openSave');
   else if (el.dataset.act === 'newPlanet') store.emit('newPlanet');
   else if (el.dataset.planet) onEnter({ planetId: el.dataset.planet, starId: el.dataset.star || undefined });
 }

@@ -120,8 +120,8 @@ initPanel();
 // "+ 새 행성"(#hNewPlanet · #wNewPlanet): 행성 꾸미기 창을 만들기로 연다.
 // 저장하면 store.reload() → 'data' → 우주 안이면 3D · 목록, 밖이면 홈의 행성 목록이 다시 그려진다.
 store.on('newPlanet', () => openPlanetForm({}));
-// "기록하기"(#hLog · #wLog): 저장 창(W-05)을 연다. 버튼은 home.js · hud.js가 듣고 'openSave'로 알린다.
-store.on('openSave', (o) => openSave(o ?? { tab: 'text' }));
+// "기록하기"(#hLog · #wLog): 기록하기 창을 연다. 버튼은 home.js · hud.js가 듣고 'openSave'로 알린다.
+store.on('openSave', (o) => openSave(o ?? {}));
 // 끌어다 놓기 · 붙여넣기(W-00 · W-01 어디서나)
 initDropzone();
 // 우주에서 나갈 때 패널 · 행성 창은 닫는다. 저장 창은 비어 있고 한가할 때만 스스로 닫힌다(쓰던 글을 지키려고).

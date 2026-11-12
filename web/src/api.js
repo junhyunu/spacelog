@@ -3,11 +3,13 @@
 import { store } from './store.js';
 
 export class ApiError extends Error {
-  constructor(status, code) {
+  /** data는 서버가 준 오류 본문 전체(예: 409 nothing_to_save의 skipped). */
+  constructor(status, code, data = null) {
     super(`${status} ${code}`);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    this.data = data;
   }
 }
 
@@ -32,13 +34,14 @@ function qs(params) {
 // 서버가 아니라 개발용 프록시가 답한 것이므로(서버 꺼짐) 연결 끊김으로 본다.
 function errorFrom(status, text) {
   let code = null;
+  let data = null;
   try {
-    const data = JSON.parse(text);
+    data = JSON.parse(text);
     if (data && typeof data.error === 'string') code = data.error;
   } catch {
     /* JSON이 아님 */
   }
-  if (code) return new ApiError(status, code);
+  if (code) return new ApiError(status, code, data);
   if (status >= 500) return offline();
   return new ApiError(status, 'unknown');
 }
@@ -52,18 +55,21 @@ function parseOk(status, text) {
   }
 }
 
-async function request(method, path, body) {
+async function request(method, path, body, { signal } = {}) {
   const init = { method, headers: { Accept: 'application/json' } };
   if (body !== undefined) {
     init.headers['Content-Type'] = 'application/json';
     init.body = JSON.stringify(body);
   }
+  if (signal) init.signal = signal;
   let res;
   let text;
   try {
     res = await fetch(`/api${path}`, init);
     text = await res.text();
   } catch {
+    // 멈춘 것은 연결 끊김으로 알리지 않는다
+    if (signal?.aborted) throw new ApiError(0, 'aborted');
     throw offline();
   }
   if (!res.ok) throw errorFrom(res.status, text);
@@ -91,30 +97,42 @@ export const api = {
 
   stars: ({ from, to, planet_id, limit } = {}) => request('GET', `/stars${qs({ from, to, planet_id, limit })}`),
   star: (starId) => request('GET', `/stars/${id(starId)}`),
-  /** body = { type: 'text'|'link', title?, body?, url?, planet_id, memo? } */
-  createStar: (body) => request('POST', '/stars', body),
   patchStar: (starId, patch) => request('PATCH', `/stars/${id(starId)}`, patch),
   deleteStar: (starId) => request('DELETE', `/stars/${id(starId)}`),
 
   /**
-   * 파일 올리기. 파일마다 별 1개. → { created: Star[], skipped: [{ file_name, reason }] }
-   * onProgress(pct)는 0~100 정수. 글자 칸을 파일보다 먼저 붙인다(서버가 그 순서로 읽는다).
+   * 별 하나를 만든다: 글 + 첨부 파일 + 링크(스펙 6-9). → { star, skipped: [{ file_name, reason }] }
+   * 파일이 있으면 multipart(XHR, 진행률 · 멈추기). 글 칸을 파일보다 먼저 붙인다(서버가 그 순서로 읽는다).
+   * 파일이 없으면 JSON. onProgress(pct)는 0~100 정수(파일이 있을 때만).
    * signal(AbortSignal)로 멈추면 ApiError(0, 'aborted')로 끝난다(연결 끊김으로 알리지 않는다).
+   * 남는 것이 없으면(같은 파일뿐) ApiError(409, 'nothing_to_save'), err.data.skipped에 뺀 파일이 있다.
    */
-  uploadStars({ planet_id, memo, files, titles } = {}, onProgress, { signal } = {}) {
+  createStar({ planet_id, title, body, links, files } = {}, onProgress, { signal } = {}) {
+    const list = Array.from(files ?? []);
+    const fields = {
+      planet_id: String(planet_id ?? ''),
+      title: typeof title === 'string' ? title : '',
+      body: typeof body === 'string' ? body : '',
+      links: Array.from(links ?? [], String),
+    };
+    if (!list.length) {
+      if (signal?.aborted) return Promise.reject(new ApiError(0, 'aborted'));
+      return request('POST', '/stars', fields, { signal });
+    }
     return new Promise((resolve, reject) => {
       if (signal?.aborted) {
         reject(new ApiError(0, 'aborted'));
         return;
       }
       const form = new FormData();
-      form.append('planet_id', String(planet_id ?? ''));
-      form.append('memo', memo ?? '');
-      form.append('titles', JSON.stringify(Array.from(titles ?? [], (t) => (typeof t === 'string' ? t : ''))));
-      for (const f of files ?? []) form.append('files', f, f.name);
+      form.append('planet_id', fields.planet_id);
+      form.append('title', fields.title);
+      form.append('body', fields.body);
+      form.append('links', JSON.stringify(fields.links));
+      for (const f of list) form.append('files', f, f.name);
 
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', '/api/stars/upload');
+      xhr.open('POST', '/api/stars');
       xhr.setRequestHeader('Accept', 'application/json');
       if (typeof onProgress === 'function') {
         xhr.upload.onprogress = (e) => {
@@ -123,8 +141,10 @@ export const api = {
       }
       xhr.onload = () => {
         try {
-          if (xhr.status >= 200 && xhr.status < 300) resolve(parseOk(xhr.status, xhr.responseText));
-          else reject(errorFrom(xhr.status, xhr.responseText));
+          if (xhr.status >= 200 && xhr.status < 300) {
+            if (store.state.offline) store.emit('reachable');
+            resolve(parseOk(xhr.status, xhr.responseText));
+          } else reject(errorFrom(xhr.status, xhr.responseText));
         } catch (err) {
           reject(err);
         }
@@ -150,9 +170,9 @@ export const api = {
     return request('GET', `/rediscovery${qs({ today: localDay(now), before })}`);
   },
 
-  /** → { action: 'opened' | 'revealed' } */
-  open: (starId) => request('POST', `/stars/${id(starId)}/open`),
-  reveal: (starId) => request('POST', `/stars/${id(starId)}/reveal`),
-  fileUrl: (starId) => `/api/stars/${id(starId)}/file`,
-  thumbUrl: (starId) => `/api/stars/${id(starId)}/thumb`,
+  /** 첨부의 보관함 사본을 기본 프로그램으로 연다(열면 안 되는 종류는 폴더에서 보여 준다). → { action: 'opened' | 'revealed' } */
+  openAttachment: (attId) => request('POST', `/attachments/${id(attId)}/open`),
+  revealAttachment: (attId) => request('POST', `/attachments/${id(attId)}/reveal`),
+  attachmentFileUrl: (attId) => `/api/attachments/${id(attId)}/file`,
+  attachmentThumbUrl: (attId) => `/api/attachments/${id(attId)}/thumb`,
 };

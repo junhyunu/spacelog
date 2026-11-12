@@ -6,7 +6,7 @@
 // store로 알리는 것:
 //   'land'       planetId               목록에서 눌러 그 행성에 도착했을 때
 //   'openStar'   { planetId, starId }   재발견 "날아가기"로 그 별의 행성에 도착했을 때
-//   'openSave'   { tab: 'text' }        "기록하기"(#wLog · 빈 우주 카드)
+//   'openSave'                          "기록하기"(#wLog · 빈 우주 카드)
 //   'newPlanet'                         "+ 새 행성"(#wNewPlanet, 왼쪽 패널 목록 맨 위)
 // store에서 듣는 것:
 //   'data'             우주 안에 있을 때 전부 다시 그리고 3D를 맞춘다
@@ -445,7 +445,7 @@ export function initHud() {
     store.emit('newPlanet');
   });
   $('redis').addEventListener('click', onRedisClick);
-  $('wLog').addEventListener('click', () => store.emit('openSave', { tab: 'text' }));
+  $('wLog').addEventListener('click', () => store.emit('openSave'));
   $('wHintX').addEventListener('click', dismissHint);
   paintPeriod();
 

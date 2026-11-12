@@ -1,73 +1,71 @@
-// W-05 저장 창 "별 띄우기"(#save, 스펙 6-4). 글 · 링크 · 파일을 행성의 별로 저장한다.
+// 기록하기 창 "별 띄우기"(#save, 스펙 6-9). 글 + 첨부 파일 + 링크를 저장하면 별 하나가 된다.
 // 여는 곳: "기록하기"(#hLog · #wLog · 빈 우주 카드 → 'openSave' 이벤트, main.js), 끌어다 놓기 · 붙여넣기(dropzone.js).
 // Esc는 escape.js의 60번 자리(행성 꾸미기 창 다음, 전환 건너뛰기 앞). 열려 있는 동안 비행 키를 받지 않는다.
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { playerPosition, setInputBlocked } from '../three/controls.js';
 import { flyStarIn } from '../three/planets.js';
-import { PLANET_COLORS, esc, fileSize, firstLine, ico } from '../util.js';
+import { PLANET_COLORS, esc, fileSize, ico } from '../util.js';
 import { ask, closeAsk } from './confirm.js';
 import { registerEscape } from './escape.js';
 import { flashStars } from './panel.js';
 import { trapTab, wireBackdrop } from './planetForm.js';
 import {
-  FILES_MAX,
+  ATTACH_MAX,
+  KEPT_TOAST,
   TOO_BIG_TOAST,
   TOO_MANY_TOAST,
+  URL_ERROR,
+  autoTitle,
   canSubmit,
   clampPlanetName,
   cleanPlanetName,
-  dedupeFiles,
   defaultPlanetId,
-  fileStem,
-  partitionBySize,
-  remainingAfterUpload,
-  remainingMessage,
+  httpUrl,
+  matchSkipped,
+  nothingToast,
+  planAdd,
   resultToast,
   saveError,
+  skipNote,
+  submitTitle,
   urlError,
 } from './saveLogic.js';
 import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
-const TABS = ['text', 'link', 'file'];
-const PANES = { text: 'svPaneText', link: 'svPaneLink', file: 'svPaneFile' };
-const TITLE_HINT = {
-  text: '비워 두면 글의 첫 줄을 써요',
-  link: '비워 두면 링크 제목을 가져와요',
-  file: '비워 두면 파일 이름을 써요',
-};
-const FLY_MAX = 12; // 한 번에 솟는 별의 수(그보다 많으면 나머지는 제자리에 바로 뜬다)
 const FLY_DROP = 6; // 캐릭터 아래 이만큼에서 솟는다
 const THUMB_TYPE = /^image\/(png|jpe?g|gif|webp|bmp|avif)$/i;
-const THUMB_MAX = 30 * 1024 * 1024; // 이보다 큰 이미지는 미리보기를 만들지 않는다
-const SLOW_MS = 15000; // 글 · 링크 저장이 이보다 오래 걸리면 취소를 다시 열어 준다
-const KEPT_TOAST = '이미 쓰던 내용이 있어 그대로 두었어요';
+const THUMB_MAX = 30 * 1024 * 1024; // 이보다 큰 이미지는 칩 미리보기를 만들지 않는다
+const SLOW_MS = 15000; // 파일 없는 저장이 이보다 오래 걸리면 취소를 다시 열어 준다
+const TITLE_EMPTY = '비워 두면 글의 첫 줄을 써요';
 const aborted = () => Object.assign(new Error('aborted'), { code: 'aborted' });
 
-// 열려 있는 동안의 상태. 글 · 주소 · 메모 · 새 행성 이름은 입력칸이 그대로 들고 있다(탭을 바꿔도 남는다).
+// 열려 있는 동안의 상태. 글 · 제목 · 주소 · 새 행성 이름은 입력칸이 들고 있다.
 let S = null;
 let wired = false;
 let itemSeq = 0;
 
 function fresh() {
   return {
-    tab: 'text',
-    textTitle: '', // 글 탭의 제목
-    textTouched: false, // 제목을 직접 고쳤는지(그 전까지는 본문 첫 줄을 따라간다)
-    linkTitle: '',
-    items: [], // 파일 탭: { id, file, title, url }
+    items: [], // { id, kind: 'file', file, thumb, hint, skip } | { id, kind: 'link', url }
     planet: 'new',
     pick: false, // 고른 행성이 사라져 다시 골라야 하는 동안(선택 상자 맨 위에 "행성을 골라 주세요"가 생긴다)
     extra: [], // 이 창에서 만들었지만 아직 store에 없는 행성
     busy: false,
-    abort: null, // 파일을 올리는 동안의 AbortController(이때만 멈출 수 있다)
-    slow: false, // 글 · 링크 저장의 응답이 늦어져 취소를 다시 열어 둔 동안
+    abort: null, // 저장하는 동안의 AbortController. 파일을 올릴 때만 "올리기 멈추기"로 쓴다
+    files: false, // 지금 저장에 파일이 있는지
+    slow: false, // 파일 없는 저장의 응답이 늦어져 취소를 다시 열어 둔 동안
     pct: null,
     asking: false,
     prevFocus: null,
   };
 }
+
+const fileItems = () => (S ? S.items.filter((it) => it.kind === 'file') : []);
+const linkItems = () => (S ? S.items.filter((it) => it.kind === 'link') : []);
+// 서버가 저장하는 순서(파일 다음 링크)대로 보인다
+const ordered = () => [...fileItems(), ...linkItems()];
 
 /* ---------- 행성 선택 ---------- */
 
@@ -127,79 +125,97 @@ function rebuildPlanets(wanted) {
   paintPlanet();
 }
 
-/* ---------- 파일 목록 ---------- */
+/* ---------- 첨부 칩 ---------- */
 
-function renderFiles() {
-  if (!S) return;
-  const list = $('svFiles');
-  const multi = S.items.length > 1;
-  list.hidden = S.items.length === 0;
-  list.innerHTML = S.items
-    .map((it) => {
-      const name = it.file.name || '이름 미확인';
-      const isImage = String(it.file.type).startsWith('image/');
-      const thumb = it.url ? `<img src="${esc(it.url)}" alt="">` : ico(isImage ? 'image' : 'file-text', 17);
-      const main = multi
-        ? `<input type="text" class="ft" maxlength="200" autocomplete="off" value="${esc(it.title)}" placeholder="${esc(TITLE_HINT.file)}" aria-label="${esc(name)} 제목">`
-        : `<span class="fn">${esc(name)}</span>`;
-      const sub = multi ? `${esc(name)} · ${esc(fileSize(it.file.size))}` : esc(fileSize(it.file.size));
-      return (
-        `<li class="frow" data-id="${it.id}"><span class="th">${thumb}</span>` +
-        `<div class="fm">${main}<small>${sub}</small></div>` +
-        `<button type="button" class="btn x ghost" data-rm aria-label="${esc(name)} 빼기">${ico('x', 16)}</button></li>`
-      );
-    })
-    .join('');
+function chipHtml(it) {
+  if (it.kind === 'link') {
+    return (
+      `<li class="chip link" data-id="${it.id}"><span class="th" aria-hidden="true">${ico('link', 16)}</span>` +
+      `<span class="cm"><span class="cn" title="${esc(it.url)}">${esc(it.url)}</span></span>` +
+      `<button type="button" class="btn x" data-rm aria-label="${esc(`링크 ${it.url} 빼기`)}">${ico('x', 14)}</button></li>`
+    );
+  }
+  const name = it.file.name || '이름 미확인';
+  const isImage = String(it.file.type).startsWith('image/');
+  const thumb = it.thumb ? `<img src="${esc(it.thumb)}" alt="">` : ico(isImage ? 'image' : 'file-text', 16);
+  const note = it.skip ? skipNote(it.skip) : fileSize(it.file.size);
+  return (
+    `<li class="chip file${it.skip ? ' skip' : ''}" data-id="${it.id}"><span class="th" aria-hidden="true">${thumb}</span>` +
+    `<span class="cm"><span class="cn" title="${esc(name)}">${esc(name)}</span><small>${esc(note)}</small></span>` +
+    `<button type="button" class="btn x" data-rm aria-label="${esc(`${name} 빼기`)}">${ico('x', 14)}</button></li>`
+  );
 }
 
-// 파일을 담는다. 500MB 초과 · 이미 담긴 파일 · 500개 초과분은 빼고 토스트로 알린다. 담은 개수를 돌려준다.
-function addFiles(files, titles) {
-  if (!S) return 0;
+function renderChips() {
+  if (!S) return;
+  const list = $('svChips');
+  const items = ordered();
+  list.hidden = items.length === 0;
+  list.innerHTML = items.map(chipHtml).join('');
+  $('svCount').textContent = items.length ? `첨부 ${items.length}/${ATTACH_MAX}` : '';
+  for (const btn of list.querySelectorAll('[data-rm]')) btn.disabled = S.busy;
+}
+
+const room = () => Math.max(0, ATTACH_MAX - (S ? S.items.length : 0));
+
+// 파일을 담는다. 500MB 초과 · 이미 담긴 파일 · 50개 초과분은 빼고 토스트로 알린다. 담은 개수를 돌려준다.
+// hints는 files와 같은 순서의 제목 힌트(붙여넣은 그림 등).
+function addFiles(files, hints) {
+  if (!S || S.busy) return 0;
   const incoming = Array.from(files ?? []);
-  const titleOf = new Map(incoming.map((f, i) => [f, titles?.[i]]));
-  const { ok, tooBig } = partitionBySize(incoming);
-  let add = dedupeFiles(
-    S.items.map((it) => it.file),
-    ok,
-  );
-  let notice = tooBig.length ? TOO_BIG_TOAST : ok.length && !add.length ? '이미 담긴 파일이에요' : null;
-  const room = Math.max(0, FILES_MAX - S.items.length);
-  if (add.length > room) {
-    add = add.slice(0, room);
-    notice = TOO_MANY_TOAST;
-  }
-  for (const file of add) {
-    const title = titleOf.get(file);
-    let url = null;
+  const hintOf = new Map(incoming.map((f, i) => [f, hints?.[i] ?? null]));
+  const plan = planAdd({ existing: fileItems().map((it) => it.file), incoming, room: room() });
+  for (const file of plan.add) {
+    let thumb = null;
     if (THUMB_TYPE.test(file.type) && file.size <= THUMB_MAX) {
       try {
-        url = URL.createObjectURL(file);
+        thumb = URL.createObjectURL(file);
       } catch {
-        url = null;
+        thumb = null;
       }
     }
-    S.items.push({ id: ++itemSeq, file, title: typeof title === 'string' && title ? title : fileStem(file.name), url });
+    S.items.push({ id: ++itemSeq, kind: 'file', file, thumb, hint: hintOf.get(file) || null, skip: null });
   }
-  if (notice) toast(notice);
-  if (add.length) {
-    showError('');
-    renderFiles();
-    paintTab();
-  }
-  return add.length;
+  if (plan.overflow) toast(TOO_MANY_TOAST);
+  else if (plan.tooBig) toast(TOO_BIG_TOAST);
+  else if (plan.repeated && !plan.add.length) toast('이미 담긴 파일이에요');
+  if (plan.add.length) changed();
+  return plan.add.length;
 }
 
-function removeFile(id) {
+// 링크 칩을 더한다. 주소가 아니면 안내만 보인다. 더했으면 true.
+function addLink(raw) {
+  if (!S || S.busy) return false;
+  const url = httpUrl(raw);
+  if (!url) {
+    showUrlError(URL_ERROR);
+    return false;
+  }
+  if (!room()) {
+    toast(TOO_MANY_TOAST);
+    return false;
+  }
+  if (linkItems().some((it) => it.url === url)) {
+    toast('이미 담긴 링크예요');
+    return false;
+  }
+  S.items.push({ id: ++itemSeq, kind: 'link', url });
+  changed();
+  return true;
+}
+
+function removeItem(id) {
   if (!S || S.busy) return;
-  const at = S.items.findIndex((it) => String(it.id) === String(id));
+  const before = ordered();
+  const at = before.findIndex((it) => String(it.id) === String(id));
   if (at < 0) return;
-  const [gone] = S.items.splice(at, 1);
-  if (gone.url) URL.revokeObjectURL(gone.url);
-  renderFiles();
-  paintTab();
-  // 지운 자리의 다음 항목(없으면 "파일 고르기")으로 초점을 옮긴다
-  const next = $('svFiles').querySelectorAll('[data-rm]')[Math.min(at, S.items.length - 1)];
-  (next ?? $('svPick')).focus();
+  const gone = before[at];
+  S.items = S.items.filter((it) => it !== gone);
+  if (gone.thumb) URL.revokeObjectURL(gone.thumb);
+  changed();
+  // 지운 자리의 다음 칩(없으면 "파일 첨부")으로 초점을 옮긴다
+  const next = $('svChips').querySelectorAll('[data-rm]')[Math.min(at, S.items.length - 1)];
+  (next ?? $('svAttach')).focus();
 }
 
 /* ---------- 그리기 ---------- */
@@ -210,25 +226,41 @@ function showError(message) {
   el.hidden = !message;
 }
 
-// 주소 칸 아래의 안내와 aria-invalid를 함께 맞춘다. strict(칸을 떠날 때)가 아니면 "htt"처럼 치는 중인 것은 봐준다.
-function paintUrlError(strict = false) {
-  const value = $('svUrl').value.trim().toLowerCase();
-  const typing = !strict && ('https://'.startsWith(value) || 'http://'.startsWith(value));
-  const message = typing ? null : urlError(value);
+function showUrlError(message) {
   const el = $('svUrlErr');
   el.textContent = message || '';
   el.hidden = !message;
   $('svUrl').setAttribute('aria-invalid', String(Boolean(message)));
 }
 
+// 칩 · 제목 힌트 · 버튼을 지금 내용에 맞춘다
+function changed() {
+  showError('');
+  renderChips();
+  paintTitleHint();
+  paintSubmit();
+}
+
+function titleParts() {
+  return {
+    text: $('svText').value,
+    files: fileItems().map((it) => ({ name: it.file.name, hint: it.hint })),
+    links: linkItems().map((it) => it.url),
+  };
+}
+
+// 제목 칸의 placeholder: 비워 두면 쓰일 제목
+function paintTitleHint() {
+  if (!S) return;
+  $('svTitle').placeholder = autoTitle(titleParts()) || TITLE_EMPTY;
+}
+
 function paintSubmit() {
   if (!S) return;
   const yes = $('svYes');
   const ready = canSubmit({
-    tab: S.tab,
     text: $('svText').value,
-    url: $('svUrl').value,
-    files: S.items,
+    count: S.items.length,
     planetId: S.planet,
     newPlanetName: $('svNewName').value,
   });
@@ -238,13 +270,21 @@ function paintSubmit() {
   syncUnload();
 }
 
-// 취소 · ✕: 파일을 올리는 동안에는 "올리기 멈추기"로 살아 있고, 글 · 링크 저장은 응답이 늦어질 때만 다시 열린다.
+// 취소 · ✕: 파일을 올리는 동안에는 "올리기 멈추기"로 살아 있고, 파일 없는 저장은 응답이 늦어질 때만 다시 열린다.
 function paintCancel() {
   if (!S) return;
-  const off = S.busy && !S.abort && !S.slow;
+  const stoppable = S.busy && S.files;
+  const off = S.busy && !stoppable && !S.slow;
   $('svNo').disabled = off;
   $('svX').disabled = off;
-  $('svNo').textContent = S.busy && S.abort ? '올리기 멈추기' : '취소';
+  $('svNo').textContent = stoppable ? '올리기 멈추기' : '취소';
+}
+
+// 글 칸은 쓰는 만큼 늘어난다(최대 높이는 CSS, 그 뒤로는 칸 안에서 스크롤)
+function growText() {
+  const el = $('svText');
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight + 6}px`;
 }
 
 // 저장하는 중이거나 쓰던 것이 있으면 탭을 닫거나 새로 고칠 때 브라우저가 한 번 묻게 한다.
@@ -261,27 +301,6 @@ function syncUnload() {
   else window.removeEventListener('beforeunload', onBeforeUnload);
 }
 
-// 탭 · 내용 영역 · 제목 칸을 지금 탭에 맞춘다. 입력한 내용은 건드리지 않는다.
-function paintTab() {
-  if (!S) return;
-  for (const btn of $('svTabs').querySelectorAll('[role="tab"]')) {
-    const on = btn.dataset.tab === S.tab;
-    btn.classList.toggle('on', on);
-    btn.setAttribute('aria-selected', String(on));
-    btn.tabIndex = on ? 0 : -1;
-  }
-  for (const tab of TABS) $(PANES[tab]).hidden = tab !== S.tab;
-
-  // 파일이 2개 이상이면 제목은 목록에서 파일별로 쓴다. 파일이 없을 때도 쓸 제목이 없으니 숨긴다.
-  const title = $('svTitle');
-  $('svTitleFld').hidden = S.tab === 'file' && S.items.length !== 1;
-  title.placeholder = TITLE_HINT[S.tab];
-  if (S.tab === 'text') title.value = S.textTitle;
-  else if (S.tab === 'link') title.value = S.linkTitle;
-  else title.value = S.items.length === 1 ? S.items[0].title : '';
-  paintSubmit();
-}
-
 function setBusy(on, pct = null) {
   if (!S) return;
   S.busy = on;
@@ -291,22 +310,18 @@ function setBusy(on, pct = null) {
   for (const el of box.querySelectorAll('select, input[type="file"], button:not(#svYes)')) el.disabled = on;
   if (!on) {
     S.abort = null;
+    S.files = false;
     S.slow = false;
   }
   paintCancel();
   paintSubmit();
 }
 
-function setTab(tab) {
-  if (!S || S.busy || !TABS.includes(tab)) return;
-  S.tab = tab;
-  paintTab();
-}
-
-function focusContent() {
-  if (!S) return;
-  const el = S.tab === 'text' ? $('svText') : S.tab === 'link' ? $('svUrl') : $('svPick');
-  el.focus();
+function setLinkRow(open, { focus = false } = {}) {
+  $('svLinkRow').hidden = !open;
+  $('svLinkBtn').setAttribute('aria-expanded', String(open));
+  if (!open) showUrlError('');
+  if (open && focus) $('svUrl').focus();
 }
 
 /* ---------- 닫기 ---------- */
@@ -315,38 +330,45 @@ function hasContent() {
   if (!S) return false;
   return (
     $('svText').value.trim() !== '' ||
-    $('svUrl').value.trim() !== '' ||
     S.items.length > 0 ||
-    $('svMemo').value.trim() !== '' ||
-    $('svNewName').value.trim() !== '' ||
-    S.textTouched ||
-    S.linkTitle.trim() !== ''
+    $('svTitle').value.trim() !== '' ||
+    $('svUrl').value.trim() !== '' ||
+    $('svNewName').value.trim() !== ''
   );
+}
+
+const FIELDS = ['svText', 'svUrl', 'svTitle', 'svNewName', 'svFile'];
+
+function clearFields() {
+  for (const id of FIELDS) $(id).value = '';
+  $('svText').style.height = '';
+  $('svChips').textContent = '';
+  $('svCount').textContent = '';
 }
 
 function close() {
   const c = S;
   if (!c) return;
   S = null;
-  for (const it of c.items) if (it.url) URL.revokeObjectURL(it.url);
+  for (const it of c.items) if (it.thumb) URL.revokeObjectURL(it.thumb);
   $('save').hidden = true;
-  for (const id of ['svText', 'svUrl', 'svTitle', 'svMemo', 'svNewName', 'svFile']) $(id).value = '';
-  $('svFiles').textContent = '';
+  clearFields();
+  setLinkRow(false);
   syncUnload();
   const prev = c.prevFocus;
   if (prev && typeof prev.focus === 'function' && document.contains(prev)) prev.focus();
 }
 
 // 취소 · ✕ · Esc · 바깥 클릭. 쓰던 것이 있으면 먼저 묻는다.
-// 파일을 올리는 중이면 멈출지 묻고(멈춰도 창과 목록은 남는다), 글 · 링크를 저장하는 중에는 응답이 늦어질 때만 닫을 수 있다.
+// 파일을 올리는 중이면 멈출지 묻고(멈춰도 창과 내용은 남는다), 파일 없는 저장 중에는 응답이 늦어질 때만 닫을 수 있다.
 function requestClose() {
   const c = S;
   if (!c || c.asking) return;
   if (c.busy) {
-    if (c.abort) {
+    if (c.files && c.abort) {
       const ctl = c.abort;
       c.asking = true;
-      ask({ title: '올리기를 멈출까요?', desc: '이미 올라간 파일은 별로 남아요.', confirmLabel: '멈추기', confirmKind: 'pink' }).then((yes) => {
+      ask({ title: '올리기를 멈출까요?', desc: '쓴 글과 담은 첨부는 창에 그대로 남아요.', confirmLabel: '멈추기', confirmKind: 'pink' }).then((yes) => {
         c.asking = false;
         if (yes && S === c && c.abort === ctl) ctl.abort(); // 뒤처리는 submit의 catch가 한다
       });
@@ -373,33 +395,22 @@ function requestClose() {
 /* ---------- 저장 ---------- */
 
 // 띄운 별을 알리고 화면에 올린다(토스트 · 다시 받기 · 솟아오르기 · 목록의 분홍 표시). 창을 닫을지는 부르는 쪽이 정한다.
-async function land(planetId, result) {
-  const ids = result.created.map((s) => s.id);
+async function land(planetId, star, skipped) {
   store.state.lastPlanetId = planetId;
-  toast(resultToast(result));
+  toast(resultToast(skipped));
   try {
     await store.reload(); // 'data' → 우주 안이면 3D · 목록, 밖이면 홈의 숫자 · 카드가 다시 그려진다
   } catch {
     return; // 연결이 끊겼으면 연결 실패 카드가 알린다
   }
+  if (!star) return;
   if (store.state.inWorld) {
     // 화면 가운데 아래(캐릭터 발밑)에서 솟아 그 행성 궤도로 들어간다
     const from = playerPosition();
     from.y -= FLY_DROP;
-    for (const id of ids.slice(0, FLY_MAX)) flyStarIn(id, from);
+    flyStarIn(star.id, from);
   }
-  flashStars(ids);
-}
-
-// 일부만 저장됐다: 저장되지 않은 파일만 목록에 남기고 창을 그대로 둔다.
-function keepUnsaved(c, unsaved, skipped) {
-  const keep = new Set(unsaved);
-  for (const it of c.items) if (!keep.has(it) && it.url) URL.revokeObjectURL(it.url);
-  c.items = unsaved;
-  setBusy(false);
-  renderFiles();
-  paintTab();
-  showError(remainingMessage(unsaved.length, skipped));
+  flashStars([star.id]);
 }
 
 function focusAfterSave() {
@@ -412,17 +423,21 @@ function focusAfterSave() {
 async function submit() {
   const c = S;
   if (!c || c.busy || $('svYes').disabled) return;
-  const tab = c.tab;
-  const memo = $('svMemo').value;
-  const title = $('svTitle').value.trim();
+  const files = fileItems();
+  const links = linkItems().map((it) => it.url);
+  const body = $('svText').value;
+  const title = submitTitle($('svTitle').value, titleParts());
   showError('');
-  // 파일 올리기는 처음부터 멈출 수 있다(행성을 만드는 동안 누른 멈춤은 올리기 직전에 받는다)
-  const ctl = tab === 'file' ? new AbortController() : null;
+  // 지난번에 서버가 뺀 표시는 지운다(이번 결과로 다시 표시한다)
+  for (const it of files) it.skip = null;
+  renderChips();
+  const ctl = new AbortController();
   c.abort = ctl;
+  c.files = files.length > 0;
   c.slow = false;
-  setBusy(true, tab === 'file' ? 0 : null);
-  // 글 · 링크는 멈출 수 없지만 끝없이 붙잡아 두지 않는다
-  const slowTimer = ctl
+  setBusy(true, c.files ? 0 : null);
+  // 파일 없는 저장은 멈출 수 없지만 끝없이 붙잡아 두지 않는다
+  const slowTimer = c.files
     ? 0
     : setTimeout(() => {
         if (S !== c || !c.busy) return;
@@ -432,8 +447,8 @@ async function submit() {
       }, SLOW_MS);
 
   let madePlanet = false;
+  let planetId = c.planet;
   try {
-    let planetId = c.planet;
     if (planetId === 'new') {
       // 행성을 먼저 만든다. 별 저장이 실패해도 행성은 남기고, 다시 누르면 그 행성을 그대로 쓴다.
       const planet = await api.createPlanet({ name: cleanPlanetName($('svNewName').value) });
@@ -445,62 +460,22 @@ async function submit() {
         rebuildPlanets(planetId);
       }
     }
-
-    let result;
-    if (tab === 'text') {
-      const star = await api.createStar({ type: 'text', title, body: $('svText').value, planet_id: planetId, memo });
-      result = { created: [star], skipped: [] };
-    } else if (tab === 'link') {
-      const star = await api.createStar({ type: 'link', title, url: $('svUrl').value.trim(), planet_id: planetId, memo });
-      result = { created: [star], skipped: [] };
-    } else {
-      if (ctl.signal.aborted) throw aborted();
-      const res = await api.uploadStars(
-        { planet_id: planetId, memo, files: c.items.map((it) => it.file), titles: c.items.map((it) => it.title.trim()) },
-        (pct) => {
-          if (S !== c || !c.busy) return;
-          c.pct = pct;
-          paintSubmit();
-        },
-        { signal: ctl.signal },
-      );
-      result = { created: res?.created ?? [], skipped: res?.skipped ?? [] };
-    }
+    // 행성을 만드는 동안 누른 멈춤은 올리기 직전에 받는다
+    if (ctl.signal.aborted) throw aborted();
+    const res = await api.createStar(
+      { planet_id: planetId, title, body, links, files: files.map((it) => it.file) },
+      (pct) => {
+        if (S !== c || !c.busy) return;
+        c.pct = pct;
+        paintSubmit();
+      },
+      { signal: ctl.signal },
+    );
     clearTimeout(slowTimer);
     // 멈출지 · 닫을지 묻는 사이에 끝났으면 그 물음은 거둔다
     if (c.asking && c.busy) closeAsk();
-
-    if (S !== c) {
-      // 기다리다 닫은 뒤에 끝났다: 별은 생겼으니 알리고 화면에 올린다
-      if (result.created.length) await land(planetId, result);
-      else if (madePlanet) store.reload().catch(() => {});
-      return;
-    }
-    const unsaved =
-      tab === 'file' && result.skipped.some((s) => s?.reason !== 'duplicate' && s?.reason !== 'too_large')
-        ? remainingAfterUpload(c.items, result)
-        : [];
-    if (unsaved.length) {
-      keepUnsaved(c, unsaved, result.skipped);
-      if (result.created.length) await land(planetId, result);
-      else {
-        toast(resultToast(result));
-        if (madePlanet) store.reload().catch(() => {});
-      }
-      if (S === c && !c.busy) focusAfterSave();
-      return;
-    }
-    if (result.created.length) {
-      close();
-      await land(planetId, result);
-      return;
-    }
-    // 하나도 저장되지 않았다(같은 파일 등): 창을 그대로 두고 알린다
-    setBusy(false);
-    const message = resultToast(result);
-    showError(message);
-    toast(message);
-    if (madePlanet) store.reload().catch(() => {});
+    if (S === c) close();
+    await land(planetId, res?.star, res?.skipped ?? []);
   } catch (err) {
     clearTimeout(slowTimer);
     if (c.asking && c.busy) closeAsk();
@@ -508,15 +483,28 @@ async function submit() {
       if (madePlanet) store.reload().catch(() => {});
       return;
     }
+    setBusy(false);
+    if (err?.code === 'nothing_to_save') {
+      // 같은 파일뿐이라 별을 만들지 않았다: 창을 그대로 두고 뺀 칩을 표시한다
+      const skipped = Array.isArray(err.data?.skipped) ? err.data.skipped : [];
+      const marks = matchSkipped(files, skipped);
+      files.forEach((it, i) => {
+        it.skip = marks[i];
+      });
+      renderChips();
+      const message = nothingToast(skipped);
+      showError(message);
+      toast(message);
+      if (madePlanet) store.reload().catch(() => {});
+      focusAfterSave();
+      return;
+    }
     if (err?.code === 'unknown_planet') {
       // 고른 행성이 그 사이 지워졌다: 목록을 새로 받고, 아무것도 고르지 않은 자리에서 다시 고르게 한다
       c.extra = [];
       c.pick = true;
       c.planet = '';
-    }
-    setBusy(false);
-    showError(saveError(err, tab));
-    if (err?.code === 'unknown_planet') {
+      showError(saveError(err, c.files));
       rebuildPlanets('');
       await store.reload().catch(() => {});
       if (S === c && !c.busy) {
@@ -525,38 +513,19 @@ async function submit() {
       }
       return;
     }
-    if (err?.code === 'aborted') {
-      // 멈추기 전에 다 올라간 파일은 이미 별이 됐다. 목록은 그대로 두고 화면만 다시 받는다
-      await store.reload().catch(() => {});
-    } else if (madePlanet) {
-      store.reload().catch(() => {});
-    }
+    showError(saveError(err, files.length > 0));
+    if (madePlanet) store.reload().catch(() => {});
     if (S === c && !c.busy) focusAfterSave();
   }
 }
 
 /* ---------- 입력 ---------- */
 
-function onTitleInput() {
-  if (!S) return;
-  const value = $('svTitle').value;
-  if (S.tab === 'text') {
-    S.textTitle = value;
-    S.textTouched = value.trim() !== ''; // 비우면 다시 본문 첫 줄을 따라간다
-  } else if (S.tab === 'link') {
-    S.linkTitle = value;
-  } else if (S.items.length === 1) {
-    S.items[0].title = value;
-  }
-}
-
 function onTextInput() {
   if (!S) return;
-  if (!S.textTouched) {
-    S.textTitle = firstLine($('svText').value, 40);
-    if (S.tab === 'text') $('svTitle').value = S.textTitle;
-  }
+  growText();
   showError('');
+  paintTitleHint();
   paintSubmit();
 }
 
@@ -571,18 +540,12 @@ function clampNewName(e) {
   paintSubmit();
 }
 
-function onTabsKeydown(e) {
-  const at = TABS.indexOf(e.target?.dataset?.tab);
-  if (at < 0 || !S || S.busy) return;
-  let next = null;
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (at + 1) % TABS.length;
-  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (at + TABS.length - 1) % TABS.length;
-  else if (e.key === 'Home') next = 0;
-  else if (e.key === 'End') next = TABS.length - 1;
-  if (next === null) return;
-  e.preventDefault();
-  setTab(TABS[next]);
-  $('svTabs').querySelector(`[data-tab="${TABS[next]}"]`).focus();
+function submitUrl() {
+  if (addLink($('svUrl').value)) {
+    $('svUrl').value = '';
+    showUrlError('');
+    $('svUrl').focus();
+  }
 }
 
 function onKeydown(e) {
@@ -593,6 +556,9 @@ function onKeydown(e) {
   if (e.ctrlKey || e.metaKey) {
     e.preventDefault();
     submit();
+  } else if (e.target === $('svUrl')) {
+    e.preventDefault();
+    submitUrl();
   } else if (e.target instanceof HTMLInputElement) {
     e.preventDefault(); // 한 줄 입력칸의 Enter로는 저장하지 않는다(Ctrl+Enter로 저장)
   }
@@ -603,6 +569,8 @@ function wire() {
   wired = true;
   const box = $('save');
   $('svX').innerHTML = ico('x');
+  $('svAttachIco').outerHTML = ico('paperclip', 16);
+  $('svLinkIco').outerHTML = ico('link', 16);
   wireBackdrop(box, requestClose);
   box.addEventListener('keydown', onKeydown);
   $('svForm').addEventListener('submit', (e) => {
@@ -612,22 +580,42 @@ function wire() {
   $('svNo').addEventListener('click', requestClose);
   $('svX').addEventListener('click', requestClose);
 
-  $('svTabs').addEventListener('click', (e) => {
-    const btn = e.target instanceof Element ? e.target.closest('[role="tab"]') : null;
-    if (btn) setTab(btn.dataset.tab);
-  });
-  $('svTabs').addEventListener('keydown', onTabsKeydown);
-
   $('svText').addEventListener('input', onTextInput);
-  $('svUrl').addEventListener('input', () => {
-    paintUrlError();
-    showError('');
-    paintSubmit();
-  });
-  $('svUrl').addEventListener('blur', () => paintUrlError(true));
-  $('svTitle').addEventListener('input', onTitleInput);
-  $('svMemo').addEventListener('input', () => showError(''));
+  $('svTitle').addEventListener('input', () => showError(''));
   box.addEventListener('input', syncUnload); // 어느 칸이든 쓰기 시작하면 떠날 때 묻는다
+
+  $('svAttach').addEventListener('click', () => {
+    if (!room()) {
+      toast(TOO_MANY_TOAST);
+      return;
+    }
+    $('svFile').click();
+  });
+  $('svFile').addEventListener('change', () => {
+    const picked = [...$('svFile').files];
+    $('svFile').value = ''; // 같은 파일을 다시 골라도 change가 오게
+    if (picked.length) addFiles(picked);
+  });
+  $('svLinkBtn').addEventListener('click', () => {
+    const open = $('svLinkRow').hidden;
+    setLinkRow(open, { focus: open });
+    if (!open) $('svLinkBtn').focus();
+  });
+  $('svUrlAdd').addEventListener('click', submitUrl);
+  $('svUrl').addEventListener('input', () => {
+    // "htt"처럼 치는 중인 것은 봐준다. 칸을 떠나거나 붙이기를 누를 때 알린다
+    const v = $('svUrl').value.trim().toLowerCase();
+    const typing = 'https://'.startsWith(v) || 'http://'.startsWith(v);
+    showUrlError(typing ? null : urlError(v));
+    syncUnload();
+  });
+  $('svUrl').addEventListener('blur', () => {
+    if ($('svUrl').value.trim()) showUrlError(urlError($('svUrl').value));
+  });
+  $('svChips').addEventListener('click', (e) => {
+    const btn = e.target instanceof Element ? e.target.closest('[data-rm]') : null;
+    if (btn) removeItem(btn.closest('.chip').dataset.id);
+  });
 
   $('svPlanet').addEventListener('change', () => {
     if (!S) return;
@@ -643,22 +631,6 @@ function wire() {
   });
   $('svNewName').addEventListener('input', clampNewName);
   $('svNewName').addEventListener('compositionend', () => clampNewName());
-
-  $('svPick').addEventListener('click', () => $('svFile').click());
-  $('svFile').addEventListener('change', () => {
-    const picked = [...$('svFile').files];
-    $('svFile').value = ''; // 같은 파일을 다시 골라도 change가 오게
-    if (picked.length) addFiles(picked);
-  });
-  $('svFiles').addEventListener('click', (e) => {
-    const btn = e.target instanceof Element ? e.target.closest('[data-rm]') : null;
-    if (btn) removeFile(btn.closest('.frow').dataset.id);
-  });
-  $('svFiles').addEventListener('input', (e) => {
-    const row = e.target instanceof Element ? e.target.closest('.frow') : null;
-    const item = row && S?.items.find((it) => String(it.id) === row.dataset.id);
-    if (item) item.title = e.target.value;
-  });
 
   // 다른 곳에서 행성이 바뀌면(만들기 · 지우기 · 이름 바꾸기) 선택 상자를 맞춘다
   store.on('data', () => {
@@ -687,12 +659,12 @@ function wire() {
 
 /* ---------- 밖에서 쓰는 것 ---------- */
 
-/** 저장 창이 떠 있는지. */
+/** 기록하기 창이 떠 있는지. */
 export function isSaveOpen() {
   return S !== null;
 }
 
-/** 저장하는 중인지(이때는 파일을 더 받지 않는다). */
+/** 저장하는 중인지(이때는 더 받지 않는다). */
 export function isSaveBusy() {
   return Boolean(S?.busy);
 }
@@ -703,13 +675,13 @@ export function closeSave() {
 }
 
 /**
- * 저장 창을 연다. 이미 열려 있으면 files는 파일 탭 목록에 더하고(하나라도 담겼을 때만) 파일 탭으로 옮기며,
- * text · url은 그 칸이 비어 있을 때만 담는다(쓰던 것을 덮어쓰지 않고, 그대로 두었다고 토스트로 알린다).
- * titles는 files와 같은 순서의 제목(없으면 파일 이름에서 확장자를 뺀 것).
- * @param {{ tab?: 'text'|'link'|'file', text?: string, url?: string, files?: File[], titles?: string[] }} [o]
- * @returns {boolean} 받았으면 true(저장 중이거나 담을 파일이 하나도 없으면 false)
+ * 기록하기 창을 연다(이미 열려 있으면 그 창에 더한다). 쓰던 글은 덮어쓰지 않는다.
+ * files는 첨부 칩으로 더한다(hints는 같은 순서의 제목 힌트). url은 링크 칩. text는 글 칸이 비어 있을 때만 담고,
+ * 이미 쓰던 글이 있으면 그대로 두었다고 토스트로 알린다.
+ * @param {{ text?: string, url?: string, files?: File[], hints?: (string|null)[] }} [o]
+ * @returns {boolean} 받았으면 true(저장 중이거나, 닫혀 있는데 담을 것이 하나도 없으면 false)
  */
-export function openSave({ tab = 'text', text, url, files, titles } = {}) {
+export function openSave({ text, url, files, hints } = {}) {
   wire();
   const list = Array.from(files ?? []);
   const hasText = typeof text === 'string' && text.trim() !== '';
@@ -717,23 +689,12 @@ export function openSave({ tab = 'text', text, url, files, titles } = {}) {
 
   if (S) {
     if (S.busy) return false;
-    if (list.length) {
-      // 하나라도 담겼을 때만 파일 탭으로 옮긴다(모두 이미 담긴 파일이면 addFiles가 "이미 담긴 파일이에요"라고 알린다)
-      if (addFiles(list, titles) > 0) setTab('file');
-    } else if (hasText) {
+    if (list.length) addFiles(list, hints);
+    if (hasUrl) addLink(url);
+    if (hasText) {
       if ($('svText').value.trim() === '') {
         $('svText').value = text;
         onTextInput();
-        setTab('text');
-      } else {
-        toast(KEPT_TOAST);
-      }
-    } else if (hasUrl) {
-      if ($('svUrl').value.trim() === '') {
-        $('svUrl').value = url.trim();
-        paintUrlError();
-        showError('');
-        setTab('link');
       } else {
         toast(KEPT_TOAST);
       }
@@ -741,36 +702,34 @@ export function openSave({ tab = 'text', text, url, files, titles } = {}) {
     return true;
   }
 
-  // 담을 수 있는 파일이 하나도 없으면 창을 열지 않는다
-  if (list.length && !partitionBySize(list).ok.length) {
+  // 닫혀 있는데 담을 수 있는 파일이 하나도 없으면(모두 500MB 초과) 창을 열지 않는다
+  if (list.length && !hasText && !hasUrl && !planAdd({ incoming: list }).add.length) {
     toast(TOO_BIG_TOAST);
     return false;
   }
 
   S = fresh();
   S.prevFocus = document.activeElement;
-  S.tab = TABS.includes(tab) ? tab : 'text';
-  for (const id of ['svText', 'svUrl', 'svTitle', 'svMemo', 'svNewName', 'svFile']) $(id).value = '';
-  if (hasText) {
-    $('svText').value = text;
-    S.textTitle = firstLine(text, 40);
-  }
-  if (hasUrl) $('svUrl').value = url.trim();
+  clearFields();
+  setLinkRow(false);
+  if (hasText) $('svText').value = text;
   showError('');
   setBusy(false);
   rebuildPlanets(null);
-  renderFiles();
-  if (list.length) addFiles(list, titles);
-  paintUrlError();
-  paintTab();
+  if (list.length) addFiles(list, hints);
+  if (hasUrl) addLink(url);
+  renderChips();
+  paintTitleHint();
+  paintSubmit();
 
   $('save').hidden = false;
+  growText();
   $('svBodyWrap').scrollTop = 0;
-  focusContent();
+  $('svText').focus();
   return true;
 }
 
-// Esc = 취소(파일을 올리는 중이면 멈출지 묻고, 글 · 링크 저장 중 · 묻는 중에는 키만 삼킨다). 열려 있는 동안 비행 키를 막는다.
+// Esc = 취소(파일을 올리는 중이면 멈출지 묻고, 파일 없는 저장 중 · 묻는 중에는 키만 삼킨다). 열려 있는 동안 비행 키를 막는다.
 registerEscape(60, () => {
   if (!S) return false;
   requestClose();

@@ -1,13 +1,14 @@
-// 끌어다 놓기 · 붙여넣기(스펙 6-3). W-00 · W-01 어디서나 받는다.
-// 파일 · 링크 · 글을 화면 위로 가져오면 놓기 막(#dropveil, 쌓임 42)이 뜨고, 놓으면 저장 창이 그 탭으로 열린다.
-// 저장 창이 이미 열려 있으면 놓은 파일을 그 목록에 더한다. 저장 창의 점선 상자에 놓은 것도 여기서 한 번만 받는다.
+// 끌어다 놓기 · 붙여넣기(스펙 6-3 · 6-9). W-00 · W-01 어디서나 받는다.
+// 파일 · 링크 · 글을 화면 위로 가져오면 놓기 막(#dropveil, 쌓임 42)이 뜨고, 놓으면 기록하기 창에 담긴다
+// (닫혀 있으면 연다. 쓰던 글은 그대로 둔다): 파일 → 첨부 칩, 주소 하나 → 링크 칩, 그 밖의 글 → 글 칸이 비어 있을 때만 글.
+// 붙여넣기는 글 칸 밖에서만 받는다. 다만 글 없이 파일(그림)만 붙여넣으면 기록하기 창의 글 칸에서도 칩으로 받는다.
 // 밖에서 끌어온 링크는 브라우저가 그 주소로 떠나 버리지 않게 늘 여기서 막는다(글 칸에 놓는 것만 브라우저에 맡긴다).
 // 이 화면 안에서 시작한 끌기(미리보기 그림 · 링크 · 고른 글)는 받지 않는다.
 import { isAskOpen } from './confirm.js';
 import { isPlanetDeleteOpen } from './planetDelete.js';
 import { isPlanetFormOpen } from './planetForm.js';
-import { FOLDER_TOAST, classifyDrop, classifyPaste, pastedTitle, splitDropped } from './saveLogic.js';
-import { isSaveBusy, openSave } from './saveModal.js';
+import { FOLDER_TOAST, classifyDrop, classifyPaste, pastedHint, splitDropped } from './saveLogic.js';
+import { isSaveBusy, isSaveOpen, openSave } from './saveModal.js';
 import { toast } from './toast.js';
 import { isTransitioning } from './transition.js';
 
@@ -110,14 +111,14 @@ function onDrop(e) {
     const { files, folders } = dt.items?.length ? splitDropped(dt.items) : { files: [...(dt.files ?? [])], folders: 0 };
     if (folders) toast(FOLDER_TOAST);
     if (files.length) {
-      openSave({ tab: 'file', files }); // 500MB 초과 · 500개 초과 · 이미 담긴 파일은 저장 창이 빼고 알린다
+      openSave({ files }); // 500MB 초과 · 50개 초과 · 이미 담긴 파일은 기록하기 창이 빼고 알린다
       return;
     }
     if (folders) return;
   }
   // 링크 · 글(파일이라고 왔지만 꺼낼 파일이 없을 때도 여기로 온다)
   const found = classifyDrop({ types: Array.from(dt.types ?? []), uriList: dt.getData('text/uri-list'), text: dt.getData('text/plain') });
-  if (found) openSave(found); // 저장 창이 열려 있고 그 칸에 쓰던 것이 있으면 덮어쓰지 않는다
+  if (found) openSave(found); // 쓰던 글이 있으면 덮어쓰지 않는다(링크는 칩으로 더한다)
 }
 
 function isField(target) {
@@ -127,15 +128,24 @@ function isField(target) {
 }
 
 function onPaste(e) {
-  if (isField(e.target) || blocked()) return;
+  if (blocked()) return;
   const data = e.clipboardData;
   if (!data) return;
-  const found = classifyPaste({ files: [...(data.files ?? [])], text: data.getData('text/plain') });
+  const files = [...(data.files ?? [])];
+  const text = data.getData('text/plain');
+  if (isField(e.target)) {
+    // 칸 안의 붙여넣기는 브라우저에 맡긴다. 기록하기 창 안에서 글 없이 파일만 붙여넣은 것만 칩으로 받는다
+    if (!(isSaveOpen() && e.target.closest?.('#save') && files.length && !text.trim())) return;
+  }
+  const found = classifyPaste({ files, text });
   if (!found) return;
   e.preventDefault();
-  // 화면 갈무리는 이름이 늘 image.png라 제목을 따로 붙인다
-  if (found.tab === 'file') found.titles = found.files.map(pastedTitle);
-  openSave(found);
+  if (found.kind === 'files') {
+    // 클립보드 그림은 이름이 늘 image.png라 제목 힌트를 붙인다
+    openSave({ files: found.files, hints: found.files.map(pastedHint) });
+  } else {
+    openSave(found);
+  }
 }
 
 /** 끌어다 놓기 · 붙여넣기를 받기 시작한다(한 번만). */

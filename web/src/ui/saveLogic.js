@@ -1,34 +1,41 @@
-// W-05 저장 창 · 끌어다 놓기 · 붙여넣기의 순수 함수(DOM 없음). 문구는 스펙 6-3 · 6-4와 계획 Task 11 그대로다.
-// 한도는 서버와 같다: 파일 하나 500MB, 한 번에 500개, 메모 20,000자, 제목 200자, 행성 이름 20자.
+// 기록하기 창(W-05 대체, 스펙 6-9) · 끌어다 놓기 · 붙여넣기의 순수 함수(DOM 없음).
+// 글 + 첨부 파일 + 링크를 저장하면 별 하나가 된다. 한도는 서버와 같다:
+// 첨부(파일 + 링크) 50개, 파일 하나 500MB, 제목 200자, 행성 이름 20자.
 
 export const FILE_MAX = 500 * 1024 * 1024;
-export const FILES_MAX = 500;
-export const MEMO_MAX = 20000;
+export const ATTACH_MAX = 50;
 export const TITLE_MAX = 200;
+export const TITLE_FROM_BODY_MAX = 40;
 export const PLANET_NAME_MAX = 20;
 
 export const URL_ERROR = '주소는 http로 시작해야 해요';
 export const TOO_BIG_TOAST = '500MB보다 큰 파일은 담을 수 없어요';
-export const TOO_MANY_TOAST = '한 번에 500개까지 띄울 수 있어요';
+export const TOO_MANY_TOAST = '첨부는 50개까지 담을 수 있어요';
 export const FOLDER_TOAST = '폴더는 담을 수 없어요. 파일만 놓아 주세요';
+export const KEPT_TOAST = '이미 쓰던 내용이 있어 그대로 두었어요';
+export const PASTED_IMAGE = '붙여넣은 이미지';
 
 const num = (v) => (Number(v) || 0).toLocaleString('ko-KR');
 const str = (v) => (typeof v === 'string' ? v : '');
 // 공백 없는 http(s) 주소 하나. 호스트가 한 글자는 있어야 한다.
 const HTTP_URL = /^https?:\/\/[^\s/]\S*$/i;
 
-// 글 하나를 link(전체가 공백 없는 http(s) 주소 하나) · text(그 밖의 비어 있지 않은 글) · null로 가른다.
+/** 공백 없는 http(s) 주소 하나면 앞뒤 공백을 뗀 주소, 아니면 null. */
+export function httpUrl(url) {
+  const u = str(url).trim();
+  return u && HTTP_URL.test(u) ? u : null;
+}
+
+// 글 하나를 link(전체가 주소 하나) · text(그 밖의 비어 있지 않은 글) · null로 가른다.
 function classifyText(text) {
   const raw = str(text);
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  if (HTTP_URL.test(trimmed)) return { tab: 'link', url: trimmed };
-  return { tab: 'text', text: raw };
+  if (!raw.trim()) return null;
+  const url = httpUrl(raw);
+  return url ? { kind: 'link', url } : { kind: 'text', text: raw };
 }
 
 /**
- * 붙여넣은 것을 어느 탭으로 열지 정한다.
- * 파일이 있으면 file, 글 전체가 공백 없는 http(s) 주소 하나면 link, 그 밖의 비어 있지 않은 글이면 text, 없으면 null.
+ * 글 칸 밖에서 붙여넣은 것: { kind: 'files', files } | { kind: 'link', url } | { kind: 'text', text } | null.
  * 글과 함께 온 파일이 모두 이미지면 글을 쓴다(엑셀 · 워드 · 파워포인트에서 복사하면 글 옆에 그림이 같이 온다).
  */
 export function classifyPaste({ files, text } = {}) {
@@ -36,22 +43,21 @@ export function classifyPaste({ files, text } = {}) {
   const found = classifyText(text);
   if (!list.length) return found;
   if (found && list.every((f) => str(f?.type).startsWith('image/'))) return found;
-  return { tab: 'file', files: list };
+  return { kind: 'files', files: list };
 }
 
 /**
- * 끌어다 놓은 것을 어느 탭으로 열지 정한다. 파일이 있으면 file.
- * 없으면 text/uri-list의 첫 http(s) 주소(#으로 시작하는 줄은 설명이라 건너뛴다) → link,
- * 그것도 없으면 text/plain을 붙여넣기처럼 가른다(주소 하나면 link, 그 밖의 글이면 text). 쓸 것이 없으면 null.
+ * 끌어다 놓은 것. 파일이 있으면 files. 없으면 text/uri-list의 첫 http(s) 주소(#으로 시작하는 줄은 건너뛴다) → link,
+ * 그것도 없으면 text/plain을 붙여넣기처럼 가른다. 쓸 것이 없으면 null.
  */
 export function classifyDrop({ types, uriList, text, files } = {}) {
   const list = Array.from(files ?? []);
-  if (list.length) return { tab: 'file', files: list };
+  if (list.length) return { kind: 'files', files: list };
   const kinds = Array.from(types ?? []);
   if (kinds.includes('text/uri-list')) {
     for (const line of str(uriList).split(/\r?\n/)) {
       const url = line.trim();
-      if (url && !url.startsWith('#') && HTTP_URL.test(url)) return { tab: 'link', url };
+      if (url && !url.startsWith('#') && HTTP_URL.test(url)) return { kind: 'link', url };
     }
   }
   if (kinds.includes('text/plain')) return classifyText(text);
@@ -60,12 +66,11 @@ export function classifyDrop({ types, uriList, text, files } = {}) {
 
 /** 주소 칸 아래에 보일 글. 비어 있으면 null, http:// · https://로 시작하는 주소가 아니면 안내 문구. */
 export function urlError(url) {
-  const u = str(url).trim();
-  if (!u) return null;
-  return HTTP_URL.test(u) ? null : URL_ERROR;
+  if (!str(url).trim()) return null;
+  return httpUrl(url) ? null : URL_ERROR;
 }
 
-const INVISIBLE = /[\u0000-\u001f\u007f\u200b-\u200d\u2060\ufeff]/g;
+const INVISIBLE = /[\u0000-\u001f\u007f​-‍⁠﻿]/g;
 
 /**
  * 새 행성 이름 칸에 둘 값. 서버처럼 NFC로 모으고 보이지 않는 글자를 뺀 뒤에 세어, 20자를 넘으면 앞의 20자만 남긴다.
@@ -79,10 +84,7 @@ export function clampPlanetName(name) {
 
 /** 서버가 행성 이름을 다듬는 방식 그대로: NFC, 보이지 않는 글자 제거, 앞뒤 공백 제거. */
 export function cleanPlanetName(name) {
-  return str(name)
-    .normalize('NFC')
-    .replace(/[\u0000-\u001f\u007f​-‍⁠﻿]/g, '')
-    .trim();
+  return str(name).normalize('NFC').replace(INVISIBLE, '').trim();
 }
 
 /** 다듬은 행성 이름의 글자 수(코드 포인트). */
@@ -90,20 +92,16 @@ export function planetNameLength(name) {
   return [...cleanPlanetName(name)].length;
 }
 
-/** "별 띄우기"를 누를 수 있는지: 지금 탭에 내용이 있고 행성이 정해졌을 때. */
-export function canSubmit({ tab, text, url, files, planetId, newPlanetName } = {}) {
+/** "별 띄우기"를 누를 수 있는지: 글이나 첨부(count개, 50개까지)가 있고 행성이 정해졌을 때. */
+export function canSubmit({ text, count = 0, planetId, newPlanetName } = {}) {
   if (planetId === null || planetId === undefined || planetId === '') return false;
   if (planetId === 'new') {
     const n = planetNameLength(newPlanetName);
     if (n < 1 || n > PLANET_NAME_MAX) return false;
   }
-  if (tab === 'text') return str(text).trim() !== '';
-  if (tab === 'link') return str(url).trim() !== '' && urlError(url) === null;
-  if (tab === 'file') {
-    const n = Array.from(files ?? []).length;
-    return n >= 1 && n <= FILES_MAX;
-  }
-  return false;
+  const n = Number(count) || 0;
+  if (n > ATTACH_MAX) return false;
+  return str(text).trim() !== '' || n > 0;
 }
 
 /**
@@ -119,88 +117,55 @@ export function defaultPlanetId({ panelPlanetId, lastPlanetId, planets } = {}) {
   return ids[0];
 }
 
-/** 저장 결과를 한 줄로. 하나도 저장되지 않았으면 창을 닫지 않는다(부르는 쪽이 본다). */
-export function resultToast({ created, skipped } = {}) {
-  const n = Array.from(created ?? []).length;
-  const skips = Array.from(skipped ?? []);
-  let dupBig = 0;
-  let many = 0;
-  let failed = 0;
-  for (const s of skips) {
-    if (s?.reason === 'duplicate' || s?.reason === 'too_large') dupBig += 1;
-    else if (s?.reason === 'too_many') many += 1;
-    else failed += 1;
-  }
-  if (n > 0) {
-    let out = `별 ${num(n)}개를 띄웠어요`;
-    if (dupBig) out += `. ${num(dupBig)}개는 이미 있거나 너무 커서 빼놨어요`;
-    if (failed) out += `. ${num(failed)}개는 저장하지 못했어요`;
-    if (many) out += `. ${TOO_MANY_TOAST}`;
-    return out;
-  }
-  if (!skips.length) return '띄운 별이 없어요';
-  if (skips.length === 1 && skips[0]?.reason === 'duplicate') return '이미 있는 별이에요';
-  if (skips.length === 1 && skips[0]?.reason === 'too_large') return TOO_BIG_TOAST;
-  if (failed && dupBig) return `띄운 별이 없어요. ${num(dupBig)}개는 이미 있거나 너무 컸고, ${num(failed)}개는 저장하지 못했어요`;
-  if (failed) return `띄운 별이 없어요. ${num(failed)}개는 저장하지 못했어요`;
-  if (dupBig) return '띄운 별이 없어요. 이미 있거나 너무 큰 파일이에요';
-  return `띄운 별이 없어요. ${TOO_MANY_TOAST}`;
+/** 파일 이름에서 확장자를 뺀 것. 200자까지. */
+export function fileStem(name) {
+  const s = str(name).trim();
+  const dot = s.lastIndexOf('.');
+  const stem = dot > 0 ? s.slice(0, dot) : s;
+  return [...stem].slice(0, TITLE_MAX).join('').trim();
 }
 
-const FINAL_SKIP = new Set(['duplicate', 'too_large']);
-const sameName = (v) => str(v).normalize('NFC').trim();
-
-/**
- * 올린 뒤에도 목록에 남길 항목(저장되지 않아 다시 올릴 것)을 원래 순서대로 돌려준다.
- * 서버는 파일을 보낸 순서대로 다루므로 created · skipped의 file_name을 앞에서부터 짝짓는다.
- * 저장된 것 · duplicate · too_large는 끝난 것이라 빠지고, 그 밖의 이유(failed 등)는 남는다.
- * 이름 없는 건너뜀(too_many · 중간에 끊긴 failed)이 있으면 마지막으로 짝지은 항목 뒤의 것이 모두 남는다.
- * @param {{ file: { name: string } }[]} items
- */
-export function remainingAfterUpload(items, { created, skipped } = {}) {
-  const list = Array.from(items ?? []);
-  const state = list.map(() => null); // null = 소식 없음, 'done' = 끝남, 'keep' = 다시 올릴 것
-  const take = (fileName, mark) => {
-    const want = sameName(fileName);
-    const at = list.findIndex((it, i) => state[i] === null && sameName(it?.file?.name) === want);
-    if (at >= 0) state[at] = mark;
-  };
-  let cut = false;
-  for (const star of Array.from(created ?? [])) {
-    if (typeof star?.file_name === 'string') take(star.file_name, 'done');
-  }
-  for (const skip of Array.from(skipped ?? [])) {
-    if (typeof skip?.file_name === 'string') take(skip.file_name, FINAL_SKIP.has(skip.reason) ? 'done' : 'keep');
-    else if (!FINAL_SKIP.has(skip?.reason)) cut = true;
-  }
-  const last = state.reduce((at, mark, i) => (mark === null ? at : i), -1);
-  return list.filter((_, i) => state[i] === 'keep' || (cut && i > last));
+/** 붙여넣은 클립보드 그림(이름이 늘 image.png 같은 것)의 제목 힌트. 아니면 null. */
+export function pastedHint(file) {
+  if (!str(file?.type).startsWith('image/')) return null;
+  return /^image\.[a-z0-9]+$/i.test(str(file?.name)) ? PASTED_IMAGE : null;
 }
 
-/** 일부만 저장됐을 때 발 위에 보일 한 줄. n은 목록에 남은 파일 수. */
-export function remainingMessage(n, skipped) {
-  if (Array.from(skipped ?? []).some((s) => s?.reason === 'too_many')) return `${TOO_MANY_TOAST}. 남은 ${num(n)}개를 이어서 띄워 주세요`;
-  return `${num(n)}개는 저장하지 못했어요. 다시 눌러 주세요`;
+function firstLine(text) {
+  const line = str(text)
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .find((l) => l !== '');
+  return line ? [...line].slice(0, TITLE_FROM_BODY_MAX).join('').trim() : '';
+}
+
+// 제목을 비웠을 때 쓰일 것과 그 출처
+function autoSource({ text, files, links } = {}) {
+  const fromBody = firstLine(text);
+  if (fromBody) return { title: fromBody, hint: false };
+  const first = Array.from(files ?? [])[0];
+  if (first) return first.hint ? { title: first.hint, hint: true } : { title: fileStem(first.name), hint: false };
+  const link = Array.from(links ?? [])[0];
+  return { title: link ? str(link).trim() : '', hint: false };
 }
 
 /**
- * 놓은 것에서 파일만 꺼낸다. 폴더(webkitGetAsEntry()?.isDirectory)는 빼고 센다.
- * drop 이벤트 처리 안에서 바로 불러야 한다(끝나면 목록이 비워진다).
+ * 제목을 비우면 쓰일 제목(제목 칸의 placeholder): 글 첫 줄(40자) → 첫 파일 이름(확장자 뺌) → 첫 링크 주소.
+ * files = [{ name, hint? }], links = 주소 문자열 목록.
  */
-export function splitDropped(items) {
-  const files = [];
-  let folders = 0;
-  for (const item of Array.from(items ?? [])) {
-    if (!item || item.kind !== 'file') continue;
-    const entry = typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null;
-    if (entry?.isDirectory) {
-      folders += 1;
-      continue;
-    }
-    const f = typeof item.getAsFile === 'function' ? item.getAsFile() : null;
-    if (f) files.push(f);
-  }
-  return { files, folders };
+export function autoTitle(parts) {
+  return autoSource(parts).title;
+}
+
+/**
+ * 서버에 보낼 제목. 쓴 것이 있으면 그것. 비웠으면 ''(서버가 같은 규칙으로 정한다).
+ * 다만 붙여넣은 그림이 제목이 될 때는 서버가 모르는 힌트("붙여넣은 이미지")를 보낸다.
+ */
+export function submitTitle(typed, parts) {
+  const t = str(typed).trim();
+  if (t) return [...t].slice(0, TITLE_MAX).join('');
+  const src = autoSource(parts);
+  return src.hint ? src.title : '';
 }
 
 const fileKey = (f) => `${f?.name}\u0000${f?.size}\u0000${f?.lastModified}`;
@@ -226,22 +191,107 @@ export function partitionBySize(files, max = FILE_MAX) {
   return { ok, tooBig };
 }
 
-/** 파일 이름에서 확장자를 뺀 것(제목 기본값). 200자까지. */
-export function fileStem(name) {
-  const s = str(name).trim();
-  const dot = s.lastIndexOf('.');
-  const stem = dot > 0 ? s.slice(0, dot) : s;
-  return [...stem].slice(0, TITLE_MAX).join('').trim();
+/**
+ * 파일을 담을 계획. room은 남은 첨부 자리 수.
+ * → { add: 담을 파일, tooBig: 500MB 초과 수, repeated: 이미 담긴 파일 수, overflow: 자리가 없어 못 담은 수 }
+ */
+export function planAdd({ existing, incoming, room = ATTACH_MAX } = {}) {
+  const { ok, tooBig } = partitionBySize(incoming);
+  const fresh = dedupeFiles(existing, ok);
+  const n = Math.max(0, Number(room) || 0);
+  return {
+    add: fresh.slice(0, n),
+    tooBig: tooBig.length,
+    repeated: ok.length - fresh.length,
+    overflow: Math.max(0, fresh.length - n),
+  };
 }
 
-/** 붙여넣은 파일의 제목. 화면 갈무리는 이름이 늘 image.png라서 따로 붙인다. */
-export function pastedTitle(file) {
-  if (file?.name === 'image.png' && str(file?.type).startsWith('image/')) return '붙여넣은 이미지';
-  return fileStem(file?.name);
+/**
+ * 놓은 것에서 파일만 꺼낸다. 폴더(webkitGetAsEntry()?.isDirectory)는 빼고 센다.
+ * drop 이벤트 처리 안에서 바로 불러야 한다(끝나면 목록이 비워진다).
+ */
+export function splitDropped(items) {
+  const files = [];
+  let folders = 0;
+  for (const item of Array.from(items ?? [])) {
+    if (!item || item.kind !== 'file') continue;
+    const entry = typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null;
+    if (entry?.isDirectory) {
+      folders += 1;
+      continue;
+    }
+    const f = typeof item.getAsFile === 'function' ? item.getAsFile() : null;
+    if (f) files.push(f);
+  }
+  return { files, folders };
 }
 
-/** 저장 실패 때 발 위에 보일 한 줄. tab은 저장하던 탭('text' | 'link' | 'file'). */
-export function saveError(err, tab) {
+function countSkips(skipped) {
+  let dup = 0;
+  let big = 0;
+  for (const s of Array.from(skipped ?? [])) {
+    if (s?.reason === 'duplicate') dup += 1;
+    else if (s?.reason === 'too_large') big += 1;
+  }
+  return { dup, big };
+}
+
+/** 별을 띄웠을 때(201)의 토스트. 빼고 저장한 파일이 있으면 함께 알린다. */
+export function resultToast(skipped) {
+  const { dup, big } = countSkips(skipped);
+  const parts = [];
+  if (dup) parts.push(`이미 있는 파일 ${num(dup)}개`);
+  if (big) parts.push(`500MB보다 큰 파일 ${num(big)}개`);
+  return parts.length ? `별을 띄웠어요. ${parts.join('와 ')}는 빼고 띄웠어요` : '별을 띄웠어요';
+}
+
+/** 뺀 뒤 남는 것이 없어 별을 만들지 않았을 때(409 nothing_to_save)의 한 줄. */
+export function nothingToast(skipped) {
+  const { dup, big } = countSkips(skipped);
+  if (big && !dup) return TOO_BIG_TOAST;
+  if (big && dup) return '띄울 것이 없어요. 이미 있거나 너무 큰 파일이에요';
+  return '이미 있는 별이에요';
+}
+
+// 서버가 파일 이름을 다듬는 방식에 가깝게: NFC, 제어 · 방향 문자 제거, 경로의 마지막 조각
+function serverName(name) {
+  return (
+    str(name)
+      .normalize('NFC')
+      .replace(/[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g, '')
+      .split(/[\\/]/)
+      .map((s) => s.trim())
+      .filter((s) => s !== '')
+      .pop() ?? ''
+  );
+}
+
+/**
+ * 서버가 뺀 파일(skipped)을 칩에 짝짓는다. 서버는 파일을 보낸 순서대로 다루므로 이름을 앞에서부터 짝짓는다.
+ * → items와 같은 길이의 배열: 뺀 이유('duplicate' | 'too_large' | …) 또는 null.
+ */
+export function matchSkipped(items, skipped) {
+  const list = Array.from(items ?? []);
+  const out = list.map(() => null);
+  for (const skip of Array.from(skipped ?? [])) {
+    if (typeof skip?.file_name !== 'string') continue;
+    const want = serverName(skip.file_name);
+    const at = list.findIndex((it, i) => out[i] === null && it?.kind === 'file' && serverName(it.file?.name) === want);
+    if (at >= 0) out[at] = typeof skip.reason === 'string' ? skip.reason : 'failed';
+  }
+  return out;
+}
+
+/** 서버가 뺀 칩 아래에 보일 짧은 말. */
+export function skipNote(reason) {
+  if (reason === 'duplicate') return '이미 있는 파일';
+  if (reason === 'too_large') return '500MB보다 커서 뺐어요';
+  return reason ? '저장하지 못한 파일' : '';
+}
+
+/** 저장 실패 때 발 위에 보일 한 줄. hasFiles는 파일을 함께 올리던 중인지. */
+export function saveError(err, hasFiles = false) {
   switch (err?.code) {
     case 'offline':
       return '서버와 연결이 끊겨서 저장하지 못했어요. 서버를 켠 뒤 다시 눌러 주세요';
@@ -249,20 +299,23 @@ export function saveError(err, tab) {
       return '올리기를 멈췄어요';
     case 'upload_failed':
       return '읽을 수 없는 파일이 있어요. 폴더는 담을 수 없어요';
+    case 'upload_incomplete':
+      return '파일을 다 받지 못했어요. 다시 눌러 주세요';
     case 'unknown_planet':
       return '그 행성이 사라졌어요. 다시 골라 주세요';
     case 'too_large':
-      return tab === 'file' ? TOO_BIG_TOAST : '글이 너무 길어요';
-    case 'invalid_memo':
-      return '메모가 너무 길어요';
+      return hasFiles ? TOO_BIG_TOAST : '글이 너무 길어요';
+    case 'invalid_body':
+      return '글이 너무 길어요';
     case 'invalid_url':
+    case 'invalid_links':
       return URL_ERROR;
+    case 'too_many_attachments':
+      return TOO_MANY_TOAST;
     case 'invalid_name':
       return '행성 이름은 1~20자로 써 주세요';
-    case 'empty_body':
+    case 'empty_star':
       return '내용을 입력해 주세요';
-    case 'no_files':
-      return '담긴 파일이 없어요';
     default:
       return '저장하지 못했어요. 다시 눌러 주세요';
   }
