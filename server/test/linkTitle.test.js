@@ -122,3 +122,40 @@ test('malformed url → null', async () => {
   expect(await fetchLinkTitle('not a url')).toBeNull();
   expect(await fetchLinkTitle(undefined)).toBeNull();
 });
+
+// --- 검토에서 나온 경우들 ---
+import { extractTitle } from '../linkTitle.js';
+
+test('extractTitle is linear on pathological input', () => {
+  const started = Date.now();
+  expect(extractTitle('<title '.repeat(40000))).toBeNull();
+  expect(extractTitle('<title>'.repeat(40000))).toBeNull();
+  expect(Date.now() - started).toBeLessThan(200);
+});
+
+test('extractTitle skips svg and commented titles', () => {
+  expect(extractTitle('<svg><title>icon</title></svg><title>진짜</title>')).toBe('진짜');
+  expect(extractTitle('<!-- <title>옛 제목</title> --><TITLE lang="ko">새 제목</TITLE>')).toBe('새 제목');
+  expect(extractTitle('<svg><title>icon</title></svg>')).toBeNull();
+  expect(extractTitle('<titlebar>x</titlebar>')).toBeNull();
+});
+
+const EUC_KR_HANGUL = Buffer.from([0xc7, 0xd1, 0xb1, 0xdb]); // '한글'
+
+test('charset from <meta> when the header has none', async () => {
+  const body = Buffer.concat([Buffer.from('<meta charset="euc-kr"><title>'), EUC_KR_HANGUL, Buffer.from('</title>')]);
+  const url = await serve((req, res) => html(res, body, 'text/html'));
+  expect(await fetchLinkTitle(url)).toBe('한글');
+});
+
+test('euc-kr page with no charset anywhere is still readable', async () => {
+  const many = Buffer.concat([EUC_KR_HANGUL, EUC_KR_HANGUL, EUC_KR_HANGUL]);
+  const body = Buffer.concat([Buffer.from('<title>'), many, Buffer.from('</title>')]);
+  const url = await serve((req, res) => html(res, body, 'text/html'));
+  expect(await fetchLinkTitle(url)).toBe('한글한글한글');
+});
+
+test('control and bidi characters from entities are dropped', async () => {
+  const url = await serve((req, res) => html(res, '<title>a&#1;b&#x202e;c&#xD800;</title>'));
+  expect(await fetchLinkTitle(url)).toBe('a b c&#xD800;');
+});
