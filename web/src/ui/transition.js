@@ -13,7 +13,7 @@
 // 4단계의 store.reload()가 내는 'data'는 inWorld가 이미 true인 채로 온다.
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { enterOverview, flyTo, setInputBlocked, startLoop } from '../three/controls.js';
+import { enterOverview, flyTo, setInputBlocked, startLoop, stopFlight } from '../three/controls.js';
 import { initScene } from '../three/scene.js';
 import { renderHome, resumeEmblem, setEmblemSpin } from './home.js';
 import { toast } from './toast.js';
@@ -26,7 +26,12 @@ const WORLD_UI = ['brand', 'help', 'dock', 'period', 'wLog'];
 const WORLD_UI_ALL = [...WORLD_UI, 'redis', 'worldMsg', 'near'];
 const ENTERING = 'world-entering'; // body에 붙어 있는 동안 조작 UI가 투명하다(app.css)
 
+const OPEN_TIMEOUT = 8000; // 4단계(3D 준비 + 데이터)를 기다려 주는 한도
+const FAIL_MSG = '우주를 열지 못했어요. 다시 눌러 주세요';
+
 let busy = false; // 전환 중
+let isLeaving = false; // 돌아가기 진행 중
+let epoch = 0; // 4단계의 세대. 중단하면 올려서 늦게 끝난 준비가 화면을 바꾸지 못하게 한다
 let skippable = false; // 1 ~ 3단계
 let skip = false;
 let wakeSkip = null;
@@ -128,7 +133,13 @@ async function abortToHome(err) {
     store.emit('offline'); // inWorld가 false가 된 뒤 다시 알려 연결 실패 카드를 홈에 띄운다
   } else {
     console.error('[transition] 우주에 들어가지 못했어요', err);
-    toast(err?.name === 'ApiError' ? '우주를 불러오지 못했어요. 다시 눌러 주세요' : '3D 화면을 열지 못했어요. 브라우저를 확인하고 다시 눌러 주세요');
+    toast(
+      err?.code === 'timeout'
+        ? FAIL_MSG
+        : err?.name === 'ApiError'
+          ? '우주를 불러오지 못했어요. 다시 눌러 주세요'
+          : '3D 화면을 열지 못했어요. 브라우저를 확인하고 다시 눌러 주세요',
+    );
   }
   veil.style.background = '';
   veil.style.clipPath = '';
@@ -138,14 +149,93 @@ async function abortToHome(err) {
   busy = false;
 }
 
+// 전환 도중 예상하지 못한 오류: 애니메이션 없이 바로 홈으로 되돌린다.
+// 한 단계가 실패해도 나머지는 끝까지 한다(막이 남거나 홈이 잠긴 채로 두지 않는다).
+function recoverHome(err) {
+  console.error('[transition] 전환 중 오류', err);
+  const safely = (fn) => {
+    try {
+      fn();
+    } catch (e) {
+      console.error('[transition] 되돌리는 중 오류', e);
+    }
+  };
+  epoch++; // 아직 돌고 있는 4단계 준비를 버린다
+  skippable = false;
+  safely(stopFlight);
+  store.state.inWorld = false;
+  store.state.panelPlanetId = null;
+  store.state.detailStarId = null;
+  safely(hideWorldUi);
+  safely(cancelHomeAnimations);
+  safely(() => {
+    const veil = $('veil');
+    veil.classList.remove('waiting');
+    veil.hidden = true;
+    resetVeil();
+  });
+  safely(() => {
+    const home = $('home');
+    home.hidden = false;
+    home.inert = false;
+    home.querySelector('.home-stars').style.transformOrigin = '';
+  });
+  safely(() => setEmblemSpin(0.22));
+  safely(resumeEmblem);
+  busy = false;
+  isLeaving = false;
+  safely(() => toast(FAIL_MSG));
+  renderHome(); // 던지지 않는다
+}
+
+// 4단계: 3D 준비 + 데이터 받기(최소 380ms) + 열기 전 할 일. 들어갈 별({ star, starGone })을 돌려준다.
+// 기다리는 사이 중단됐으면(token이 지난 세대) 더 진행하지 않고 던진다.
+async function prepareWorld(token, { planetId, starId }) {
+  const alive = () => {
+    if (token !== epoch) throw Object.assign(new Error('stale'), { code: 'stale' });
+  };
+  initScene($('stage')); // 처음 들어올 때만 만든다. WebGL을 못 쓰면 여기서 던진다
+  startLoop();
+  enterOverview();
+  let starGone = false;
+  const starReq =
+    starId === null
+      ? null
+      : api.star(starId).catch((err) => {
+          starGone = err?.status === 404; // 지워진 별. 그 밖의 실패는 행성만 연다
+          return null;
+        });
+  const [, , star] = await Promise.all([sleep(380), store.reload(), starReq]);
+  alive();
+  for (const fn of [...openHooks]) {
+    await fn({ planetId, starId });
+    alive();
+  }
+  // 첫 장면이 그려질 틈(탭이 숨겨져 있으면 기다리지 않는다)
+  await Promise.race([new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))), sleep(200)]);
+  alive();
+  return { star, starGone };
+}
+
 /**
  * 홈에서 블랙홀을 지나 우주로 들어간다(DESIGN.md 9-1의 5단계 + 조작 UI 200ms 페이드 인).
  * planetId가 있으면 끝난 뒤 그 행성으로 자동 비행하고, 도착하면 'land'(별이 있으면 'openStar')를 알린다.
- * 들어갔으면 true, 이미 전환 중 · 우주 안 · 연결 끊김이거나 4단계에서 실패해 홈으로 되돌아갔으면 false. 던지지 않는다.
+ * 그 행성(별)이 그 사이 지워졌으면 날아가지 않고 토스트로 알린다.
+ * 들어갔으면 true, 이미 전환 중 · 우주 안 · 연결 끊김이거나 4단계에서 실패 · 8초를 넘겨 홈으로 되돌아갔으면 false.
+ * 어디서 오류가 나도 홈으로 되돌리고 false. 던지지 않는다.
  */
-export async function enterWorld({ planetId, starId } = {}) {
+export async function enterWorld(target = {}) {
   if (busy || store.state.inWorld || store.state.offline) return false;
   busy = true;
+  try {
+    return await runEnter(target || {});
+  } catch (err) {
+    recoverHome(err);
+    return false;
+  }
+}
+
+async function runEnter({ planetId, starId }) {
   skip = false;
   skippable = true;
   const home = $('home');
@@ -217,20 +307,26 @@ export async function enterWorld({ planetId, starId } = {}) {
   store.state.inWorld = true;
 
   // 4. 기다림: 3D 준비 + 데이터 받기(최소 380ms). 가운데 무지개 고리가 돈다
+  // 8초 안에 끝나지 않으면 홈으로 되돌아간다.
   veil.classList.add('waiting');
+  const token = ++epoch;
   let star = null;
+  let starGone = false;
+  let timer = 0;
   try {
-    initScene($('stage')); // 처음 들어올 때만 만든다. WebGL을 못 쓰면 여기서 던진다
-    startLoop();
-    enterOverview();
-    [, , star] = await Promise.all([sleep(380), store.reload(), hasStar ? api.star(starId).catch(() => null) : null]);
-    for (const fn of [...openHooks]) await fn({ planetId: hasPlanet ? planetId : null, starId: hasStar ? starId : null });
-    // 첫 장면이 그려질 틈(탭이 숨겨져 있으면 기다리지 않는다)
-    await Promise.race([new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))), sleep(200)]);
+    const prep = prepareWorld(token, { planetId: hasPlanet ? planetId : null, starId: hasStar ? starId : null });
+    prep.catch(() => {}); // 한도를 넘긴 뒤 늦게 실패해도 조용히 버린다
+    const timeout = new Promise((_, rej) => {
+      timer = setTimeout(() => rej(Object.assign(new Error('timeout'), { code: 'timeout' })), OPEN_TIMEOUT);
+    });
+    ({ star, starGone } = await Promise.race([prep, timeout]));
   } catch (err) {
+    clearTimeout(timer);
+    epoch++; // 늦게 끝난 reload · 훅이 우주를 열지 못하게 한다
     await abortToHome(err);
     return false;
   }
+  clearTimeout(timer);
   veil.classList.remove('waiting');
 
   // 5. 열림: 가운데 구멍으로 우주가 열린다. 카메라는 조망 거리의 80%에서 100%로 물러난다
@@ -250,32 +346,58 @@ export async function enterWorld({ planetId, starId } = {}) {
   busy = false;
   store.emit('enterWorld', { planetId: hasPlanet ? String(planetId) : null, starId: hasStar ? String(starId) : null });
 
-  // 행성 · 별을 눌러 들어온 경우: 그 행성으로 자동 비행
-  if (hasPlanet && store.state.inWorld) {
-    // 별이 그 사이 다른 행성으로 옮겨졌으면 별이 있는 행성으로 간다. 별이 지워졌으면 행성만 연다.
-    const targetPlanet = String(star ? star.planet_id : planetId);
-    const targetStar = star ? String(star.id) : null;
-    if (star && !store.state.stars.some((s) => String(s.id) === targetStar)) {
-      store.emit('guestStar', star); // 지금 기간 밖의 별: 이 별만 잠시 보여 달라고 알린다
+  // 여기부터는 우주가 이미 열려 있다. 오류가 나도 홈으로 되돌리지 않는다.
+  try {
+    if (hasPlanet && store.state.inWorld && !isLeaving) {
+      // 행성 · 별을 눌러 들어온 경우: 그 행성으로 자동 비행.
+      // 별이 그 사이 다른 행성으로 옮겨졌으면 별이 있는 행성으로 간다.
+      const targetPlanet = String(star ? star.planet_id : planetId);
+      const targetStar = star ? String(star.id) : null;
+      if (hasStar && starGone) {
+        toast('그 별을 찾지 못했어요'); // 그 사이 지워진 별
+      } else if (!store.state.planets.some((p) => String(p.id) === targetPlanet)) {
+        toast('그 행성을 찾지 못했어요'); // 그 사이 지워진 행성
+      } else {
+        if (star && !store.state.stars.some((s) => String(s.id) === targetStar)) {
+          store.emit('guestStar', star); // 지금 기간 밖의 별: 이 별만 잠시 보여 달라고 알린다
+        }
+        const arrived = await flyTo(targetPlanet, targetStar ?? undefined);
+        // 날아가는 사이 돌아가기를 눌렀으면(flyTo가 false) 알리지 않는다
+        if (arrived && store.state.inWorld && !isLeaving) {
+          if (targetStar) store.emit('openStar', { planetId: targetPlanet, starId: targetStar });
+          else store.emit('land', targetPlanet);
+        }
+      }
+    } else if (!hasPlanet && store.state.planets.length) {
+      toast('WASD로 날아보거나, 왼쪽 행성을 눌러 바로 이동해 보세요');
     }
-    const arrived = await flyTo(targetPlanet, targetStar ?? undefined);
-    if (arrived) {
-      if (targetStar) store.emit('openStar', { planetId: targetPlanet, starId: targetStar });
-      else store.emit('land', targetPlanet);
-    }
-  } else if (!hasPlanet && store.state.planets.length) {
-    toast('WASD로 날아보거나, 왼쪽 행성을 눌러 바로 이동해 보세요');
+  } catch (err) {
+    console.error('[transition] 자동 비행 중 오류', err);
   }
   return true;
 }
 
 /**
  * 우주에서 홈으로 돌아간다(DESIGN.md 9-2): 잉크 막의 구멍이 400ms 동안 닫히고, 홈이 250ms 페이드로 나타난다.
- * 홈은 최신 데이터로 다시 그린다. 돌아갔으면 true. 던지지 않는다.
+ * 홈은 최신 데이터로 다시 그린다. 돌아갔으면 true. 도중에 오류가 나도 홈으로 되돌린다. 던지지 않는다.
  */
 export async function leaveWorld() {
   if (busy || !store.state.inWorld) return false;
+  stopFlight(); // 날아가던 중이면 끊는다: 기다리던 flyTo가 false로 끝나 'land' · 'openStar'가 나가지 않는다
   busy = true;
+  isLeaving = true;
+  try {
+    await runLeave();
+  } catch (err) {
+    recoverHome(err);
+    store.emit('leaveWorld'); // 듣는 쪽이 우주 화면을 정리하게
+  } finally {
+    isLeaving = false;
+  }
+  return true;
+}
+
+async function runLeave() {
   const home = $('home');
   const veil = $('veil');
   store.emit('leavingWorld');
@@ -302,9 +424,9 @@ export async function leaveWorld() {
   veil.hidden = true;
   resetVeil();
   busy = false;
+  isLeaving = false;
   $('enterBtn').focus({ preventScroll: true });
   store.emit('leaveWorld');
-  return true;
 }
 
 /* ---------- 입력 ---------- */

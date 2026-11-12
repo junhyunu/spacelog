@@ -111,7 +111,11 @@ function refreshOverview(force) {
 }
 
 /* ---------- 자동 비행 ---------- */
-function stopFlight() {
+/**
+ * 자동 비행과 도착 뒤 0.2초 기다림을 모두 끊는다. 기다리던 flyTo()는 false로 끝난다('land' · 'pickStar' 없음).
+ * 비행 중이 아니면 아무 일도 하지 않는다. 던지지 않는다.
+ */
+export function stopFlight() {
   if (autopilot) {
     const a = autopilot;
     autopilot = null;

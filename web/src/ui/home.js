@@ -122,6 +122,9 @@ export async function renderHome() {
   }
   if (seq !== renderSeq) return false; // 더 새로운 그리기가 있다
   if (store.state.offline) return false; // 다시 연결되면 'data'가 와서 다시 그린다
+  // 기다리는 사이 전환이 시작됐거나 우주 안이면 그리지 않는다(흡입 중인 요소를 갈아 끼우지 않게).
+  // 돌아올 때 leaveWorld가 다시 그린다.
+  if (home.inert || store.state.inWorld) return false;
   paint({ summary, planets: planets || [], recent: recent || [], redis, now });
   return true;
 }
