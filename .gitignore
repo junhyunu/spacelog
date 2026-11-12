@@ -5,3 +5,6 @@ dist
 *.db-shm
 .env
 .env.*
+
+# 수업 자료(직접 만든 것이 아님)
+D22_*.html
