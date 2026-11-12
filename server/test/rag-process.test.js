@@ -8,7 +8,9 @@ import { cleanup, makeApp } from './helpers.js';
 const HOST = { host: '127.0.0.1:4747' };
 
 // 가짜 자식 프로세스. kill() 하면 (autoExit 이면) 곧 exit 를 낸다.
-function fakeSpawn({ autoExit = true } = {}) {
+// 표준 입력이 닫히면 (exitOnStdinEnd 이면) 파이썬처럼 스스로 exit(0) 한다.
+// events 에 'stdin' · 'kill' 순서를 남긴다.
+function fakeSpawn({ autoExit = true, exitOnStdinEnd = true } = {}) {
   const children = [];
   const spawn = vi.fn((cmd, args, opts) => {
     const child = new EventEmitter();
@@ -16,11 +18,19 @@ function fakeSpawn({ autoExit = true } = {}) {
     child.stdout = new PassThrough();
     child.stderr = new PassThrough();
     child.stdin = new PassThrough();
+    child.events = [];
+    const end = child.stdin.end.bind(child.stdin);
+    child.stdin.end = vi.fn((...a) => {
+      child.events.push('stdin');
+      if (exitOnStdinEnd) queueMicrotask(() => child.exit(0));
+      return end(...a);
+    });
     child.exitCode = null;
     child.cmd = cmd;
     child.args = args;
     child.opts = opts;
     child.kill = vi.fn(() => {
+      child.events.push('kill');
       if (autoExit) queueMicrotask(() => child.exit(null, 'SIGTERM'));
       return true;
     });
@@ -85,6 +95,7 @@ describe('startRag', () => {
     expect(child.opts.env.SPACELOG_RAG_PORT).toBe('4999');
     expect(child.opts.env.SPACELOG_RAG_TOKEN).toMatch(/^[0-9a-f]{48}$/);
     expect(child.opts.env.PATH).toBe('x');
+    expect(child.opts.env.SPACELOG_RAG_WATCH_STDIN).toBe('1');
     expect(rag.status().state).toBe('starting');
 
     const other = startRag(base({ spawn, fetch: healthAfter(1) }));
@@ -171,19 +182,20 @@ describe('startRag', () => {
     await rag.stop();
   });
 
-  test('stop() kills the child, no restart, state off', async () => {
+  test('stop() closes stdin so python flushes and exits by itself; no kill, no restart, state off', async () => {
     const { spawn, children } = fakeSpawn();
     const rag = startRag(base({ spawn, fetch: healthAfter(1) }));
     await vi.advanceTimersByTimeAsync(0);
     await rag.stop();
-    expect(children[0].kill).toHaveBeenCalledTimes(1);
+    expect(children[0].stdin.end).toHaveBeenCalledTimes(1);
+    expect(children[0].kill).not.toHaveBeenCalled();
     expect(rag.status()).toEqual({ state: 'off' });
     await vi.advanceTimersByTimeAsync(120_000);
     expect(spawn).toHaveBeenCalledTimes(1);
   });
 
-  test('stop() on Windows falls back to taskkill for that pid only after 3 s', async () => {
-    const { spawn, children } = fakeSpawn({ autoExit: false });
+  test('stop() closes stdin before killing: kill after 5 s, taskkill for that pid only 3 s later', async () => {
+    const { spawn, children } = fakeSpawn({ autoExit: false, exitOnStdinEnd: false });
     const execFile = vi.fn((cmd, args, cb) => {
       children[0].exit(1);
       cb?.(null);
@@ -191,12 +203,70 @@ describe('startRag', () => {
     const rag = startRag(base({ spawn, execFile, platform: 'win32', fetch: healthAfter(1) }));
     await vi.advanceTimersByTimeAsync(0);
     const done = rag.stop();
+    // 동기 부분에서는 표준 입력만 닫는다(process 'exit' 처리기에서 부를 때와 같다).
+    expect(children[0].events).toEqual(['stdin']);
+    await vi.advanceTimersByTimeAsync(4_900);
+    expect(children[0].kill).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(children[0].events).toEqual(['stdin', 'kill']);
     await vi.advanceTimersByTimeAsync(2_900);
     expect(execFile).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(100);
     expect(execFile).toHaveBeenCalledWith('taskkill', ['/pid', String(children[0].pid), '/T', '/F'], expect.any(Function));
     await done;
     expect(rag.status()).toEqual({ state: 'off' });
+  });
+
+  test('stop() twice returns the same wait and does not restart the kill timers', async () => {
+    const { spawn, children } = fakeSpawn({ autoExit: true, exitOnStdinEnd: false });
+    const rag = startRag(base({ spawn, fetch: healthAfter(1) }));
+    await vi.advanceTimersByTimeAsync(0);
+    const first = rag.stop();
+    await vi.advanceTimersByTimeAsync(4_000);
+    const second = rag.stop();
+    expect(second).toBe(first);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(children[0].kill).toHaveBeenCalledTimes(1);
+    await first;
+    expect(rag.status()).toEqual({ state: 'off' });
+  });
+
+  test('exit code 3 → crashed / port_in_use, retried only at the normal backoff', async () => {
+    const { spawn, children } = fakeSpawn();
+    const rag = startRag(base({ spawn, fetch: vi.fn(async () => { throw new TypeError('fetch failed'); }) }));
+    children[0].exit(3);
+    expect(rag.status()).toEqual({ state: 'crashed', reason: 'port_in_use' });
+    await vi.advanceTimersByTimeAsync(1_900);
+    expect(spawn).toHaveBeenCalledTimes(1);
+    expect(rag.status()).toEqual({ state: 'crashed', reason: 'port_in_use' });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(spawn).toHaveBeenCalledTimes(2);
+
+    // 계속 막혀 있으면 포기해도 이유는 port_in_use
+    for (const wait of [5_000, 15_000, 60_000]) {
+      children.at(-1).exit(3);
+      await vi.advanceTimersByTimeAsync(wait);
+    }
+    children.at(-1).exit(3);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(spawn).toHaveBeenCalledTimes(5);
+    expect(rag.status()).toEqual({ state: 'crashed', reason: 'port_in_use' });
+    await rag.stop();
+  });
+
+  test('401 from /health while starting → crashed / port_in_use, child killed, no fast polling', async () => {
+    const { spawn, children } = fakeSpawn();
+    const fetch = vi.fn(async () => json(401, { error: 'unauthorized' }));
+    const rag = startRag(base({ spawn, fetch }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(rag.status()).toEqual({ state: 'crashed', reason: 'port_in_use' });
+    expect(children[0].kill).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_900);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(spawn).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(spawn).toHaveBeenCalledTimes(2);
+    await rag.stop();
   });
 
   test('createRag does not spawn until start()', async () => {
@@ -315,5 +385,18 @@ describe('GET /api/chat/status', () => {
 
   test('no rag at all → off', async () => {
     expect((await status(undefined)).body).toEqual({ rag: { state: 'off', reason: null }, key: null });
+  });
+
+  test('bad Host → 403, rag not consulted', async () => {
+    const rag = fakeRag({ state: 'ready' });
+    const { app, dataDir } = await makeApp({ rag });
+    try {
+      const res = await app.inject({ url: '/api/chat/status', headers: { host: 'evil.example:4747' } });
+      expect(res.statusCode).toBe(403);
+      expect(rag.client.health).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+      cleanup(dataDir);
+    }
   });
 });

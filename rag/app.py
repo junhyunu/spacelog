@@ -1,12 +1,15 @@
 """spaceLog RAG 서버(Flask). Node 가 자식 프로세스로 띄우고, 127.0.0.1 에서만 연다."""
 
 import hmac
+import socket
 import sys
 import threading
+import time
 from pathlib import Path
 
 from flask import Flask, jsonify, request
 from langchain_core.embeddings import Embeddings
+from werkzeug.serving import ThreadedWSGIServer
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -167,19 +170,75 @@ def app_chat(app):
     return ext["chat"]
 
 
-def run_shutdown_hooks(app):
-    """프로세스가 끝나기 전에 부른다(Task 2 의 색인 flush 가 여기에 붙는다)."""
-    for hook in app.extensions["spacelog"].setdefault("shutdown", []):
+# 끝내기 처리(색인 flush 등)에 쓰는 시간의 상한. 멈춘 flush 가 종료를 막지 못하게 한다.
+SHUTDOWN_TIMEOUT_S = 4.0
+# 신호 처리기 안에서 다시 불려도(같은 스레드) 막히지 않도록 RLock.
+_shutdown_lock = threading.RLock()
+
+
+def _run_hooks(hooks):
+    for hook in hooks:
         try:
             hook()
         except Exception as err:  # noqa: BLE001 — 끝내는 중 오류는 기록만
-            print(f"shutdown hook failed: {err}", file=sys.stderr, flush=True)
+            print(f"shutdown hook failed: {type(err).__name__}", file=sys.stderr, flush=True)
+
+
+def run_shutdown_hooks(app, timeout=SHUTDOWN_TIMEOUT_S):
+    """프로세스가 끝나기 전에 부른다(색인 flush 가 여기에 붙는다).
+
+    SIGINT 와 표준 입력 EOF 가 함께 와도 처리기는 한 번만 돈다. 두 번째 호출은 첫 실행이 끝나기를
+    (같은 마감 시각까지) 기다린다. 마감을 넘기면 기다리기를 그만두고 False 를 돌려준다.
+    """
+    ext = app.extensions["spacelog"]
+    with _shutdown_lock:
+        worker = ext.get("shutdown_worker")
+        if worker is None:
+            hooks = list(ext.setdefault("shutdown", []))
+            worker = threading.Thread(target=_run_hooks, args=(hooks,), name="shutdown-hooks", daemon=True)
+            ext["shutdown_worker"] = worker
+            ext["shutdown_deadline"] = time.monotonic() + timeout
+            worker.start()
+        deadline = ext["shutdown_deadline"]
+    worker.join(max(0.0, deadline - time.monotonic()))
+    if worker.is_alive():
+        print("shutdown hooks timed out", file=sys.stderr, flush=True)
+        return False
+    return True
+
+
+# ---------- 서버 ----------
+
+# 포트를 이미 누가 쓰고 있을 때의 종료 코드. Node(process.js) 가 이 값을 port_in_use 로 읽는다.
+EXIT_PORT_IN_USE = 3
+
+
+class PortInUse(RuntimeError):
+    """포트를 잡지 못했다. OSError 가 아니어야 werkzeug 가 가로채 sys.exit(1) 하지 않는다."""
+
+
+class ExclusiveWSGIServer(ThreadedWSGIServer):
+    """Windows 에서는 SO_REUSEADDR 가 남의 포트까지 함께 잡게 해 준다. 끄고 SO_EXCLUSIVEADDRUSE 를 켠다."""
+
+    allow_reuse_address = sys.platform != "win32"
+
+    def server_bind(self):
+        if sys.platform == "win32" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        try:
+            super().server_bind()
+        except OSError as err:
+            raise PortInUse(f"{type(err).__name__} errno={err.errno}") from err
+
+
+def make_rag_server(host, port, app):
+    """요청마다 스레드를 쓰는 werkzeug 서버. 같은 포트를 두 번 잡으면 PortInUse."""
+    return ExclusiveWSGIServer(host, port, app)
 
 
 def _exit_when_parent_goes(app):
-    """Node 가 띄웠을 때: 표준 입력이 닫히면(Node 가 죽으면) 스스로 끝낸다. 고아 프로세스를 남기지 않는다."""
+    """Node 가 띄웠을 때: 표준 입력이 닫히면(Node 가 끄거나 죽으면) 색인을 저장하고 끝낸다. 고아 프로세스를 남기지 않는다."""
     import os
-    import threading
 
     def watch():
         try:
@@ -207,6 +266,12 @@ def main():
         run_shutdown_hooks(app)
         os._exit(0)
 
+    try:
+        server = make_rag_server("127.0.0.1", config.port, app)
+    except PortInUse as err:
+        print(f"spaceLog rag: port {config.port} is already in use ({err})", file=sys.stderr, flush=True)
+        sys.exit(EXIT_PORT_IN_USE)
+
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, on_signal)
     if os.environ.get("SPACELOG_RAG_WATCH_STDIN") == "1":
@@ -217,7 +282,7 @@ def main():
         f"  fake={'yes' if config.fake else 'no'}",
         flush=True,
     )
-    app.run(host="127.0.0.1", port=config.port, debug=False, use_reloader=False, threaded=True)
+    server.serve_forever()
 
 
 if __name__ == "__main__":
