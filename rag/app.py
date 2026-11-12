@@ -1,19 +1,21 @@
 """spaceLog RAG 서버(Flask). Node 가 자식 프로세스로 띄우고, 127.0.0.1 에서만 연다."""
 
 import hmac
+import json
 import socket
 import sys
 import threading
 import time
 from pathlib import Path
 
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request, stream_with_context
 from langchain_core.embeddings import Embeddings
 from werkzeug.serving import ThreadedWSGIServer
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from answer import BadRequest, answer_events, parse_request  # noqa: E402
 from config import load_config  # noqa: E402
 from index import BadStar, StarIndex  # noqa: E402
 from models import get_chat, get_embeddings  # noqa: E402
@@ -46,6 +48,7 @@ def create_app(cfg, *, embeddings=None, chat=None):
         )
 
     register_index_routes(app)
+    register_answer_routes(app)
     app.extensions["spacelog"]["shutdown"].append(lambda: close_index(app))
     return app
 
@@ -154,6 +157,47 @@ def register_index_routes(app):
             return jsonify(ok=True, saved=app_index(app).flush())
         except OSError as err:
             return fail(500, "storage_error", err)
+
+
+# ---------- 답하기 ----------
+
+
+def _ndjson(event):
+    return json.dumps(event, ensure_ascii=False) + "\n"
+
+
+def register_answer_routes(app):
+    """POST /answer → application/x-ndjson. 이벤트 모양은 answer.py 맨 위 설명."""
+
+    @app.post("/answer")
+    def answer_route():
+        try:
+            req = parse_request(request.get_json(silent=True))
+        except BadRequest as err:
+            return jsonify(error="bad_request", field=err.field), 400
+
+        cfg = app.config["RAG"]
+        ext = app.extensions["spacelog"]
+
+        def events():
+            if ext["chat"] is None and not cfg.fake and not cfg.key_present:
+                yield _ndjson({"type": "error", "code": "key_missing", "message": "OpenAI 키가 없어요"})
+                return
+            try:
+                chat = app_chat(app)
+                index = app_index(app)
+            except Exception as err:  # noqa: BLE001
+                print(f"rag /answer setup failed ({type(err).__name__})", file=sys.stderr, flush=True)
+                yield _ndjson({"type": "error", "code": "internal", "message": "답을 만들지 못했어요"})
+                return
+            for event in answer_events(req, chat=chat, index=index, k=cfg.search_k, min_score=cfg.min_score):
+                yield _ndjson(event)
+
+        return Response(
+            stream_with_context(events()),
+            mimetype="application/x-ndjson",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
 
 def app_embeddings(app):

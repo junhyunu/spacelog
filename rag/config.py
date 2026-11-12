@@ -15,6 +15,13 @@ ENV_FILE = PROJECT_ROOT / ".env"
 DEFAULT_PORT = 4748
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_EMBED_MODEL = "text-embedding-3-small"
+# 검색: 조각을 k 개 가져와 점수(코사인 유사도)가 min_score 미만이면 버린다.
+# 진짜 임베딩(text-embedding-3-small)의 기본값은 0.25. 가짜 임베딩(DeterministicFakeEmbedding)은
+# 글자가 다르면 점수가 무작위(64차원에서 최대 0.5 정도)라 테스트용 기본값을 0.6 으로 올린다.
+# 둘 다 SPACELOG_RAG_K · SPACELOG_RAG_MIN_SCORE 로 바꿀 수 있다.
+DEFAULT_SEARCH_K = 8
+DEFAULT_MIN_SCORE = 0.25
+DEFAULT_FAKE_MIN_SCORE = 0.6
 
 
 class ConfigError(Exception):
@@ -31,6 +38,8 @@ class Config:
     key_present: bool
     token: str = field(repr=False)
     api_key: str = field(repr=False, default="")
+    search_k: int = DEFAULT_SEARCH_K
+    min_score: float = DEFAULT_MIN_SCORE
 
 
 def _truthy(value) -> bool:
@@ -58,13 +67,27 @@ def load_config(environ=None, env_file=ENV_FILE) -> Config:
     data_dir = Path(data_raw) if data_raw else Path.home() / "spaceLog"
 
     api_key = str(values.get("OPENAI_API_KEY") or "").strip()
+    fake = _truthy(values.get("SPACELOG_FAKE_MODELS"))
+
+    k_raw = str(values.get("SPACELOG_RAG_K") or "").strip()
+    score_raw = str(values.get("SPACELOG_RAG_MIN_SCORE") or "").strip()
+    try:
+        search_k = int(k_raw) if k_raw else DEFAULT_SEARCH_K
+        min_score = float(score_raw) if score_raw else (DEFAULT_FAKE_MIN_SCORE if fake else DEFAULT_MIN_SCORE)
+    except ValueError as err:
+        raise ConfigError("SPACELOG_RAG_K must be an integer and SPACELOG_RAG_MIN_SCORE a number") from err
+    if search_k < 1 or not -1.0 <= min_score <= 1.0:
+        raise ConfigError("SPACELOG_RAG_K must be >= 1 and SPACELOG_RAG_MIN_SCORE within [-1, 1]")
+
     return Config(
         data_dir=data_dir.resolve(),
         port=port,
         model=str(values.get("OPENAI_MODEL") or "").strip() or DEFAULT_MODEL,
         embed_model=str(values.get("OPENAI_EMBED_MODEL") or "").strip() or DEFAULT_EMBED_MODEL,
-        fake=_truthy(values.get("SPACELOG_FAKE_MODELS")),
+        fake=fake,
         key_present=bool(api_key),
         token=token,
         api_key=api_key,
+        search_k=search_k,
+        min_score=min_score,
     )
