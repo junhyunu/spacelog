@@ -1,0 +1,36 @@
+/* DESIGN.md 3장 토큰. 색 · 서체 · 간격 · 쌓임 순서는 여기 값만 쓴다. */
+:root{
+  /* 3-1 컬러 */
+  --ink:#1a1430;      /* 외곽선, 본문 글자, 그림자, 배지 바탕 */
+  --space:#15103a;    /* 우주 배경, 웹 전체 바탕 */
+  --panel:#f4f2ff;    /* 카드 · 패널 바탕 */
+  --panel-2:#e6e2ff;  /* 패널 안 2차 면, 고스트 버튼 */
+  --mute:#5b5480;     /* 보조 글자, 날짜, 안내 */
+  --white:#ffffff;    /* 목록 항목, 입력창, 미리보기 바탕 */
+  --yellow:#ffd23f;   /* 기본 버튼, 선택된 항목, 별 */
+  --pink:#ff5d8f;     /* 고른 별, 새 항목 강조, 지우기 확정 */
+  --violet:#7a6cff;   /* 우주로 들어가기, 라벨 */
+  --sky:#5ec8ff;      /* 키보드 포커스 링 */
+  --notice:#fff4c2;   /* 띠 배너 */
+  --danger-text:#c2185b; /* "이 별 지우기" 글자 링크 */
+
+  /* 3-2 타이포그래피. 이름은 npm 서체 패키지가 등록하는 font-family와 같아야 한다
+     (pretendard → 'Pretendard Variable', @fontsource → 'Black Han Sans' · 'IBM Plex Mono'). */
+  --f-display:"Black Han Sans","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-body:"Pretendard Variable",Pretendard,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+
+  /* 3-3 모양과 간격 */
+  --line:3px; --line-thin:2.5px;
+  --r-card:16px; --r-btn:12px; --r-item:12px; --r-thumb:8px; --r-pill:999px;
+  --drop-card:0 5px 0 var(--ink);
+  --drop-btn:0 4px 0 var(--ink);
+  --gap-1:6px; --gap-2:8px; --gap-3:12px; --gap-4:16px; --gap-5:24px;
+  --edge:14px; /* 화면 가장자리에서 떨어지는 거리 */
+
+  /* 쌓임 순서 */
+  --z-stage:1; --z-hud:2; --z-state:3; --z-home:20; --z-veil:30;
+  --z-drop:42; --z-save:43; --z-planet-form:44; --z-confirm:45; --z-toast:50;
+
+  color-scheme:dark;
+}

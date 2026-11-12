@@ -1,0 +1,144 @@
+// 로컬 서버(/api) 요청 래퍼. 실패하면 ApiError { status, code }를 던진다.
+// 네트워크 실패(서버가 꺼짐)는 status 0, code 'offline'이고 store에 'offline'을 알린다.
+import { store } from './store.js';
+
+export class ApiError extends Error {
+  constructor(status, code) {
+    super(`${status} ${code}`);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+function offline() {
+  store.emit('offline');
+  return new ApiError(0, 'offline');
+}
+
+const id = (v) => encodeURIComponent(String(v));
+
+// 값이 있는 것만 쿼리 문자열로 만든다
+function qs(params) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params || {})) {
+    if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
+  }
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+// 서버의 오류는 항상 JSON { error }다. 5xx인데 그 모양이 아니면
+// 서버가 아니라 개발용 프록시가 답한 것이므로(서버 꺼짐) 연결 끊김으로 본다.
+function errorFrom(status, text) {
+  let code = null;
+  try {
+    const data = JSON.parse(text);
+    if (data && typeof data.error === 'string') code = data.error;
+  } catch {
+    /* JSON이 아님 */
+  }
+  if (code) return new ApiError(status, code);
+  if (status >= 500) return offline();
+  return new ApiError(status, 'unknown');
+}
+
+function parseOk(status, text) {
+  if (status === 204 || text === '') return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new ApiError(status, 'bad_response');
+  }
+}
+
+async function request(method, path, body) {
+  const init = { method, headers: { Accept: 'application/json' } };
+  if (body !== undefined) {
+    init.headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(body);
+  }
+  let res;
+  let text;
+  try {
+    res = await fetch(`/api${path}`, init);
+    text = await res.text();
+  } catch {
+    throw offline();
+  }
+  if (!res.ok) throw errorFrom(res.status, text);
+  return parseOk(res.status, text);
+}
+
+const localDay = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+export const api = {
+  health: () => request('GET', '/health'),
+
+  /** range = { from, to } (ISO). 없으면 전체. → { in_period, total, planets } */
+  summary: (range) => request('GET', `/summary${qs({ from: range?.from, to: range?.to })}`),
+  planets: (range) => request('GET', `/planets${qs({ from: range?.from, to: range?.to })}`),
+  nextLook: () => request('GET', '/planets/next-look'),
+  createPlanet: ({ name, description, color_index, deco, ring } = {}) =>
+    request('POST', '/planets', { name, description, color_index, deco, ring }),
+  patchPlanet: (planetId, patch) => request('PATCH', `/planets/${id(planetId)}`, patch),
+  mergePlanet: (planetId, into) => request('POST', `/planets/${id(planetId)}/merge`, { into }),
+  /** opts.stars: 'move'(into 필요) | 'delete'. 빈 행성은 opts 없이. */
+  deletePlanet: (planetId, { stars, into } = {}) =>
+    request('DELETE', `/planets/${id(planetId)}${qs({ stars, into: stars === 'move' ? into : undefined })}`),
+
+  stars: ({ from, to, planet_id, limit } = {}) => request('GET', `/stars${qs({ from, to, planet_id, limit })}`),
+  star: (starId) => request('GET', `/stars/${id(starId)}`),
+  /** body = { type: 'text'|'link', title?, body?, url?, planet_id, memo? } */
+  createStar: (body) => request('POST', '/stars', body),
+  patchStar: (starId, patch) => request('PATCH', `/stars/${id(starId)}`, patch),
+  deleteStar: (starId) => request('DELETE', `/stars/${id(starId)}`),
+
+  /**
+   * 파일 올리기. 파일마다 별 1개. → { created: Star[], skipped: [{ file_name, reason }] }
+   * onProgress(pct)는 0~100 정수. 글자 칸을 파일보다 먼저 붙인다(서버가 그 순서로 읽는다).
+   */
+  uploadStars({ planet_id, memo, files, titles } = {}, onProgress) {
+    return new Promise((resolve, reject) => {
+      const form = new FormData();
+      form.append('planet_id', String(planet_id ?? ''));
+      form.append('memo', memo ?? '');
+      form.append('titles', JSON.stringify(Array.from(titles ?? [], (t) => (typeof t === 'string' ? t : ''))));
+      for (const f of files ?? []) form.append('files', f, f.name);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/stars/upload');
+      xhr.setRequestHeader('Accept', 'application/json');
+      if (typeof onProgress === 'function') {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable && e.total > 0) onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)));
+        };
+      }
+      xhr.onload = () => {
+        try {
+          if (xhr.status >= 200 && xhr.status < 300) resolve(parseOk(xhr.status, xhr.responseText));
+          else reject(errorFrom(xhr.status, xhr.responseText));
+        } catch (err) {
+          reject(err);
+        }
+      };
+      xhr.onerror = () => reject(offline());
+      xhr.ontimeout = () => reject(offline());
+      xhr.onabort = () => reject(new ApiError(0, 'aborted'));
+      xhr.send(form);
+    });
+  },
+
+  /** 오늘의 재발견 별. 없으면 null. 넣은 지 7일 이상 된 별만 대상이다. */
+  rediscovery(now = new Date()) {
+    const before = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString();
+    return request('GET', `/rediscovery${qs({ today: localDay(now), before })}`);
+  },
+
+  /** → { action: 'opened' | 'revealed' } */
+  open: (starId) => request('POST', `/stars/${id(starId)}/open`),
+  reveal: (starId) => request('POST', `/stars/${id(starId)}/reveal`),
+  fileUrl: (starId) => `/api/stars/${id(starId)}/file`,
+  thumbUrl: (starId) => `/api/stars/${id(starId)}/thumb`,
+};

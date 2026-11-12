@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>spaceLog</title>
+<link rel="icon" href="data:,">
+</head>
+<body>
+
+<div id="stage"></div>
+
+<div id="veil" hidden><div class="ring"></div></div>
+
+<section id="home" aria-label="메인 홈">
+  <div class="home-stars" aria-hidden="true"></div>
+  <div class="home-wrap">
+    <header class="home-top">
+      <div class="logo card" data-suck>space<span>Log</span></div>
+      <button type="button" class="btn" id="hLog" data-suck><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 기록하기</button>
+    </header>
+    <div class="hero">
+      <h2 id="hGreet" data-suck></h2>
+      <div class="hstats" id="hStats" data-suck></div>
+      <div class="bh-wrap"><canvas id="bhCanvas" aria-hidden="true"></canvas><button type="button" class="btn violet" id="enterBtn">우주로 들어가기</button></div>
+      <p class="hint" data-suck>버튼을 누르면 블랙홀을 지나 내 우주로 들어갑니다</p>
+    </div>
+    <div class="home-grid">
+      <article class="card hcard" id="hRedis" data-suck></article>
+      <article class="card hcard" data-suck><div class="eyebrow">행성으로 바로 들어가기</div><div class="hlist" id="hPlanets"></div></article>
+      <article class="card hcard" data-suck><div class="eyebrow">최근 별</div><div class="hlist" id="hRecent"></div></article>
+    </div>
+    <article class="card hcard" id="hState" hidden></article>
+  </div>
+</section>
+
+<div id="brand" class="card" hidden>
+  <h1>space<span>Log</span></h1>
+  <div class="stats"><span>이 기간</span><b id="sRec">0</b>개의 별 <b id="sPlanet">0</b>개의 행성</div>
+  <div class="brow"><button type="button" class="btn ghost" id="goHome">← 홈</button></div>
+</div>
+
+<div id="period" class="card" hidden>
+  <div class="seg" role="group" aria-label="기간 선택"><button type="button" data-p="today">오늘</button><button type="button" data-p="week">이번 주</button><button type="button" data-p="custom">직접 지정</button></div>
+  <div class="range" id="range" hidden><input type="date" id="rFrom" aria-label="시작 날짜"><span>~</span><input type="date" id="rTo" aria-label="끝 날짜"></div>
+</div>
+
+<div id="help" class="card big" hidden>
+  <b class="ht">처음이라면, 이렇게 날아요</b>
+  <div class="keys"><span><kbd>WASD</kbd>비행</span><span><kbd>Space</kbd><kbd>Shift</kbd>상승·하강</span><span><kbd>드래그</kbd>시점</span><span><kbd>E</kbd>착륙</span></div>
+</div>
+
+<div id="dock" class="dock" hidden><div class="label">행성으로 바로 날아가기</div></div>
+
+<button type="button" id="near" class="btn" hidden></button>
+
+<div id="redis" class="card" hidden></div>
+
+<button type="button" id="wLog" class="btn" hidden><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 기록하기</button>
+
+<div id="worldMsg" class="card" hidden></div>
+
+<aside id="panel" class="card" hidden aria-live="polite"></aside>
+
+<div id="confirm" hidden>
+  <div class="card" role="alertdialog" aria-modal="true" aria-labelledby="cTitle" aria-describedby="cBody">
+    <h3 id="cTitle"></h3><p id="cBody"></p><div id="cExtra"></div>
+    <div class="row"><button type="button" class="btn ghost" id="cNo">취소</button><button type="button" class="btn pink" id="cYes">확인</button></div>
+  </div>
+</div>
+
+<div id="toast" class="card" role="status" aria-live="polite" hidden></div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
