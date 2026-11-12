@@ -35,6 +35,21 @@ export function buildApp({
 
   registerGuard(app, { port, allowedOrigins });
 
+  // 시각 쿼리(from · to · before)는 여기서 한 번만 검사해 UTC ISO 로 맞춘다.
+  // DB 의 created_at 과 글자 비교를 하므로 형식이 다르면 조용히 틀린 결과가 나온다.
+  app.addHook('preHandler', async (req, reply) => {
+    const q = req.query;
+    if (!q || typeof q !== 'object') return;
+    for (const key of ['from', 'to', 'before']) {
+      const v = q[key];
+      if (v === undefined) continue;
+      if (v === '') { delete q[key]; continue; }
+      const t = typeof v === 'string' ? Date.parse(v) : NaN;
+      if (Number.isNaN(t)) return reply.code(400).send({ error: 'invalid_period' });
+      q[key] = new Date(t).toISOString();
+    }
+  });
+
   app.get('/api/health', async () => ({ ok: true }));
   registerPlanets(app);
   registerStars(app);

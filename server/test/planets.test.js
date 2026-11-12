@@ -323,3 +323,39 @@ test('period: from is inclusive, to is exclusive', async () => {
   const [onlyFrom] = await list('?from=2026-11-11T00:00:00.000Z');
   expect(onlyFrom.count_in_period).toBe(1);
 });
+
+test('zero-width-only name → 400 invalid_name', async () => {
+  const res = await call('POST', '/api/planets', { name: '​‍﻿ ' });
+  expect(res.statusCode).toBe(400);
+  expect(res.json()).toEqual({ error: 'invalid_name' });
+});
+
+test('name is NFC-normalised so decomposed hangul is not over-counted', async () => {
+  const name = '가나다라마바사아자차카타파하가나다라마바'; // 20자
+  const planet = await create({ name: name.normalize('NFD') });
+  expect(planet.name).toBe(name);
+});
+
+test('period without millis or with an offset is normalised', async () => {
+  const p = await create();
+  addStar(p.id, '2026-11-10T00:00:00.000Z');
+  const a = await list('?from=2026-11-10T00:00:00Z&to=2026-11-11T00:00:00Z');
+  expect(a[0].count_in_period).toBe(1);
+  const b = await list(`?from=${encodeURIComponent('2026-11-10T09:00:00+09:00')}`);
+  expect(b[0].count_in_period).toBe(1);
+});
+
+test('only `to` is honoured', async () => {
+  const p = await create();
+  addStar(p.id, '2026-11-10T00:00:00.000Z');
+  addStar(p.id, '2026-11-12T00:00:00.000Z');
+  const rows = await list('?to=2026-11-11T00:00:00.000Z');
+  expect(rows[0].count_in_period).toBe(1);
+});
+
+test('garbage or repeated period → 400 invalid_period', async () => {
+  expect((await call('GET', '/api/planets?from=yesterday')).statusCode).toBe(400);
+  const res = await call('GET', '/api/planets?from=2026-11-10T00:00:00Z&from=2026-11-11T00:00:00Z');
+  expect(res.statusCode).toBe(400);
+  expect(res.json()).toEqual({ error: 'invalid_period' });
+});
