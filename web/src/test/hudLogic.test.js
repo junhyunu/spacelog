@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { defaultCustom, isOutsidePeriod, nextCustom, shouldWiden, worldStateOf } from '../ui/hudLogic.js';
+import { defaultCustom, guestMoved, guestVerdict, isOutsidePeriod, nextCustom, revertTarget, shouldWiden, worldStateOf } from '../ui/hudLogic.js';
 import { periodRange } from '../util.js';
 
 describe('worldStateOf', () => {
@@ -75,6 +75,48 @@ describe('isOutsidePeriod (guest star decision)', () => {
   test('no star or an unreadable date → not a guest', () => {
     expect(isOutsidePeriod(null, today)).toBe(false);
     expect(isOutsidePeriod({ created_at: 'nope' }, today)).toBe(false);
+  });
+});
+
+describe('guestVerdict (guest star on re-render)', () => {
+  const guest = { id: '7', planet_id: '2' };
+  const planets = [{ id: 1 }, { id: 2 }];
+  test('no guest → none', () => expect(guestVerdict({ guest: null, planets, stars: [] })).toBe('none'));
+  test('planet still there and star still out of the period → keep', () => {
+    expect(guestVerdict({ guest, planets, stars: [{ id: 3 }] })).toBe('keep');
+  });
+  test('its planet is gone → gone', () => {
+    expect(guestVerdict({ guest, planets: [{ id: 1 }], stars: [] })).toBe('gone');
+    expect(guestVerdict({ guest })).toBe('gone');
+  });
+  test('the period now contains the star → inPeriod (ids compare as strings)', () => {
+    expect(guestVerdict({ guest, planets, stars: [{ id: 3 }, { id: 7 }] })).toBe('inPeriod');
+  });
+});
+
+describe('guestMoved (guest star re-validated against the server)', () => {
+  const guest = { id: '7', planet_id: '2' };
+  test('same planet → stays', () => expect(guestMoved(guest, { id: 7, planet_id: 2 })).toBe(false));
+  test('deleted (404 → null) → drop', () => expect(guestMoved(guest, null)).toBe(true));
+  test('moved to another planet → drop', () => expect(guestMoved(guest, { id: 7, planet_id: 5 })).toBe(true));
+  test('no guest → nothing to drop', () => expect(guestMoved(null, null)).toBe(false));
+});
+
+describe('revertTarget (failed period change)', () => {
+  const loaded = { period: 'today', range: { from: 'a', to: 'b' } };
+  test('goes back to the last period that actually loaded, not the one clicked before', () => {
+    // 오늘(받음) → 이번 주(받는 중) → 직접 지정(실패): 오늘로
+    expect(revertTarget({ isLatest: true, offline: false, loaded })).toBe(loaded);
+  });
+  test('a newer change is in flight → leave it alone', () => {
+    expect(revertTarget({ isLatest: false, offline: false, loaded })).toBeNull();
+  });
+  test('offline → keep the chosen period for the reconnect', () => {
+    expect(revertTarget({ isLatest: true, offline: true, loaded })).toBeNull();
+  });
+  test('nothing loaded yet → no revert', () => {
+    expect(revertTarget({ isLatest: true, offline: false, loaded: null })).toBeNull();
+    expect(revertTarget()).toBeNull();
   });
 });
 

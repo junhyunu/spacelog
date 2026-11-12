@@ -11,18 +11,20 @@
 //   'data'             우주 안에 있을 때 전부 다시 그리고 3D를 맞춘다
 //   'near'             planetId | null  목록의 노랑 표시
 //   'guestStar'        star             transition.js: 기간 밖의 별로 들어옴 → showGuestStar
-//   'manualMove'       패널이 닫혀 있으면 손님 별을 숨긴다. 조작 안내를 한 줄로
+//   'manualMove'       패널이 닫혀 있거나 손님 별에 아직 도착하지 않았으면 손님 별을 숨긴다. 조작 안내를 한 줄로
+//   'flightCancelled'  (controls.js가 알리게 되면) 손님 별로 가던 길이 끊겼을 때 손님 별을 숨긴다
 //   'leftPanelPlanet'  손님 별을 숨긴다
 //   'land' · 'pickStar' · 'openStar'    손님 별이 아닌 곳으로 갔으면 숨긴다
 //   'enterWorld'       기간을 넓혔으면 그 토스트
 //   'leaveWorld'       손님 별 · 가까운 행성 표시를 지운다
 // 연결 실패 카드는 main.js(showOffline)가 #worldMsg에 그린다. 그 카드가 떠 있는 동안 #worldMsg는 건드리지 않는다.
+// 손님 별은 clearGuestStar()로 언제든(손님 별이 없을 때도) 숨길 수 있다: 패널 닫기 · 목록으로 · 삭제 · 이동.
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { flyTo } from '../three/controls.js';
 import { STAR_CAP, setSelectedStar, syncUniverse } from '../three/planets.js';
 import { PLANET_COLORS, daysAgo, esc, ico, periodRange } from '../util.js';
-import { defaultCustom, isOutsidePeriod, nextCustom, shouldWiden, worldStateOf } from './hudLogic.js';
+import { defaultCustom, guestMoved, guestVerdict, isOutsidePeriod, nextCustom, revertTarget, shouldWiden, worldStateOf } from './hudLogic.js';
 import { toast } from './toast.js';
 import { onBeforeWorldOpens } from './transition.js';
 
@@ -35,7 +37,14 @@ let ready = false;
 let custom = defaultCustom(); // "직접 지정"의 날짜 { from, to } 'YYYY-MM-DD'
 let nearId = null;
 let guest = null; // 손님 별 { id, planet_id }: 기간 밖인데 재발견으로 들어와 잠시 보여 주는 별
+let guestArrived = false; // 손님 별에 도착했는지('openStar'). 가는 길에 끊기면 손님 별을 숨긴다
+let guestSeq = 0; // 손님 별 다시 확인(api.star)의 세대
 let holdGuest = false; // 손님 별로 날아가기를 시작하는 순간의 'leftPanelPlanet'은 흘려보낸다
+// 마지막으로 받는 데 성공한 기간. 기간 바꾸기가 실패하면 여기로 되돌린다
+let loaded = { period: store.state.period, range: store.state.range, custom };
+let periodSeq = 0;
+let widenSeq = 0;
+let widenPending = false; // 들어올 때 이번 주로 넓히는 reload가 아직 끝나지 않았다
 let flightSeq = 0;
 let redisSeq = 0;
 let redisStar = null; // 지금 재발견 카드에 그려진 별
@@ -60,22 +69,50 @@ function sync() {
 export function showGuestStar(star) {
   if (!star || star.id === null || star.id === undefined || star.planet_id === null || star.planet_id === undefined) return;
   guest = { id: String(star.id), planet_id: String(star.planet_id) };
+  guestArrived = false;
+  guestSeq += 1;
   store.state.guestStarId = guest.id;
   sync();
   setSelectedStar(guest.id);
   toast(`${num(daysAgo(star.created_at))}일 전 별이라 이 별만 잠시 보여드려요`);
 }
 
-/** 손님 별을 다시 숨긴다. 손님 별이 없으면 아무 일도 없다. */
+/** 손님 별을 다시 숨긴다. 언제 불러도 된다: 손님 별이 없으면 아무 일도 없다. */
 export function clearGuestStar() {
-  if (!guest) return;
+  if (!guest) {
+    store.state.guestStarId = null;
+    return;
+  }
   const id = guest.id;
-  guest = null;
-  store.state.guestStarId = null;
+  dropGuest();
   sync();
   // 다른 별의 상세가 열려 있으면 그 별의 핑크는 건드리지 않는다
   const detail = store.state.detailStarId;
   if (detail === null || detail === undefined || same(detail, id)) setSelectedStar(null);
+}
+
+// 화면은 건드리지 않고 손님 별 표시만 내린다(다시 그리는 쪽이 3D를 맞춘다)
+function dropGuest() {
+  guest = null;
+  guestArrived = false;
+  guestSeq += 1;
+  store.state.guestStarId = null;
+}
+
+// 손님 별이 떠 있는 동안 'data'가 오면(삭제 · 이동 뒤) 그 별이 아직 그 행성에 있는지 확인한다.
+// 지워졌거나(404) 다른 행성으로 옮겨졌으면 숨긴다. 그 밖의 실패는 그대로 둔다.
+async function revalidateGuest() {
+  if (!guest) return;
+  const { id } = guest;
+  const seq = ++guestSeq;
+  let star = null;
+  try {
+    star = await api.star(id);
+  } catch (err) {
+    if (err?.status !== 404) return;
+  }
+  if (seq !== guestSeq || !guest || guest.id !== id) return;
+  if (guestMoved(guest, star)) clearGuestStar();
 }
 
 // 별로 날아간다(재발견 "날아가기"). 기간 밖이면 손님 별로 보여 주고, 도착하면 'openStar'.
@@ -107,20 +144,22 @@ function paintPeriod() {
   if ($('rTo').value !== custom.to) $('rTo').value = custom.to;
 }
 
-// 기간을 바꾸고 다시 받는다. 연결이 끊긴 경우가 아닌데 실패하면 전 기간으로 되돌린다.
+// 기간을 바꾸고 다시 받는다. 연결이 끊긴 경우가 아닌데 실패하면 마지막으로 받은 기간으로 되돌린다
+// (바로 전에 누른 기간이 아니다: 그 기간은 아직 받지 못했을 수 있다). 더 새로운 바꾸기가 있으면 그쪽에 맡긴다.
 async function applyPeriod(period) {
-  const prev = { period: store.state.period, range: store.state.range };
+  const token = ++periodSeq;
   store.state.period = period;
   if (period === 'custom') store.state.range = periodRange('custom', custom);
-  const mine = store.state.range;
   paintPeriod();
   try {
     await store.reload();
     return true;
   } catch (err) {
-    if (err?.code !== 'offline' && store.state.period === period && (period !== 'custom' || store.state.range === mine)) {
-      store.state.period = prev.period;
-      store.state.range = prev.range;
+    const back = revertTarget({ isLatest: token === periodSeq, offline: err?.code === 'offline', loaded });
+    if (back) {
+      store.state.period = back.period;
+      store.state.range = back.range;
+      if (back.period === 'custom' && back.custom) custom = back.custom;
       paintPeriod();
       toast('기간을 바꾸지 못했어요. 다시 눌러 주세요');
     }
@@ -209,9 +248,13 @@ function paintBanner({ kind, todayButton }) {
 // 가운데 상태 카드: 전체 0개(행성도 없음). 연결 실패 카드가 떠 있으면 그대로 둔다.
 function paintMsg(kind) {
   const el = $('worldMsg');
-  if (store.state.offline || el.querySelector('[data-retry]')) return;
+  if (store.state.offline || el.querySelector('[data-retry]')) {
+    delete el.dataset.kind; // 카드를 연결 실패 안내에 내줬다
+    return;
+  }
   if (kind === 'empty') {
-    if (el.dataset.kind !== 'empty') {
+    // 표시(dataset.kind)가 아니라 실제 내용으로 판단한다: 연결 실패 카드가 덮어썼다 걷히면 비어 있다
+    if (!el.querySelector('[data-act="log"]')) {
       el.innerHTML =
         '<span class="eyebrow">빈 우주</span><h3>아직 별이 없어요</h3>' +
         '<p>파일을 끌어다 놓거나 기록하기를 눌러 첫 별을 띄워 보세요.</p>' +
@@ -266,10 +309,11 @@ async function paintRedis(kind) {
 function render() {
   if (!store.state.inWorld) return;
   const { planets, summary, period } = store.state;
-  // 손님 별의 행성이 사라졌으면 손님 별도 없다
-  if (guest && !planets.some((p) => same(p.id, guest.planet_id))) {
-    guest = null;
-    store.state.guestStarId = null;
+  // 손님 별: 행성이 사라졌거나, 기간이 바뀌어 이제 기간 안의 별이면 손님이 아니다.
+  // 그대로면 그 별이 지워지거나 옮겨지지 않았는지 확인한다.
+  if (guest) {
+    if (guestVerdict({ guest, planets, stars: store.state.stars }) === 'keep') revalidateGuest();
+    else dropGuest();
   }
   const st = worldStateOf({ total: summary?.total, inPeriod: summary?.in_period, planets: planets.length, period, cap: STAR_CAP });
   sync();
@@ -324,6 +368,10 @@ export function initHud() {
   $('wLog').addEventListener('click', () => store.emit('openSave', { tab: 'text' }));
   paintPeriod();
 
+  // 받는 데 성공한 기간을 적어 둔다(우주 밖에서 받은 것도). 겹친 reload는 마지막 것만 'data'를 낸다
+  store.on('data', () => {
+    loaded = { period: store.state.period, range: store.state.range, custom };
+  });
   store.on('data', render);
   store.on('near', (id) => {
     nearId = id ?? null;
@@ -334,7 +382,12 @@ export function initHud() {
   store.on('guestStar', showGuestStar);
   store.on('manualMove', () => {
     $('help').classList.remove('big');
-    if (store.state.panelPlanetId === null || store.state.panelPlanetId === undefined) clearGuestStar();
+    // 손님 별로 가던 길(누가 시작했든)이 이동 키로 끊겼으면 패널이 열려 있어도 숨긴다
+    if (!guestArrived || store.state.panelPlanetId === null || store.state.panelPlanetId === undefined) clearGuestStar();
+  });
+  // controls.js가 끊긴 비행을 알리게 되면 쓴다. 새 손님 별로 떠나는 순간(이전 비행이 끊긴다)은 흘려보낸다
+  store.on('flightCancelled', () => {
+    if (!holdGuest && guest && !guestArrived) clearGuestStar();
   });
   store.on('leftPanelPlanet', () => {
     if (!holdGuest) clearGuestStar();
@@ -343,14 +396,15 @@ export function initHud() {
     if (guest && !same(planetId, guest.planet_id)) clearGuestStar();
   });
   const otherStar = (starId) => {
-    if (guest && !same(starId, guest.id)) clearGuestStar();
+    if (!guest) return;
+    if (same(starId, guest.id)) guestArrived = true;
+    else clearGuestStar();
   };
   store.on('pickStar', otherStar);
   store.on('openStar', (e) => otherStar(e?.starId));
   store.on('leaveWorld', () => {
     // 우주 밖: 3D는 다음에 들어올 때 'data'로 다시 맞춘다
-    guest = null;
-    store.state.guestStarId = null;
+    dropGuest();
     setSelectedStar(null);
     nearId = null;
     redisSeq += 1;
@@ -361,14 +415,35 @@ export function initHud() {
   // 사용자가 직접 "오늘"을 고른 때에는 넓히지 않는다.
   onBeforeWorldOpens(async () => {
     widened = false;
+    const seq = ++widenSeq;
+    if (widenPending) {
+      // 넓히는 사이 8초를 넘겨 홈으로 되돌아갔다가 다시 들어왔다: 이번에 받은 것이 이미 이번 주다
+      widenPending = false;
+      widened = store.state.period === 'week';
+      return;
+    }
     const { period, summary } = store.state;
     if (!shouldWiden({ period, inPeriod: summary?.in_period, total: summary?.total })) return;
+    const prev = period;
+    widenPending = true;
     store.state.period = 'week';
     try {
       await store.reload(); // 'data' → 다시 그린다
     } catch (err) {
-      store.state.period = 'today';
+      if (seq === widenSeq) {
+        widenPending = false;
+        store.state.period = prev;
+      }
       throw err; // transition.js가 홈으로 되돌린다
+    }
+    if (seq !== widenSeq) return; // 그 사이 다시 들어왔다: 새 쪽이 이어받았다
+    widenPending = false;
+    if (!store.state.inWorld) {
+      // 받는 사이 전환이 홈으로 되돌아갔다(8초 한도 등). 사용자는 넓힌 것을 못 봤으니 전 기간으로 되돌린다
+      store.state.period = prev;
+      paintPeriod();
+      store.reload().catch(() => {});
+      return;
     }
     widened = true;
   });

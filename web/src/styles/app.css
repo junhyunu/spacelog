@@ -246,13 +246,16 @@ body{word-break:keep-all}
 #wBanner{position:absolute;top:calc(100% + 16px);left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 28px)}
 
 @media (max-width:760px){
-  #wBanner{top:auto;bottom:calc(100% + 11px)}
-  body:has(#wBanner:not([hidden])) #near{bottom:calc(246px + env(safe-area-inset-bottom,0px))}
+  /* 좁으면 줄임표 대신 줄을 바꾼다 */
+  #wBanner{top:auto;bottom:calc(100% + 11px);white-space:normal;text-align:center;border-radius:20px}
+  #wBanner span{overflow:visible;text-wrap:balance}
+  body:has(#wBanner:not([hidden])) #near{bottom:calc(258px + env(safe-area-inset-bottom,0px))}
   #dock{max-height:none;margin:0}
   .dock #wNewPlanet{align-self:center}
-  #period{top:auto;bottom:calc(136px + env(safe-area-inset-bottom,0px))}
+  /* 목록(가로 스크롤 막대 포함)과 겹치지 않게 12px 띄운다 */
+  #period{top:auto;bottom:calc(148px + env(safe-area-inset-bottom,0px))}
   #redis{display:none}
-  #near{bottom:calc(190px + env(safe-area-inset-bottom,0px))}
+  #near{bottom:calc(202px + env(safe-area-inset-bottom,0px))}
   .home-grid{grid-template-columns:minmax(0,1fr)}
   .bh-wrap{width:250px;height:250px}
   #help{display:none}

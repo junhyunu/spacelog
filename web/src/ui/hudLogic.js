@@ -45,6 +45,37 @@ export function isOutsidePeriod(star, range) {
   return false;
 }
 
+const sameId = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined && String(a) === String(b);
+
+/**
+ * 다시 그릴 때 손님 별을 어떻게 할지. guest = { id, planet_id }, planets · stars = 지금 기간으로 받은 것.
+ * - 'none'      손님 별이 없다
+ * - 'gone'      손님 별의 행성이 사라졌다 → 내린다
+ * - 'inPeriod'  기간이 바뀌어 그 별이 이제 기간 안에 있다 → 손님이 아니다(보통 별로 그려진다)
+ * - 'keep'
+ */
+export function guestVerdict({ guest, planets, stars } = {}) {
+  if (!guest) return 'none';
+  if (!(planets || []).some((p) => sameId(p?.id, guest.planet_id))) return 'gone';
+  if ((stars || []).some((s) => sameId(s?.id, guest.id))) return 'inPeriod';
+  return 'keep';
+}
+
+/** 서버에서 다시 받은 별(지워졌으면 null)을 보고, 손님 별이 지워졌거나 다른 행성으로 옮겨졌는지. */
+export function guestMoved(guest, star) {
+  if (!guest) return false;
+  return !star || !sameId(star.planet_id, guest.planet_id);
+}
+
+/**
+ * 기간 바꾸기가 실패했을 때 되돌아갈 곳. 마지막으로 받는 데 성공한 기간(loaded)으로 간다.
+ * 더 새로운 바꾸기가 진행 중이거나(isLatest가 아님) 연결이 끊긴 것이면 되돌리지 않는다(null).
+ */
+export function revertTarget({ isLatest, offline, loaded } = {}) {
+  if (!isLatest || offline || !loaded?.period) return null;
+  return loaded;
+}
+
 /** "직접 지정"의 처음 값: 오늘 포함 최근 30일. { from, to } 'YYYY-MM-DD'(현지 날짜). */
 export function defaultCustom(now = new Date()) {
   return {
