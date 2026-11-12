@@ -126,7 +126,9 @@ function multipartFields(raw, truncated) {
     }
     if (!Array.isArray(links)) throw new ApiError(400, 'invalid_links');
   }
-  return { planet_id: raw.planet_id, title: raw.title, body: raw.body, memo: raw.memo, links };
+  // multipart 는 글 칸의 줄바꿈을 CRLF 로 보낸다(폼 인코딩 규칙). JSON 으로 받은 글과 같게 LF 로 맞춘다.
+  const lf = (v) => (typeof v === 'string' ? v.replace(/\r\n/g, '\n') : v);
+  return { planet_id: raw.planet_id, title: lf(raw.title), body: lf(raw.body), memo: lf(raw.memo), links };
 }
 
 // 제목을 비웠을 때: 본문 첫 줄(40자) → 첫 파일 이름(확장자 뺌) → 첫 링크 제목 → 첫 주소.

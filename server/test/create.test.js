@@ -123,6 +123,12 @@ test('body + 2 files + 1 link → one star with 3 attachments: files in upload o
   expect(count('stars')).toBe(1);
 });
 
+test('multipart text fields get CRLF line breaks (form encoding) normalised to LF like JSON', async () => {
+  const { star } = await sendOk({ title: '제목', body: '첫 줄\r\n둘째 줄\r\n', memo: '메모\r\n끝' });
+  expect(star.body).toBe('첫 줄\n둘째 줄\n');
+  expect(star.memo).toBe('메모\n끝');
+});
+
 test('multipart with only text, or only links, works; files without body take their title from the first file', async () => {
   const text = await sendOk({ body: '글만' });
   expect(text.star).toMatchObject({ type: 'text', title: '글만', attachment_count: 0, attachments: [] });
