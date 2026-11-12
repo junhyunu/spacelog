@@ -116,6 +116,7 @@ function refreshOverview(force) {
  * 비행 중이 아니면 아무 일도 하지 않는다. 던지지 않는다.
  */
 export function stopFlight() {
+  const cancelled = autopilot || arriving;
   if (autopilot) {
     const a = autopilot;
     autopilot = null;
@@ -127,6 +128,8 @@ export function stopFlight() {
     clearTimeout(a.timer);
     a.resolve(false);
   }
+  // 끊긴 비행이 있었을 때만 알린다(hud.js 가 손님 별을 숨기는 데 쓴다).
+  if (cancelled) store.emit('flightCancelled', { planetId: cancelled.planetId });
 }
 
 /**
