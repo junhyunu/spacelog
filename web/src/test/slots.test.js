@@ -8,12 +8,14 @@ test('first four slots are the prototype sample positions', () => {
   expect(slotPosition(3)).toEqual([-6, 11, 26]);
 });
 
-test('slots 4-9 are the prototype SLOTS', () => {
+// Slot 8 is the one deliberate change: the prototype's [48, -4, -38] sits straight behind slot 1
+// in the overview camera (see the overlap test below), so it is moved 12 right, 4 up, 4 forward.
+test('slots 4-9 are the prototype SLOTS, except slot 8', () => {
   expect(slotPosition(4)).toEqual([30, -10, 28]);
   expect(slotPosition(5)).toEqual([-38, 12, -36]);
   expect(slotPosition(6)).toEqual([16, 16, -52]);
   expect(slotPosition(7)).toEqual([-30, -14, 30]);
-  expect(slotPosition(8)).toEqual([48, -4, -38]);
+  expect(slotPosition(8)).toEqual([60, 0, -34]);
   expect(slotPosition(9)).toEqual([4, -18, 6]);
 });
 
@@ -140,6 +142,47 @@ for (const n of COUNTS) {
       if (d > 62) expect(outside(positions, d * 0.9, { aspect }).length).toBeGreaterThan(0);
     });
   }
+}
+
+/* ---------- overview: no planet hides behind another ---------- */
+
+// Screen-space discs at the overview camera (yaw 0, pitch 0.5, looking at (0,2,-6)): each planet is a
+// disc of world radius 6 (the largest a planet grows to) at its own depth, plus a gap of 2 world units.
+function overlapping(positions, distance, pitch = 0.5) {
+  const R = 6;
+  const GAP = 2;
+  const sp = Math.sin(pitch);
+  const cp = Math.cos(pitch);
+  const discs = positions.map(([x, y, z]) => {
+    const ry = y - 2;
+    const rz = z + 6;
+    const depth = distance - (ry * sp + rz * cp);
+    return { x: x / depth, y: (ry * cp - rz * sp) / depth, r: R / depth, gap: GAP / depth };
+  });
+  const out = [];
+  for (let a = 0; a < discs.length; a++) {
+    for (let b = a + 1; b < discs.length; b++) {
+      const A = discs[a];
+      const B = discs[b];
+      if (Math.hypot(A.x - B.x, A.y - B.y) < A.r + B.r + Math.max(A.gap, B.gap)) out.push(`${a}-${b}`);
+    }
+  }
+  return out;
+}
+
+test('the overlap check catches the prototype slot 8 hiding behind slot 1', () => {
+  const positions = slots(9);
+  positions[8] = [48, -4, -38];
+  expect(overlapping(positions, overviewDistance(positions))).toEqual(['1-8']);
+});
+
+for (const aspect of ASPECTS) {
+  test(`no planet overlaps another in the overview: 1 to 40 planets, aspect ${aspect.toFixed(2)}`, () => {
+    for (let n = 1; n <= 40; n++) {
+      const positions = slots(n);
+      expect(overlapping(positions, overviewDistance(positions, { aspect })), `${n} planets`).toEqual([]);
+    }
+  });
 }
 
 test('overviewDistance defaults to a 16:9 screen, 58° fov, pitch 0.5, yaw 0, margin 9', () => {
