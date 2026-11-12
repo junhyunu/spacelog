@@ -14,6 +14,10 @@ export function registerGuard(app, { port = 4747, allowedOrigins = [] } = {}) {
     if (!hosts.has(host)) {
       return reply.code(403).send({ error: 'forbidden_host' });
     }
+    // Origin 이 없는 교차 사이트 요청(<img>, 폼 GET 등)도 막는다.
+    if (String(req.headers['sec-fetch-site'] ?? '').toLowerCase() === 'cross-site') {
+      return reply.code(403).send({ error: 'forbidden_origin' });
+    }
     const origin = req.headers.origin;
     if (origin !== undefined && !origins.has(String(origin).toLowerCase())) {
       return reply.code(403).send({ error: 'forbidden_origin' });

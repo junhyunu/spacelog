@@ -47,6 +47,17 @@ test('allows localhost Host on the server port', async () => {
   expect(res.statusCode).toBe(200);
 });
 
+test('rejects cross-site fetch without Origin', async () => {
+  const res = await app.inject({ url: '/api/health', headers: { host: '127.0.0.1:4747', 'sec-fetch-site': 'cross-site' } });
+  expect(res.statusCode).toBe(403);
+});
+test('allows same-origin fetch metadata', async () => {
+  const res = await app.inject({ url: '/api/health', headers: { host: '127.0.0.1:4747', 'sec-fetch-site': 'same-origin' } });
+  expect(res.statusCode).toBe(200);
+});
+test('malformed allowedOrigins throws before opening the db', async () => {
+  await expect(makeApp({ allowedOrigins: ['not a url'] })).rejects.toThrow();
+});
 test('rejects foreign Origin', async () => {
   const res = await app.inject({
     url: '/api/health',

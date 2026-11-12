@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Node 20 이상. 서버는 `127.0.0.1:4747`에만 연다(`PORT` 환경 변수로 변경 가능).
+- Node 22 이상(better-sqlite3 13 요구). 서버는 `127.0.0.1:4747`에만 연다(`PORT` 환경 변수로 변경 가능).
 - 데이터 폴더: `SPACELOG_DATA`가 있으면 그 경로, 없으면 `os.homedir()/spaceLog`. 그 안에 `spacelog.db`, `vault/`, `thumbs/`.
 - CDN을 쓰지 않는다. three.js · 서체 · 아이콘은 모두 번들에 들어간다.
 - 탐사선(W-04) 관련은 아무것도 만들지 않는다: 탐사선 버튼 · 창, 별 목록 체크박스, "싣기" 버튼, 체크한 별의 핑크 표시, W-02 · W-03의 발. 시안의 `checked`, `cargo`, `#modal`, `loadLabel` 관련 코드는 옮기지 않는다.
@@ -142,7 +142,7 @@ test('allows configured dev origin', async () => {
 - [ ] **Step 3: `npm test` → FAIL 확인**
 - [ ] **Step 4: `db.js`, `guard.js`, `app.js`, `index.js` 구현**
 
-`guard.js`: 허용 호스트는 `127.0.0.1:PORT`, `localhost:PORT`와 `allowedOrigins`의 host. `Origin` 헤더가 있으면 허용 목록에 있어야 한다. `index.js`는 `NODE_ENV !== 'production'`일 때 `allowedOrigins: ['http://localhost:5173','http://127.0.0.1:5173']`를 넘기고, `dist/`가 있으면 `@fastify/static`으로 제공한다. `vite.config.js`의 proxy는 `changeOrigin: false`.
+`guard.js`: 허용 호스트는 `127.0.0.1:PORT`, `localhost:PORT`와 `allowedOrigins`의 host. `Origin` 헤더가 있으면 허용 목록에 있어야 한다. `index.js`는 실행 인자에 `--dev`가 있을 때만(`npm run dev`) `allowedOrigins: ['http://localhost:5173','http://127.0.0.1:5173']`를 넘기고, `dist/`가 있으면 `@fastify/static`으로 제공한다. `vite.config.js`의 proxy는 `changeOrigin: false`.
 
 - [ ] **Step 5: `npm test` → PASS, `npm start` 뒤 `curl http://127.0.0.1:4747/api/health` → `{"ok":true}`**
 - [ ] **Step 6: Commit** `chore: scaffold server, db schema, host guard`

@@ -18,6 +18,9 @@ export function buildApp({
 } = {}) {
   if (!dataDir) throw new Error('buildApp: dataDir is required');
 
+  // 잘못된 주소는 DB 를 열기 전에 걸러 낸다.
+  for (const origin of allowedOrigins) new URL(origin);
+
   const app = Fastify({ logger: false });
   const db = openDb(dataDir);
 

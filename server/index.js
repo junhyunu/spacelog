@@ -8,7 +8,8 @@ import { buildApp, DEFAULT_PORT } from './app.js';
 const HOST = '127.0.0.1';
 const port = Number(process.env.PORT) || DEFAULT_PORT;
 const dataDir = process.env.SPACELOG_DATA || path.join(os.homedir(), 'spaceLog');
-const dev = process.env.NODE_ENV !== 'production';
+// 개발용 주소(Vite 5173)는 `npm run dev` 가 --dev 를 줄 때만 허용한다.
+const dev = process.argv.includes('--dev');
 
 const app = buildApp({
   dataDir,
