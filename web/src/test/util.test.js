@@ -38,7 +38,7 @@ describe('ico', () => {
   });
   test('defaults to 18px and knows every icon the screens use', () => {
     expect(ico('x')).toContain('width="18"');
-    for (const n of ['x', 'arrow-left', 'ellipsis', 'pencil', 'link', 'image', 'file-text', 'type', 'plus', 'upload', 'panel-left-close', 'panel-left-open', 'chevron-down']) {
+    for (const n of ['x', 'arrow-left', 'ellipsis', 'pencil', 'link', 'image', 'file-text', 'type', 'plus', 'paperclip']) {
       expect(ico(n)).toMatch(/<(path|circle|rect|polyline|line) /);
     }
   });

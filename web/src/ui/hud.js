@@ -25,7 +25,7 @@
 // 손님 별은 clearGuestStar()로 언제든(손님 별이 없을 때도) 숨길 수 있다: 패널 닫기 · 목록으로 · 삭제 · 이동.
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { flyTo } from '../three/controls.js';
+import { flyTo, setInputBlocked } from '../three/controls.js';
 import { STAR_CAP, setSelectedStar, syncUniverse } from '../three/planets.js';
 import { PLANET_COLORS, daysAgo, esc, periodRange } from '../util.js';
 import { registerEscape } from './escape.js';
@@ -50,6 +50,8 @@ const faceOf = (planet) => PLANET_COLORS[planet?.color_index]?.face ?? '#7a6cff'
 const SIDE_KEY = 'spacelog.leftPanel'; // 'open' | 'closed'
 const HINT_KEY = 'spacelog.emptyHintOff'; // '1'이면 ✕로 끈 말풍선을 다시 띄우지 않는다
 const narrowMq = typeof matchMedia === 'function' ? matchMedia('(max-width: 760px)') : { matches: false };
+// 서랍이 펼쳐진 동안 inert로 잠그는 것(막 아래에 있는 우주 위 UI)
+const DRAWER_INERT = ['stage', 'period', 'near', 'redis', 'wHint', 'wLog', 'worldMsg', 'panel'];
 // 저장소를 못 쓰는 환경(사생활 보호 창 등)에서도 화면은 그대로 동작한다
 function readKey(key) {
   try {
@@ -385,8 +387,18 @@ function setSide(collapsed, { remember = false, focus = false } = {}) {
   const drawer = narrow && !sideCollapsed;
   $('left').classList.toggle('drawer', drawer);
   $('sideScrim').hidden = !drawer;
+  // 서랍이 펼쳐진 동안 막 아래의 조작 UI는 초점도 누르기도 받지 않는다(Tab이 서랍 밖으로 나가지 않게)
+  for (const id of DRAWER_INERT) {
+    const el = $(id);
+    if (el) el.inert = drawer;
+  }
   if (remember && !narrow) writeKey(SIDE_KEY, sideCollapsed ? 'closed' : 'open');
   if (focus) (sideCollapsed ? $('sideOpen') : $('sideClose')).focus({ preventScroll: true });
+}
+
+/** 좁은 화면에서 왼쪽 서랍이 펼쳐져 있는지. */
+export function isDrawerOpen() {
+  return Boolean(store.state.inWorld) && narrowMq.matches && !sideCollapsed;
 }
 
 // 좁은 화면에서 펼친 서랍만 닫는다(넓은 화면의 패널은 그대로)
@@ -442,11 +454,11 @@ export function initHud() {
   $('sideOpen').addEventListener('click', () => setSide(false, { remember: true, focus: narrowMq.matches }));
   $('sideScrim').addEventListener('click', () => setSide(true, { focus: true }));
   $('helpToggle').addEventListener('click', () => setHelp(!$('help').classList.contains('big')));
-  // 패널 위의 끌기 · 휠은 우주로 넘기지 않는다. 캔버스는 자기 위의 이벤트만 받지만, 창 단위로 듣는 처리가
-  // 더해져도 새지 않게 여기서 끊는다. 목록 끝의 휠이 밖으로 번지지 않게 하는 것은 CSS(overscroll-behavior)
-  for (const type of ['pointerdown', 'pointermove', 'wheel']) {
-    $('left').addEventListener(type, (e) => e.stopPropagation(), type === 'wheel' ? { passive: true } : undefined);
-  }
+  // 패널 위의 끌기 · 휠은 우주로 넘어가지 않는다: controls.js는 캔버스 위의 이벤트만 받는다.
+  // 여기서 전파를 끊지 않는다(dropzone.js가 window의 pointerdown으로 화면 안 끌기 표시를 지운다).
+  // 목록 끝의 휠이 밖으로 번지지 않게 하는 것은 CSS(overscroll-behavior)
+  // 좁은 화면의 서랍이 펼쳐져 있는 동안은 비행 키를 받지 않는다
+  setInputBlocked(isDrawerOpen);
   // Esc: 좁은 화면의 서랍은 아래 시트 위에 덮이는 맨 위 층이라 상세 → 목록(30)보다 먼저 닫는다(escape.js)
   registerEscape(35, () => {
     if (!store.state.inWorld || !narrowMq.matches || sideCollapsed) return false;

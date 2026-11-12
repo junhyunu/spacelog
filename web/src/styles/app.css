@@ -16,7 +16,7 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 
 /* W-01 왼쪽 패널(스펙 6-8): 로고 · 요약 · 바로 날아가기 목록 · 조작 안내를 한 카드로. 아래 "W-01 왼쪽 패널"에 이어진다 */
 #help kbd{font-family:var(--f-mono);font-size:11px;background:var(--ink);color:var(--panel);border-radius:5px;padding:1px 6px;margin-right:3px}
-.dock button{display:flex;align-items:center;gap:10px;font:600 14px var(--f-body);color:var(--ink);background:var(--panel);border:3px solid var(--ink);border-radius:14px;padding:7px 12px 7px 8px;box-shadow:0 4px 0 var(--ink);cursor:pointer;text-align:left;min-width:170px;white-space:nowrap}
+.dock button{display:flex;align-items:center;gap:10px;font:600 14px var(--f-body);color:var(--ink);background:var(--panel);border:3px solid var(--ink);border-radius:14px;padding:7px 12px 7px 8px;box-shadow:0 4px 0 var(--ink);cursor:pointer;text-align:left;white-space:nowrap}
 .dock button .dot{width:22px;height:22px;border-radius:50%;border:3px solid var(--ink);flex:none}
 .dock button .n{margin-left:auto;font-family:var(--f-display);font-size:13px;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px;font-variant-numeric:tabular-nums}
 .dock button.here{background:var(--yellow)}
@@ -264,6 +264,8 @@ body:has(#left:not([hidden])) #toast{top:calc(var(--tr-bottom,64px) + 12px)}
 @media (min-width:1100px){
   body:has(#left:not([hidden])):has(#panel:not([hidden])) #toast{--tr:calc(var(--edge) + 380px + 12px)}
 }
+/* 행성 패널이 열려 있으면 말풍선은 숨긴다(어느 너비에서나 패널과 겹친다). visibility라 ✕도 Tab으로 닿지 않는다 */
+body:has(#panel:not([hidden])) #wHint{visibility:hidden}
 /* 말풍선이 떠 있으면 착륙 안내는 그 위로 비킨다(가운데에 둔 안내와 오른쪽 말풍선이 겹치는 너비에서) */
 @media (max-width:1100px){
   body:has(#wHint:not([hidden])) #near{bottom:calc(var(--hint-lift,190px) + 12px)}
@@ -288,7 +290,7 @@ body:has(#left:not([hidden])) #toast{top:calc(var(--tr-bottom,64px) + 12px)}
   .bh-wrap{width:250px;height:250px}
   #near{font-size:14px}
   /* 아래 시트가 덮는 착륙 안내 · 말풍선은 시트가 열린 동안 숨긴다(가려진 채 초점을 받지 않게). 기간 바는 그대로 쓸 수 있다 */
-  body:has(#panel:not([hidden])) :is(#near,#wHint){visibility:hidden}
+  body:has(#panel:not([hidden])) #near{visibility:hidden}
   #panel{top:auto;left:calc(10px + env(safe-area-inset-left,0px));right:calc(10px + env(safe-area-inset-right,0px));width:auto;height:62vh;bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:4}
 }
 @media (prefers-reduced-motion:reduce){#panel{animation:none}.rec.new{animation:none}#wLog.beckon::before{animation:none}#left.drawer #side{animation:none}#helpToggle .i{transition:none}}
