@@ -14,8 +14,8 @@ function validDay(s) {
 
 /**
  * 우주 화면의 상태(DESIGN.md W-01 상태 표).
- * - 'empty'         별도 행성도 없다: 가운데 카드만
- * - 'emptyPlanets'  별은 없지만 빈 행성이 있다: 행성 · 목록은 그대로, 작은 안내만
+ * - 'empty'         별도 행성도 없다: 빈 우주 말풍선(emptyHint)이 대신 안내한다
+ * - 'emptyPlanets'  별은 없지만 빈 행성이 있다: 행성 · 목록은 그대로, 말풍선만
  * - 'cap'           기간 안의 별이 상한(2,000개)을 넘는다: 띠 배너. todayButton은 "오늘만 보기"를 넣을지
  * - 'normal'
  * total = 전체 별 수, inPeriod = 기간 안의 별 수, planets = 행성 수.
@@ -93,4 +93,27 @@ export function nextCustom(prev, patch = {}) {
   let to = validDay(patch.to) ? patch.to : prev.to;
   if (from > to) [from, to] = [to, from];
   return { from, to };
+}
+
+/**
+ * 빈 우주 말풍선(스펙 6-8): 기록하기 버튼 바로 위. 띄울 문구 { title, body }, 띄우지 않으면 null.
+ * total = 전체 별 수(기간과 상관없이), planets = 행성 수, dismissed = ✕로 껐는지(브라우저에 기억),
+ * offline = 연결 실패 카드가 떠 있는지. 별이 하나라도 있으면 스스로 사라진다.
+ */
+export function emptyHint({ total, planets, dismissed, offline } = {}) {
+  if (dismissed || offline || n(total) > 0) return null;
+  return {
+    title: '아직 별이 없어요',
+    body: n(planets) > 0 ? '기록하기를 누르거나 파일을 끌어다 놓아 보세요' : '+ 새 행성으로 첫 행성을 만들거나 기록하기를 눌러 보세요',
+  };
+}
+
+/**
+ * 왼쪽 패널의 처음 상태(스펙 6-8). 접혀 있으면 true.
+ * stored = 브라우저에 기억한 값('open' | 'closed', 없거나 모르는 값이면 처음 열기 = 펼침),
+ * narrow = 760px 이하. 좁으면 기억한 값보다 우선해 접는다.
+ */
+export function initialSideCollapsed({ stored, narrow } = {}) {
+  if (narrow) return true;
+  return stored === 'closed';
 }

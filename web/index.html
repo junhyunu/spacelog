@@ -35,28 +35,46 @@
   </div>
 </section>
 
-<div id="brand" class="card" hidden>
-  <h1>space<span>Log</span></h1>
-  <div class="stats"><span>이 기간</span><b id="sRec">0</b>개의 별 <b id="sPlanet">0</b>개의 행성</div>
-  <div class="brow"><button type="button" class="btn ghost" id="goHome"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg> 홈</button></div>
+<!-- W-01 왼쪽 패널(스펙 6-8): 로고 · 요약 · 바로 날아가기 목록 · 조작 안내. 접으면 #sideOpen만 남는다 -->
+<div id="left" hidden>
+  <button type="button" id="sideOpen" class="card" aria-label="왼쪽 패널 펼치기" aria-expanded="false" aria-controls="side" hidden><span class="logo" aria-hidden="true">space<span>Log</span></span><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/></svg></button>
+  <div id="sideScrim" hidden></div>
+  <aside id="side" class="card" aria-label="우주 안내">
+    <header class="sd-head">
+      <h1>space<span>Log</span></h1>
+      <button type="button" class="btn ghost x" id="sideClose" aria-label="왼쪽 패널 접기" aria-expanded="true" aria-controls="side"><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></svg></button>
+    </header>
+    <div class="sd-sum">
+      <div class="stats">이 기간 별<b id="sRec">0</b>개 · 행성<b id="sPlanet">0</b>개</div>
+      <button type="button" class="btn ghost" id="goHome"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg> 홈</button>
+    </div>
+    <div class="sd-planets">
+      <div class="label" id="dockLabel">행성으로 바로 날아가기</div>
+      <button type="button" class="btn ghost sm" id="wNewPlanet" data-act="newPlanet"><svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 새 행성</button>
+      <div id="dock" class="dock" role="group" aria-labelledby="dockLabel"></div>
+    </div>
+    <div id="help" class="big">
+      <button type="button" id="helpToggle" aria-expanded="true" aria-controls="helpKeys"><b class="ht">처음이라면, 이렇게 날아요</b><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <div class="keys" id="helpKeys"><span><kbd>WASD</kbd>비행</span><span><kbd>Space</kbd><kbd>Shift</kbd>상승·하강</span><span><kbd>드래그</kbd>시점</span><span><kbd>E</kbd>착륙</span></div>
+    </div>
+  </aside>
 </div>
 
-<div id="period" class="card" hidden>
-  <div class="seg" role="group" aria-label="기간 선택"><button type="button" data-p="today">오늘</button><button type="button" data-p="week">이번 주</button><button type="button" data-p="custom">직접 지정</button></div>
-  <div class="range" id="range" hidden><input type="date" id="rFrom" aria-label="시작 날짜"><span>~</span><input type="date" id="rTo" aria-label="끝 날짜"></div>
+<!-- 기간 바(오른쪽 위) + 별 상한 띠 배너(바로 아래) -->
+<div id="period" hidden>
+  <div class="pbar card">
+    <div class="seg" role="group" aria-label="기간 선택"><button type="button" data-p="today">오늘</button><button type="button" data-p="week">이번 주</button><button type="button" data-p="custom">직접 지정</button></div>
+    <div class="range" id="range" hidden><input type="date" id="rFrom" aria-label="시작 날짜"><span>~</span><input type="date" id="rTo" aria-label="끝 날짜"></div>
+  </div>
   <div id="wBanner" class="banner" role="status" hidden></div>
 </div>
-
-<div id="help" class="card big" hidden>
-  <b class="ht">처음이라면, 이렇게 날아요</b>
-  <div class="keys"><span><kbd>WASD</kbd>비행</span><span><kbd>Space</kbd><kbd>Shift</kbd>상승·하강</span><span><kbd>드래그</kbd>시점</span><span><kbd>E</kbd>착륙</span></div>
-</div>
-
-<div id="dock" class="dock" hidden><div class="label">행성으로 바로 날아가기</div></div>
 
 <button type="button" id="near" class="btn" hidden></button>
 
 <div id="redis" class="card" hidden></div>
+
+<!-- 빈 우주 말풍선: 기록하기 바로 위, 꼬리가 아래로 버튼을 가리킨다 -->
+<div id="wHint" class="card" role="note" aria-labelledby="wHintTitle" hidden><p><b id="wHintTitle"></b><span id="wHintBody"></span></p><button type="button" class="btn ghost x" id="wHintX" aria-label="안내 닫기"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div>
 
 <button type="button" id="wLog" class="btn" hidden><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 기록하기</button>
 

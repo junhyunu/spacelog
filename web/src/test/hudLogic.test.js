@@ -1,5 +1,16 @@
 import { describe, expect, test } from 'vitest';
-import { defaultCustom, guestMoved, guestVerdict, isOutsidePeriod, nextCustom, revertTarget, shouldWiden, worldStateOf } from '../ui/hudLogic.js';
+import {
+  defaultCustom,
+  emptyHint,
+  guestMoved,
+  guestVerdict,
+  initialSideCollapsed,
+  isOutsidePeriod,
+  nextCustom,
+  revertTarget,
+  shouldWiden,
+  worldStateOf,
+} from '../ui/hudLogic.js';
 import { periodRange } from '../util.js';
 
 describe('worldStateOf', () => {
@@ -144,5 +155,59 @@ describe('custom range', () => {
     const r = periodRange('custom', c, new Date(2026, 10, 11));
     expect(r.from).toBe(new Date(2026, 9, 1).toISOString());
     expect(r.to).toBe(new Date(2026, 10, 2).toISOString());
+  });
+});
+
+describe('emptyHint (W-01 빈 우주 말풍선, 스펙 6-8)', () => {
+  const BODY = '기록하기를 누르거나 파일을 끌어다 놓아 보세요';
+  const BODY_NO_PLANET = '+ 새 행성으로 첫 행성을 만들거나 기록하기를 눌러 보세요';
+  test('no stars, some planets → the standard two lines', () => {
+    expect(emptyHint({ total: 0, planets: 2, dismissed: false })).toEqual({ title: '아직 별이 없어요', body: BODY });
+  });
+  test('no stars and no planets → the second line points at + 새 행성', () => {
+    expect(emptyHint({ total: 0, planets: 0, dismissed: false })).toEqual({ title: '아직 별이 없어요', body: BODY_NO_PLANET });
+  });
+  test('any star → no bubble', () => {
+    expect(emptyHint({ total: 1, planets: 1, dismissed: false })).toBeNull();
+    expect(emptyHint({ total: 3000, planets: 0, dismissed: false })).toBeNull();
+  });
+  test('dismissed with ✕ → never again', () => {
+    expect(emptyHint({ total: 0, planets: 0, dismissed: true })).toBeNull();
+    expect(emptyHint({ total: 0, planets: 4, dismissed: true })).toBeNull();
+  });
+  test('offline → no bubble (the offline card speaks instead)', () => {
+    expect(emptyHint({ total: 0, planets: 1, dismissed: false, offline: true })).toBeNull();
+  });
+  test('missing or odd numbers count as zero', () => {
+    expect(emptyHint({}).body).toBe(BODY_NO_PLANET);
+    expect(emptyHint({ total: 'x', planets: null }).title).toBe('아직 별이 없어요');
+    expect(emptyHint()).not.toBeNull();
+  });
+  test('copy follows 13장: 해요체, no exclamation mark', () => {
+    for (const h of [emptyHint({ planets: 1 }), emptyHint({ planets: 0 })]) {
+      expect(h.title + h.body).not.toMatch(/!/);
+      expect(h.title.endsWith('요')).toBe(true);
+      expect(h.body.endsWith('요')).toBe(true);
+    }
+  });
+});
+
+describe('initialSideCollapsed (왼쪽 패널 처음 상태, 스펙 6-8)', () => {
+  test('nothing stored on a wide screen → open', () => {
+    expect(initialSideCollapsed({ stored: null, narrow: false })).toBe(false);
+  });
+  test('the remembered state wins on a wide screen', () => {
+    expect(initialSideCollapsed({ stored: 'closed', narrow: false })).toBe(true);
+    expect(initialSideCollapsed({ stored: 'open', narrow: false })).toBe(false);
+  });
+  test('760px or less → collapsed, even if open was remembered', () => {
+    expect(initialSideCollapsed({ stored: 'open', narrow: true })).toBe(true);
+    expect(initialSideCollapsed({ stored: null, narrow: true })).toBe(true);
+    expect(initialSideCollapsed({ stored: 'closed', narrow: true })).toBe(true);
+  });
+  test('an unknown stored value counts as nothing stored', () => {
+    expect(initialSideCollapsed({ stored: 'banana', narrow: false })).toBe(false);
+    expect(initialSideCollapsed({})).toBe(false);
+    expect(initialSideCollapsed()).toBe(false);
   });
 });

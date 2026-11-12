@@ -189,7 +189,6 @@ function onKeyDown(e) {
       mode = 'fly';
       camDistTarget = 9;
     }
-    document.getElementById('help')?.classList.remove('big');
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
     if (!e.repeat) store.emit('manualMove');
   }

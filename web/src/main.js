@@ -111,16 +111,16 @@ $('goHome').addEventListener('click', () => leaveWorld());
 // W-01 조작 UI. 우주 안에서 'data'가 올 때마다 다시 그리고 3D를 맞춘다(손님 별 포함).
 initHud();
 
-// Esc 순서(escape.js): 확인 창 → 행성 꾸미기 창 → 저장 창 → 전환 건너뛰기 → 상세에서 목록 → 패널 닫기
+// Esc 순서(escape.js): 확인 창 → 행성 꾸미기 창 → 저장 창 → 전환 건너뛰기 → 좁은 화면의 왼쪽 서랍 → 상세에서 목록 → 패널 닫기
 setEscapeGuards({ isAskOpen, isTransitioning });
 
 // W-02 행성 패널(+ 상세). 'land' · 'openStar' · 'pickStar'로 열리고 'leftPanelPlanet'으로 닫힌다.
 initPanel();
 
-// "+ 새 행성"(#hNewPlanet · #wNewPlanet · 빈 우주 카드): 행성 꾸미기 창을 만들기로 연다.
+// "+ 새 행성"(#hNewPlanet · #wNewPlanet): 행성 꾸미기 창을 만들기로 연다.
 // 저장하면 store.reload() → 'data' → 우주 안이면 3D · 목록, 밖이면 홈의 행성 목록이 다시 그려진다.
 store.on('newPlanet', () => openPlanetForm({}));
-// "기록하기"(#hLog · #wLog · 빈 우주 카드): 저장 창(W-05)을 연다. 버튼은 home.js · hud.js가 듣고 'openSave'로 알린다.
+// "기록하기"(#hLog · #wLog): 저장 창(W-05)을 연다. 버튼은 home.js · hud.js가 듣고 'openSave'로 알린다.
 store.on('openSave', (o) => openSave(o ?? { tab: 'text' }));
 // 끌어다 놓기 · 붙여넣기(W-00 · W-01 어디서나)
 initDropzone();

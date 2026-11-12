@@ -21,9 +21,10 @@ import { toast } from './toast.js';
 const $ = (id) => document.getElementById(id);
 const reduceMq = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
 
-// 들어오면 보이는 조작 UI. #redis · #worldMsg · #near · #panel은 주인(Task 8 ~ 10)이 켜고 끈다.
-const WORLD_UI = ['brand', 'help', 'dock', 'period', 'wLog'];
-const WORLD_UI_ALL = [...WORLD_UI, 'redis', 'worldMsg', 'near'];
+// 들어오면 보이는 조작 UI. #left(왼쪽 패널 · 접힌 로고 버튼)와 #period(기간 바 + 띠 배너)는 스펙 6-8 배치.
+// #redis · #worldMsg · #near · #wHint(빈 우주 말풍선) · #panel은 주인(hud.js · main.js · controls.js · panel.js)이 켜고 끈다.
+const WORLD_UI = ['left', 'period', 'wLog'];
+const WORLD_UI_ALL = [...WORLD_UI, 'redis', 'worldMsg', 'near', 'wHint'];
 const ENTERING = 'world-entering'; // body에 붙어 있는 동안 조작 UI가 투명하다(app.css)
 
 const OPEN_TIMEOUT = 8000; // 4단계(3D 준비 + 데이터)를 기다려 주는 한도
