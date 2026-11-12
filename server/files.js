@@ -312,9 +312,16 @@ export function registerFiles(app) {
         } catch (err) {
           // 조각을 읽다가 끊겼다(연결이 끊김 · 깨진 본문 · 개수 상한). 남은 본문은 읽어서 버린다.
           req.raw.resume();
-          throw error ?? err;
+          if (error) throw error;
+          // 본문이 파일 중간에서 끝났다(멈추기 · 연결 끊김). 이미 쓴 파일은 아래에서 지운다.
+          if (err?.code === 'ERR_STREAM_PREMATURE_CLOSE' || /unexpected end/i.test(err?.message ?? '')) {
+            throw new ApiError(400, 'upload_incomplete');
+          }
+          throw err;
         }
         if (error) throw error;
+        // 파일과 파일 사이에서 연결이 끊기면 조각 읽기가 오류 없이 끝날 수 있다. 받다 만 요청은 저장하지 않는다.
+        if (req.raw.complete === false) throw new ApiError(400, 'upload_incomplete');
         if (!fields) check(); // 파일 조각이 없었다
       }
 

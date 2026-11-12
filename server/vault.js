@@ -70,6 +70,11 @@ export async function saveUpload(dataDir, stream, { id, ext = '', maxBytes = Inf
   const vaultPath = ext ? `vault/${id}.${ext}` : `vault/${id}`;
   const finalAbs = resolveVault(dataDir, vaultPath);
   const tmpAbs = resolveVault(dataDir, `vault/.tmp-${id}`);
+  // 본문이 파일 중간에서 끊기면 multipart 가 아직 읽지 않은 파일 조각을 오류 없이 닫아 버린다.
+  // 그 조각(busboy FileStream)에 pipeline 을 걸면 끝나지 않으므로 여기서 실패로 끝낸다.
+  if (stream.destroyed && !stream.readableEnded) {
+    throw Object.assign(new Error('upload stream closed early'), { code: 'ERR_STREAM_PREMATURE_CLOSE' });
+  }
 
   const hash = crypto.createHash('sha256');
   let size = 0;

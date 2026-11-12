@@ -585,6 +585,13 @@ test('saveUpload hashes while writing and reports too large', async () => {
   const broken = new Readable({ read() { this.destroy(new Error('boom')); } });
   await expect(saveUpload(dataDir, broken, { id: 'id4', ext: 'bin', maxBytes: 10 })).rejects.toThrow('boom');
   expect(vaultFiles()).toEqual(['id1.txt', 'id2']);
+
+  // 받기 전에 이미 닫힌 조각(본문이 중간에 끊겨 multipart 가 닫아 버린 파일)은 기다리지 않고 실패한다.
+  const closed = new Readable({ read() {} });
+  closed.push(Buffer.from('part'));
+  closed.destroy();
+  await expect(saveUpload(dataDir, closed, { id: 'id5', ext: 'bin', maxBytes: 10 })).rejects.toThrow();
+  expect(vaultFiles()).toEqual(['id1.txt', 'id2']);
 });
 
 test('makeThumb returns null for non-images; removeFiles tolerates missing files', async () => {
