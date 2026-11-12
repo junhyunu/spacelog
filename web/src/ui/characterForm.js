@@ -192,6 +192,7 @@ function onGroupClick(e) {
   const next = normalizeLook({ ...current.look, [g.field]: g.number ? Number(raw) : raw });
   if (next[g.field] === current.look[g.field]) return;
   current.look = next;
+  current.touched = true;
   paintLook();
   preview?.set(next); // 고를 때마다 바로 바뀐다
 }
@@ -241,8 +242,13 @@ async function submit() {
   const applied = normalizeLook(saved ?? look);
   store.state.character = applied;
   store.state.characterLoaded = true;
-  setCharacterLook(applied); // 우주를 아직 만들지 않았으면 적어만 둔다. 만들 때 이 모습으로 만든다
-  if (current === c) c.finish(applied);
+  try {
+    setCharacterLook(applied); // 우주를 아직 만들지 않았으면 적어만 둔다. 만들 때 이 모습으로 만든다
+  } catch (err) {
+    console.error(err); // 저장은 됐다. 다시 들어오면 새 모습으로 만들어진다
+  } finally {
+    if (current === c) c.finish(applied);
+  }
   toast(CHARACTER_SAVED_TOAST);
 }
 
@@ -299,6 +305,25 @@ export function openCharacterForm() {
   box.querySelector('.card').scrollTop = 0;
   openPreview(); // 창이 보인 뒤에: 미리보기 칸의 크기를 재서 만든다
   ($('cfKinds').querySelector('[aria-checked="true"]') ?? $('cfX')).focus({ preventScroll: true });
+
+  // 저장된 모습을 아직 못 받았으면(시작 직후이거나 받다가 실패) 지금 받아서 보여 준다.
+  // 그대로 두면 기본 모습이 보이고, 저장하면 저장돼 있던 모습을 덮어쓴다. 그사이 고른 것이 있으면 건드리지 않는다.
+  if (!store.state.characterLoaded) {
+    api
+      .character()
+      .then((look) => {
+        if (store.state.characterLoaded) return;
+        const loaded = normalizeLook(look);
+        store.state.character = loaded;
+        store.state.characterLoaded = true;
+        setCharacterLook(loaded);
+        if (current !== mine || mine.busy || mine.touched) return;
+        mine.look = loaded;
+        paintLook();
+        preview?.set(loaded);
+      })
+      .catch(() => {}); // 연결 끊김은 api.js가 알린다
+  }
 
   return new Promise((resolve) => {
     mine.finish = (value) => {
