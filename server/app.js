@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import { registerAttachments } from './attachments.js';
+import { registerCharacter } from './character.js';
 import { openDb } from './db.js';
 import { registerFiles } from './files.js';
 import { registerGuard } from './guard.js';
@@ -90,6 +91,7 @@ export function buildApp({
   // registerPlanets 가 만든 removeStarFiles 를 바꾸므로 그 뒤에 둔다.
   registerFiles(app);
   registerAttachments(app);
+  registerCharacter(app);
 
   return app;
 }
