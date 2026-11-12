@@ -142,7 +142,8 @@
 <div id="charForm" hidden>
   <form class="card" id="cfForm" role="dialog" aria-modal="true" aria-labelledby="cfTitle" novalidate>
     <header><h3 id="cfTitle">캐릭터 꾸미기</h3><button type="button" class="btn x ghost" id="cfX" aria-label="닫기"><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></header>
-    <div class="preview" id="cfPreview" role="img" aria-label="미리보기"></div>
+    <div class="preview" id="cfPreview" role="img" aria-label="미리보기" tabindex="0" aria-describedby="cfPreviewHint"></div>
+    <p class="hint" id="cfPreviewHint">끌어서 돌려 보세요</p>
     <div class="fld"><span class="lbl" id="cfKindLbl">종류</span><div class="chips" id="cfKinds" role="radiogroup" aria-labelledby="cfKindLbl"></div></div>
     <div class="fld"><span class="lbl" id="cfSuitLbl">몸 색</span><div class="swatches" id="cfSuits" role="radiogroup" aria-labelledby="cfSuitLbl"></div></div>
     <div class="fld"><span class="lbl" id="cfAccentLbl">포인트 색</span><div class="swatches" id="cfAccents" role="radiogroup" aria-labelledby="cfAccentLbl"></div></div>

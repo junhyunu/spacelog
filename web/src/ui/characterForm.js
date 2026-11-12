@@ -73,6 +73,13 @@ function startPreview(host, look) {
   let last = performance.now();
   let t = 1;
   let gone = false;
+  // 끌어서 돌려 보기: 끄는 동안과 놓은 뒤 잠깐은 저절로 돌지 않는다
+  let drag = null; // { id, x, y, yaw, tilt }
+  let resumeAt = 0; // 이 시각(ms)까지는 저절로 돌지 않는다
+  const TILT_MIN = -0.35;
+  const TILT_MAX = 0.5;
+  const RESUME_MS = 1800;
+  const clampTilt = (v) => Math.max(TILT_MIN, Math.min(TILT_MAX, v));
 
   const draw = () => {
     if (!gone) renderer.render(scene, camera);
@@ -83,7 +90,10 @@ function startPreview(host, look) {
     const dt = Math.min((now - last) / 1000, 0.05);
     last = now;
     t += dt;
-    turn.rotation.y += dt * 0.7; // 한 바퀴 약 9초
+    if (!drag && now >= resumeAt) {
+      turn.rotation.y += dt * 0.7; // 한 바퀴 약 9초
+      turn.rotation.x += (0 - turn.rotation.x) * Math.min(dt * 2, 1); // 기울인 것은 천천히 바로 선다
+    }
     animateCharacterPreview(group, dt, t, 0);
     draw();
   }
@@ -98,9 +108,49 @@ function startPreview(host, look) {
     animateCharacterPreview(group, 0, still ? 1 : t, 0);
     if (still) draw(); // 모션 줄이기: 돌지 않는다. 고를 때마다 한 번만 그린다
   }
+  // 마우스 · 손가락으로 끌면 좌우로 돌고 위아래로 조금 기운다
+  const canvas = renderer.domElement;
+  function onDown(e) {
+    if (e.button !== undefined && e.button !== 0) return;
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, yaw: turn.rotation.y, tilt: turn.rotation.x };
+    canvas.setPointerCapture?.(e.pointerId);
+    host.classList.add('dragging');
+    e.preventDefault();
+  }
+  function onMove(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    turn.rotation.y = drag.yaw + (e.clientX - drag.x) * 0.012;
+    turn.rotation.x = clampTilt(drag.tilt + (e.clientY - drag.y) * 0.006);
+    if (still) draw();
+  }
+  function onUp(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag = null;
+    resumeAt = performance.now() + RESUME_MS;
+    host.classList.remove('dragging');
+  }
+  // 키보드: 미리보기에 초점이 있으면 ← → 로 돌리고 ↑ ↓ 로 기울인다
+  function onKey(e) {
+    const step = { ArrowLeft: [-0.3, 0], ArrowRight: [0.3, 0], ArrowUp: [0, -0.12], ArrowDown: [0, 0.12] }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    turn.rotation.y += step[0];
+    turn.rotation.x = clampTilt(turn.rotation.x + step[1]);
+    resumeAt = performance.now() + RESUME_MS;
+    if (still) draw();
+  }
+  canvas.addEventListener('pointerdown', onDown);
+  canvas.addEventListener('pointermove', onMove);
+  canvas.addEventListener('pointerup', onUp);
+  canvas.addEventListener('pointercancel', onUp);
+  canvas.addEventListener('lostpointercapture', onUp);
+  host.addEventListener('keydown', onKey);
+
   function dispose() {
     if (gone) return;
     gone = true;
+    host.removeEventListener('keydown', onKey);
+    host.classList.remove('dragging');
     cancelAnimationFrame(raf);
     if (group) group.userData.dispose();
     renderer.dispose();
