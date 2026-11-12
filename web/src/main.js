@@ -6,6 +6,7 @@ import '@fontsource/ibm-plex-mono/400.css';
 import './styles/tokens.css';
 import './styles/app.css';
 import './styles/planet.css';
+import './styles/detail.css';
 
 import { api } from './api.js';
 import { store } from './store.js';

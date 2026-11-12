@@ -1,0 +1,28 @@
+/* W-03 별 상세 보정. 기본 모양(.pv · .meta · .acts · #memo · .mv · .linkdel)은 app.css에 있다. 값은 tokens.css의 토큰만 쓴다. */
+
+/* 조각 묶음은 배치에 끼어들지 않는다(.body의 세로 간격을 그대로 쓴다) */
+#panel .dsec{display:contents}
+
+/* 이미지: 4:3 상자에 잘리지 않게, 파일 이름 꼬리표는 왼쪽 아래 */
+#panel .pv.img{position:relative;background:var(--white)}
+#panel .pv.img img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
+#panel .pv.img span{position:relative;box-sizing:border-box;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--white)}
+
+#panel .pv.file>div{min-width:0}
+#panel .pv.file .fi{color:var(--ink)}
+
+/* 글: 길면 상자 안에서 스크롤해 아래 메모 · 옮기기에 바로 닿게 한다 */
+#panel .detail{max-height:42vh;overflow:auto;flex:none}
+
+#panel .meta dd{overflow-wrap:anywhere}
+#panel .acts .btn:disabled{cursor:progress}
+
+#panel #memo{flex:none;min-height:44px;max-height:40vh}
+#panel .st.bad{color:var(--danger-text);font-weight:700}
+
+#panel .mv{flex:none}
+#panel .mv label{flex:none}
+#panel .mv select{min-height:44px}
+#panel .mv select:disabled{background:var(--panel-2);color:var(--mute);cursor:progress}
+
+#panel .linkdel{flex:none;min-height:44px;color:var(--danger-text)}
