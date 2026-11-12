@@ -6,5 +6,10 @@ dist
 .env
 .env.*
 
+# 챗봇 파이썬 환경
+rag/.venv/
+__pycache__/
+.pytest_cache/
+
 # 수업 자료(직접 만든 것이 아님)
 D22_*.html

@@ -7,6 +7,7 @@ import { registerGuard } from './guard.js';
 import { fetchLinkTitle } from './linkTitle.js';
 import { defaultOpener } from './opener.js';
 import { registerPlanets } from './planets.js';
+import { registerChat } from './rag/chat.js';
 import { registerStars } from './stars.js';
 import { sweepVault } from './vault.js';
 
@@ -23,6 +24,8 @@ export function buildApp({
   maxFileBytes = DEFAULT_MAX_FILE_BYTES,
   maxFiles = DEFAULT_MAX_FILES,
   port = DEFAULT_PORT,
+  // 파이썬 RAG 서버({ status(), client }). index.js 가 createRag 로 만든 것을, 테스트는 가짜를 넣는다.
+  rag = null,
 } = {}) {
   if (!dataDir) throw new Error('buildApp: dataDir is required');
 
@@ -49,6 +52,7 @@ export function buildApp({
     }
   });
   app.decorate('config', { fetchTitle, opener, maxFileBytes, maxFiles, port });
+  app.decorate('rag', rag);
   app.addHook('onClose', async () => {
     db.close();
   });
@@ -92,6 +96,7 @@ export function buildApp({
   registerFiles(app);
   registerAttachments(app);
   registerCharacter(app);
+  registerChat(app);
 
   return app;
 }

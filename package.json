@@ -10,7 +10,9 @@
     "dev": "concurrently \"node --watch server/index.js --dev\" \"vite\"",
     "build": "vite build",
     "start": "node server/index.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "rag:setup": "node scripts/rag-setup.mjs",
+    "rag:test": "node scripts/rag-test.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.8",
