@@ -36,6 +36,21 @@ export function buildApp({
 
   registerGuard(app, { port, allowedOrigins });
 
+  // 라우트 밖에서 난 오류(너무 큰 본문, 깨진 JSON 등)도 { error: code } 모양으로 맞춘다.
+  app.setErrorHandler((err, req, reply) => {
+    // 라우트가 던진 ApiError(status, code)
+    if (Number.isInteger(err.status) && typeof err.code === 'string' && err.statusCode === undefined) {
+      return reply.code(err.status).send({ error: err.code });
+    }
+    const status = err.statusCode >= 400 && err.statusCode < 600 ? err.statusCode : 500;
+    if (status >= 500) {
+      console.error(err);
+      return reply.code(status).send({ error: 'server_error' });
+    }
+    const code = status === 413 ? 'too_large' : /JSON|EMPTY_JSON/i.test(err.code ?? '') ? 'invalid_json' : 'bad_request';
+    return reply.code(status).send({ error: code });
+  });
+
   // 시각 쿼리(from · to · before)는 여기서 한 번만 검사해 UTC ISO 로 맞춘다.
   // DB 의 created_at 과 글자 비교를 하므로 형식이 다르면 조용히 틀린 결과가 나온다.
   app.addHook('preHandler', async (req, reply) => {

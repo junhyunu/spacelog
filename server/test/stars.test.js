@@ -447,3 +447,17 @@ test('a star literally named "rediscovery" or "summary" does not shadow those ro
   expect((await call('GET', '/api/stars/summary')).statusCode).toBe(404);
   expect((await call('GET', '/api/summary')).json()).toEqual({ in_period: 0, total: 0, planets: 1 });
 });
+
+// --- 검토에서 나온 경우들 ---
+test('oversized, malformed and repeated inputs get { error: code }', async () => {
+  const headers = { host: '127.0.0.1:4747', 'content-type': 'application/json' };
+  const big = await app.inject({ method: 'POST', url: '/api/stars', headers, payload: JSON.stringify({ body: 'a'.repeat(1100000) }) });
+  expect(big.statusCode).toBe(413);
+  expect(big.json()).toEqual({ error: 'too_large' });
+  const bad = await app.inject({ method: 'POST', url: '/api/stars', headers, payload: '{not json' });
+  expect(bad.statusCode).toBe(400);
+  expect(bad.json()).toEqual({ error: 'invalid_json' });
+  const arr = await app.inject({ url: '/api/stars?planet_id=a&planet_id=b', headers: { host: '127.0.0.1:4747' } });
+  expect(arr.statusCode).toBe(400);
+  expect(arr.json()).toEqual({ error: 'invalid_query' });
+});

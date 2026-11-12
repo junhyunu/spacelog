@@ -172,6 +172,7 @@ export function registerStars(app) {
     const params = {};
     periodCond(req.query, cond, params);
     const { planet_id: planetId, limit } = req.query;
+    if (planetId !== undefined && typeof planetId !== 'string') throw new ApiError(400, 'invalid_query');
     if (typeof planetId === 'string' && planetId) {
       cond.push('planet_id = @planet_id');
       params.planet_id = planetId;
