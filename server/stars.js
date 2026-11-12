@@ -237,6 +237,7 @@ export function registerStars(app) {
         ).run({ id, title: next.title, memo: next.memo, planet_id: next.planet_id, search_text: next.search_text });
         return next;
       })();
+      app.ragSync?.markStars([id], 'patch');
       return toStarJson(updated, updated.attachments);
     } catch (err) {
       return fail(reply, err);
@@ -253,6 +254,7 @@ export function registerStars(app) {
       return found;
     })();
     if (!row) return reply.code(404).send({ error: 'not_found' });
+    app.ragSync?.markStars([row.id], 'delete');
     // DB 가 확정된 뒤에 파일을 지운다. 파일 정리가 실패해도 삭제는 이미 끝난 것이다.
     try {
       await app.removeStarFiles(row);

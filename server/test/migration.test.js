@@ -100,7 +100,7 @@ test('a fresh data folder gets the new schema at the current version and no back
   const dataDir = tempDir();
   const db = openDb(dataDir);
   expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
-  expect(SCHEMA_VERSION).toBe(1);
+  expect(SCHEMA_VERSION).toBe(2);
   const cols = db.prepare("SELECT name FROM pragma_table_info('attachments')").all().map((r) => r.name);
   expect(cols).toEqual([
     'id', 'star_id', 'kind', 'position', 'file_name', 'file_ext', 'file_size', 'file_hash',
@@ -123,7 +123,7 @@ test('old database: backup first, one attachment per file/image/link star, files
 
   const app = await start(dataDir);
   const db = app.db;
-  expect(db.pragma('user_version', { simple: true })).toBe(1);
+  expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
 
   // 백업은 옮기기 전의 모습(첨부 표 없음, 별이 파일 정보를 가짐)이다.
   const bakPath = path.join(dataDir, 'spacelog.db.bak-1');
@@ -233,7 +233,7 @@ test('a migration that fails part-way leaves the old database untouched (one tra
   check.close();
 
   const app = await start(dataDir);
-  expect(app.db.pragma('user_version', { simple: true })).toBe(1);
+  expect(app.db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
   expect(app.db.prepare('SELECT COUNT(*) AS c FROM attachments').get().c).toBe(3);
 });
 
@@ -271,4 +271,74 @@ test('an existing bak-1 is never overwritten', async () => {
   expect(fs.readFileSync(bak, 'utf8')).toBe('older real backup');
   const extra = fs.readdirSync(dataDir).filter((n) => n.startsWith('spacelog.db.bak-1-'));
   expect(extra).toHaveLength(1);
+});
+
+// --- 판 1 → 2 (챗봇 표) ---
+const V2_TABLES = ['conversations', 'messages', 'rag_status'];
+
+// 판 1 DB 를 만든다: 지금 스키마로 만든 뒤 판 2 의 표를 지우고 user_version 을 1 로 되돌린다.
+function makeV1(dataDir) {
+  const db = openDb(dataDir);
+  db.prepare("INSERT INTO planets VALUES (?, '행성', '', 1, 'town', 0, 0, '2026-11-01T00:00:00.000Z')").run(IDS.planet);
+  db.prepare(`INSERT INTO stars (id, type, title, body, memo, planet_id, created_at, search_text)
+    VALUES (?, 'text', '글', '본문', '', ?, '2026-11-02T00:00:00.000Z', '글\n본문')`).run(IDS.text, IDS.planet);
+  db.exec('DROP INDEX messages_conversation_created; DROP TABLE messages; DROP TABLE conversations; DROP TABLE rag_status;');
+  db.pragma('user_version = 1');
+  db.close();
+}
+
+const tablesOf = (db) => db
+  .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${V2_TABLES.map(() => '?').join(', ')}) ORDER BY name`)
+  .all(...V2_TABLES)
+  .map((r) => r.name);
+
+test('v1 → v2: creates rag_status, conversations and messages in one go, backs up to bak-2 first', () => {
+  const dataDir = tempDir();
+  makeV1(dataDir);
+  const db = openDb(dataDir);
+  expect(db.pragma('user_version', { simple: true })).toBe(2);
+  expect(tablesOf(db)).toEqual(V2_TABLES);
+  expect(db.prepare("SELECT name FROM pragma_table_info('rag_status')").all().map((r) => r.name)).toEqual([
+    'star_id', 'content_hash', 'status', 'error', 'notes', 'attempts', 'next_try_at', 'indexed_at',
+  ]);
+  expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'messages_conversation_created'").get()).toBeDefined();
+  // 별은 그대로, rag_status 는 별을 따라 지워진다.
+  db.prepare("INSERT INTO rag_status (star_id, status) VALUES (?, 'done')").run(IDS.text);
+  db.prepare('DELETE FROM stars WHERE id = ?').run(IDS.text);
+  expect(db.prepare('SELECT COUNT(*) AS c FROM rag_status').get().c).toBe(0);
+  db.close();
+
+  expect(fs.readdirSync(dataDir).filter((n) => n.includes('bak'))).toEqual(['spacelog.db.bak-2']);
+  const bak = new Database(path.join(dataDir, 'spacelog.db.bak-2'), { readonly: true });
+  expect(bak.pragma('user_version', { simple: true })).toBe(1);
+  expect(tablesOf(bak)).toEqual([]);
+  expect(bak.prepare('SELECT COUNT(*) AS c FROM stars').get().c).toBe(1);
+  bak.close();
+});
+
+test('v1 → v2: re-opening is a no-op and an existing bak-2 is never overwritten', () => {
+  const dataDir = tempDir();
+  makeV1(dataDir);
+  const bakPath = path.join(dataDir, 'spacelog.db.bak-2');
+  fs.writeFileSync(bakPath, 'older real backup');
+  openDb(dataDir).close();
+  expect(fs.readFileSync(bakPath, 'utf8')).toBe('older real backup');
+  const after = fs.readdirSync(dataDir).filter((n) => n.includes('bak')).sort();
+  expect(after).toHaveLength(2);
+  expect(after[1]).toMatch(/^spacelog\.db\.bak-2-/);
+
+  const db = openDb(dataDir);
+  expect(db.pragma('user_version', { simple: true })).toBe(2);
+  expect(tablesOf(db)).toEqual(V2_TABLES);
+  db.close();
+  expect(fs.readdirSync(dataDir).filter((n) => n.includes('bak')).sort()).toEqual(after);
+});
+
+test('v0 straight to v2 makes one backup (bak-1) and has the chatbot tables', async () => {
+  const dataDir = tempDir();
+  (await makeOldData(dataDir)).close();
+  const db = openDb(dataDir);
+  expect(tablesOf(db)).toEqual(V2_TABLES);
+  db.close();
+  expect(fs.readdirSync(dataDir).filter((n) => n.includes('bak'))).toEqual(['spacelog.db.bak-1']);
 });

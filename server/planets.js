@@ -156,12 +156,13 @@ export function createPlanet(db, { name, description = '', color_index, deco, ri
   return getPlanet(db, run.immediate());
 }
 
-// 별을 into 로 옮기고 원본 행성을 지운다. 옮긴 별 수를 돌려준다.
+// 별을 into 로 옮기고 원본 행성을 지운다. 옮긴 별 id 들을 돌려준다.
 function moveStarsAndDelete(db, id, into) {
   return db.transaction(() => {
-    const moved = db.prepare('UPDATE stars SET planet_id = ? WHERE planet_id = ?').run(into, id).changes;
+    const ids = db.prepare('SELECT id FROM stars WHERE planet_id = ?').all(id).map((r) => r.id);
+    db.prepare('UPDATE stars SET planet_id = ? WHERE planet_id = ?').run(into, id);
     db.prepare('DELETE FROM planets WHERE id = ?').run(id);
-    return moved;
+    return ids;
   })();
 }
 
@@ -207,6 +208,7 @@ export function registerPlanets(app) {
         const sets = keys.map((k) => `${k} = @${k}`).join(', ');
         db.prepare(`UPDATE planets SET ${sets} WHERE id = @id`).run({ ...fields, id });
       }
+      if ('name' in fields) app.ragSync?.markPlanet(id);
       return getPlanet(db, id);
     } catch (err) {
       return fail(reply, err);
@@ -220,7 +222,9 @@ export function registerPlanets(app) {
       if (!exists(db, id)) throw new ApiError(404, 'not_found');
       if (typeof into !== 'string' || !into || into === id) throw new ApiError(400, 'invalid_target');
       if (!exists(db, into)) throw new ApiError(404, 'not_found');
-      return { moved: moveStarsAndDelete(db, id, into) };
+      const moved = moveStarsAndDelete(db, id, into);
+      app.ragSync?.markStars(moved, 'planet_merge');
+      return { moved: moved.length };
     } catch (err) {
       return fail(reply, err);
     }
@@ -236,7 +240,9 @@ export function registerPlanets(app) {
         if (typeof into !== 'string' || !into || into === id || !exists(db, into)) {
           throw new ApiError(400, 'invalid_target');
         }
-        moveStarsAndDelete(db, id, into);
+        // ?. 는 인자 계산까지 건너뛰므로 옮기기는 따로 부른다.
+        const moved = moveStarsAndDelete(db, id, into);
+        app.ragSync?.markStars(moved, 'planet_move');
         return reply.code(204).send();
       }
 
@@ -250,6 +256,7 @@ export function registerPlanets(app) {
           db.prepare('DELETE FROM planets WHERE id = ?').run(id);
           return rows;
         })();
+        app.ragSync?.markStars(removed.map((s) => s.id), 'planet_delete');
         // DB 가 확정된 뒤에 파일을 지운다. 파일 정리가 실패해도 삭제는 이미 끝난 것이다.
         for (const star of removed) {
           try {

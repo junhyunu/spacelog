@@ -312,6 +312,7 @@ export function registerFiles(app) {
       }
       const result = await commit(fields, files, links, skipped);
       if (result.nothing) return reply.code(409).send({ error: 'nothing_to_save', skipped });
+      app.ragSync?.markStars([result.star.id], 'create');
       return reply.code(201).send({ star: result.star, skipped });
     } catch (err) {
       await Promise.all(files.map(removeQuiet));

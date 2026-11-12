@@ -8,6 +8,7 @@ import { fetchLinkTitle } from './linkTitle.js';
 import { defaultOpener } from './opener.js';
 import { registerPlanets } from './planets.js';
 import { registerChat } from './rag/chat.js';
+import { createSync } from './rag/sync.js';
 import { registerStars } from './stars.js';
 import { sweepVault } from './vault.js';
 
@@ -26,6 +27,8 @@ export function buildApp({
   port = DEFAULT_PORT,
   // 파이썬 RAG 서버({ status(), client }). index.js 가 createRag 로 만든 것을, 테스트는 가짜를 넣는다.
   rag = null,
+  // 색인 맞추기 옵션(테스트가 가짜 시계 · 타이머를 넣는다). server/rag/sync.js 의 createSync 참고.
+  ragSync: ragSyncOptions = {},
 } = {}) {
   if (!dataDir) throw new Error('buildApp: dataDir is required');
 
@@ -53,9 +56,20 @@ export function buildApp({
   });
   app.decorate('config', { fetchTitle, opener, maxFileBytes, maxFiles, port });
   app.decorate('rag', rag);
+  // 파이썬이 있을 때만 색인 맞추기를 돌린다. 없으면 app.ragSync 가 없고 변경 알림은 아무 일도 하지 않는다.
+  const ragSync = rag ? createSync({ db, dataDir, rag, ...ragSyncOptions }) : null;
+  if (ragSync) app.decorate('ragSync', ragSync);
   app.addHook('onClose', async () => {
+    if (ragSync) {
+      ragSync.stop();
+      // 하던 요청은 잠깐만 기다린다(색인 하나는 오래 걸릴 수 있다).
+      let t;
+      await Promise.race([ragSync.idle(), new Promise((r) => { t = setTimeout(r, 1_000); t.unref?.(); })]);
+      clearTimeout(t);
+    }
     db.close();
   });
+  ragSync?.start();
 
   registerGuard(app, { port, allowedOrigins });
 

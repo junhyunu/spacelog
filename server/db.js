@@ -5,7 +5,8 @@ import { buildSearchText } from './stars.js';
 
 // PRAGMA user_version 으로 스키마 판을 적는다. 0 = 15600bb 까지(별 하나가 파일 · 링크를 직접 가졌다).
 // 1 = 첨부 표(attachments). 별 하나에 첨부 여러 개(spec 6-9).
-export const SCHEMA_VERSION = 1;
+// 2 = 챗봇 표(rag_status · conversations · messages). 2차의 표를 한 번에 만든다.
+export const SCHEMA_VERSION = 2;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS planets (
@@ -34,6 +35,29 @@ CREATE TABLE IF NOT EXISTS attachments (
 CREATE INDEX IF NOT EXISTS attachments_star_position ON attachments(star_id, position);
 CREATE UNIQUE INDEX IF NOT EXISTS attachments_hash ON attachments(file_hash) WHERE file_hash IS NOT NULL;
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+-- 판 2: 별마다 챗봇 색인 상태(server/rag/sync.js).
+CREATE TABLE IF NOT EXISTS rag_status (
+  star_id TEXT PRIMARY KEY REFERENCES stars(id) ON DELETE CASCADE,
+  content_hash TEXT,
+  status TEXT NOT NULL CHECK(status IN ('pending','done','failed','skipped')),
+  error TEXT, notes TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_try_at TEXT, indexed_at TEXT);
+-- 판 2: 챗봇 대화와 메시지(server/rag/chat.js).
+CREATE TABLE IF NOT EXISTS conversations (
+  id TEXT PRIMARY KEY, title TEXT NOT NULL,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  unread INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS messages (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK(role IN ('user','assistant')),
+  content TEXT NOT NULL DEFAULT '',
+  sources TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL CHECK(status IN ('running','done','stopped','failed')),
+  error TEXT,
+  created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS messages_conversation_created ON messages(conversation_id, created_at);
 `;
 
 const LEGACY_COLUMNS = ['url', 'link_title', 'file_name', 'file_ext', 'file_size', 'file_hash', 'vault_path', 'thumb_path'];
@@ -94,7 +118,7 @@ function migrateTo1(db) {
   rebuildSearchText(db, db.prepare('SELECT id FROM stars').all().map((r) => r.id));
 }
 
-// 옮기기 전의 DB 를 spacelog.db.bak-1 로 남긴다. VACUUM INTO 는 WAL 에만 있는 쓰기까지 담은 한 파일을 만든다.
+// 옮기기 전의 DB 를 spacelog.db.bak-<판> 으로 남긴다. VACUUM INTO 는 WAL 에만 있는 쓰기까지 담은 한 파일을 만든다.
 // 임시 이름으로 만든 뒤 바꿔 달아, 복사가 중간에 끊겨도 반쪽짜리 백업이 남지 않게 한다.
 // 옮기기는 한 트랜잭션이라 실패하면 DB 가 그대로 남으므로, 다시 켤 때 백업을 새로 만들어도 같은 내용이다.
 function backup(db, dbPath, version) {
@@ -122,10 +146,12 @@ export function openDb(dataDir) {
     if (version < SCHEMA_VERSION) {
       // 별 표가 없으면 방금 만든 빈 DB 다. 옮길 것도, 백업할 것도 없다.
       const fresh = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'stars'").get() === undefined;
-      if (!fresh) backup(db, dbPath, SCHEMA_VERSION);
+      // 백업 이름은 처음 밟는 판이다(0 → bak-1, 1 → bak-2). 0 에서 바로 2 로 가도 백업은 하나다.
+      if (!fresh) backup(db, dbPath, version + 1);
       db.transaction(() => {
         db.exec(SCHEMA);
-        if (!fresh) migrateTo1(db);
+        if (!fresh && version < 1) migrateTo1(db);
+        // 1 → 2 는 새 표만 더한다(위 SCHEMA 의 CREATE TABLE IF NOT EXISTS).
         db.pragma(`user_version = ${SCHEMA_VERSION}`);
       }).immediate();
     }
