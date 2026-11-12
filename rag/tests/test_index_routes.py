@@ -46,7 +46,7 @@ def test_routes_require_token(c):
 
 
 def test_index_remove_stats_flow(c, auth, tmp_path):
-    folder = tmp_path / "보관 함" / "vault"
+    folder = tmp_path / "data" / "vault"  # SPACELOG_DATA 의 보관함(밖은 읽지 않는다)
     folder.mkdir(parents=True)
     f = folder / "관측 기록.txt"
     f.write_text("목성 대적점 관측", encoding="utf-8")

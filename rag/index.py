@@ -1,11 +1,19 @@
 """별 하나하나를 조각으로 나눠 벡터 색인(InMemoryVectorStore)에 넣고 · 지우고 · 찾는다.
 
 - 조각 id 는 "<star_id>:<n>" (n 은 0부터). star_id → 조각 id 목록 지도를 따로 둬 지우기가 정확하다.
-- Flask 는 여러 스레드로 돌므로 바꾸기 · 찾기 · 저장은 RLock 하나 안에서 한다.
-  (파일에서 글 뽑기와 조각 임베딩은 잠금 밖에서 하고, 다 만든 조각만 잠금 안에서 바꿔 단다.)
+- Flask 는 여러 스레드로 돌므로 색인을 바꾸고 읽는 일은 RLock 하나 안에서 한다.
+  느린 일(파일에서 글 뽑기, 조각 · 질문 임베딩, 파일 쓰기)은 잠금 밖에서 한다.
+- 순서: upsert 는 시작할 때 번호표(ticket)를 받는다. 다 만든 조각을 달 때 그 번호표가 그 별의
+  마지막 번호표이고, 그 사이 reset 이 없었고, 그 사이 remove 되지 않았을 때만 단다.
+  아니면 결과를 버리고 {"chunks": 0, "notes": [...], "discarded": True} 를 돌려준다.
+  (지운 별이 되살아나거나, 늦게 끝난 옛 upsert 가 새 내용을 덮지 않게.)
 - 저장: 마지막 변경 5초 뒤(Timer 를 다시 건다), 변경이 save_every 개 쌓이면 바로, flush() · close() 에서.
-  지우기 · 처음부터 다시(reset)는 바로 저장한다(되살아난 조각을 Node 가 다시 지울 길이 없으므로).
+  지우기 · 처음부터 다시(reset)는 바뀐 게 있으면 바로 저장하고, 실패하면 OSError 를 올린다
+  (되살아난 조각을 Node 가 다시 지울 길이 없으므로 실패를 알려야 한다).
+  저장이 실패하면 dirty 로 두고 5초, 그다음부터 30초 뒤에 다시 한다.
+  잠금 안에서는 항목 사본과 판(version)만 뜨고, JSON 만들기 · 쓰기는 잠금 밖에서 한다.
   index.json.tmp 에 쓰고 fsync 한 뒤 os.replace 로 바꿔 단다.
+- 첨부 path 는 <data_dir>/vault/ 안이어야 읽는다. 밖이면 읽지 않고 note "error:outside_vault".
 """
 
 import os
@@ -16,6 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from langchain_core.documents import Document
+from langchain_core.load import dumps
 from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -24,9 +33,11 @@ from extract import extract_text, normalize_ext
 SEPARATORS = ["\n\n", "\n", ". ", "。", " ", ""]
 SAVE_DELAY = 5.0
 SAVE_EVERY = 50
+RETRY_DELAYS = (5.0, 30.0)
 REPLACE_RETRIES = 5
 REPLACE_RETRY_DELAY = 0.1
 INDEX_FILE = "index.json"
+VAULT_DIR = "vault"
 
 
 class BadStar(ValueError):
@@ -102,6 +113,18 @@ def _text(value):
     return value.strip() if isinstance(value, str) else ""
 
 
+def _check_star(star):
+    """별 모양을 확인하고 star_id 를 돌려준다(틀리면 BadStar)."""
+    if not isinstance(star, dict):
+        raise BadStar("star must be an object")
+    star_id = star.get("id")
+    if not isinstance(star_id, str) or not star_id or ":" in star_id:
+        raise BadStar("star.id must be a non-empty string without ':'")
+    if not isinstance(star.get("attachments") or [], list):
+        raise BadStar("star.attachments must be a list")
+    return star_id
+
+
 class StarIndex:
     def __init__(
         self,
@@ -112,22 +135,34 @@ class StarIndex:
         *,
         save_delay=SAVE_DELAY,
         save_every=SAVE_EVERY,
+        retry_delays=RETRY_DELAYS,
     ):
-        self.dir = Path(data_dir) / "rag"
+        self.data_dir = Path(data_dir)
+        self.dir = self.data_dir / "rag"
         self.dir.mkdir(parents=True, exist_ok=True)
         self.path = self.dir / INDEX_FILE
         self.tmp_path = self.dir / (INDEX_FILE + ".tmp")
         self.embeddings = embeddings
         self.save_delay = save_delay
         self.save_every = save_every
+        self.retry_delays = tuple(retry_delays)
         self._splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size, chunk_overlap=chunk_overlap, separators=SEPARATORS
         )
         self._lock = threading.RLock()
+        # 저장은 한 번에 하나만(같은 tmp 파일을 쓴다). 순서: _save_lock → _lock. 거꾸로 잡지 않는다.
+        self._save_lock = threading.Lock()
         self._timer = None
         self._dirty = False
         self._pending = 0
+        self._version = 0  # 바뀔 때마다 1 씩. 저장한 판과 같을 때만 깨끗하다고 본다.
+        self._failures = 0  # 연달아 실패한 저장 수(다시 하기 간격)
         self._closed = False
+        # upsert 순서 지키기
+        self._seq = 0  # 번호표 발급기
+        self._latest = {}  # star_id → 마지막 번호표(그 별의 upsert 가 진행 중일 때만 있다)
+        self._inflight = {}  # star_id → 진행 중인 upsert 수
+        self._epoch = 0  # reset 때마다 1 씩
         self._store = self._load()
         self._by_star = self._build_map()
 
@@ -182,16 +217,27 @@ class StarIndex:
     def _split(self, text):
         return [c for c in self._splitter.split_text(text) if c.strip()]
 
+    def _vault_file(self, raw):
+        """첨부 path → <data_dir>/vault 안의 실제 경로(Path). 밖이거나 이상하면 None.
+
+        상대 경로는 data_dir 기준. resolve() 로 '..' · 링크를 풀고 나서 확인한다.
+        """
+        try:
+            vault = (self.data_dir / VAULT_DIR).resolve()
+            p = Path(raw)
+            if not p.is_absolute():
+                p = self.data_dir / p
+            resolved = p.resolve()
+        except (OSError, RuntimeError, ValueError):
+            return None
+        if resolved == vault or not resolved.is_relative_to(vault):
+            return None
+        return resolved
+
     def build_documents(self, star):
         """star dict → (Document 목록, notes). 파일을 읽지만 색인은 건드리지 않는다."""
-        if not isinstance(star, dict):
-            raise BadStar("star must be an object")
-        star_id = star.get("id")
-        if not isinstance(star_id, str) or not star_id or ":" in star_id:
-            raise BadStar("star.id must be a non-empty string without ':'")
+        star_id = _check_star(star)
         attachments = star.get("attachments") or []
-        if not isinstance(attachments, list):
-            raise BadStar("star.attachments must be a list")
 
         base = {
             "star_id": star_id,
@@ -241,8 +287,12 @@ class StarIndex:
             elif not _text(att.get("path")):
                 note = "error:missing"
             else:
-                ext = normalize_ext(att.get("file_ext"), name or att.get("path"))
-                extracted, note = extract_text(att["path"], ext)
+                path = self._vault_file(att["path"])
+                if path is None:
+                    note = "error:outside_vault"
+                else:
+                    ext = normalize_ext(att.get("file_ext"), name or att.get("path"))
+                    extracted, note = extract_text(path, ext)
             if note:
                 notes.append({"attachment_id": att.get("id"), "note": note})
             chunks = self._split(extracted) if extracted else []
@@ -262,40 +312,72 @@ class StarIndex:
     # ---------- 바꾸기 ----------
 
     def upsert(self, star):
-        docs, notes = self.build_documents(star)
-        star_id = star["id"]
-        ids = [d.id for d in docs]
-        # 임베딩은 잠금 밖에서(따로 만든 저장소에 add_documents) — 검색이 기다리지 않게.
-        staged = InMemoryVectorStore(self.embeddings)
-        if docs:
-            staged.add_documents(docs, ids=ids)
+        star_id = _check_star(star)
         with self._lock:
-            old = self._by_star.pop(star_id, [])
-            self._store.delete(old)
-            self._store.store.update(staged.store)
-            if ids:
-                self._by_star[star_id] = ids
-            self._changed(1)
+            self._seq += 1
+            ticket = self._seq
+            epoch = self._epoch
+            self._latest[star_id] = ticket
+            self._inflight[star_id] = self._inflight.get(star_id, 0) + 1
+        save_now = False
+        try:
+            docs, notes = self.build_documents(star)
+            ids = [d.id for d in docs]
+            # 임베딩은 잠금 밖에서(따로 만든 저장소에 add_documents) — 검색이 기다리지 않게.
+            staged = InMemoryVectorStore(self.embeddings)
+            if docs:
+                staged.add_documents(docs, ids=ids)
+            with self._lock:
+                if self._latest.get(star_id) != ticket or self._epoch != epoch:
+                    # 그 사이 더 새 upsert · remove · reset 이 있었다. 이 결과는 낡았다.
+                    return {"chunks": 0, "notes": notes, "discarded": True}
+                old = self._by_star.pop(star_id, [])
+                self._store.delete(old)
+                self._store.store.update(staged.store)
+                if ids:
+                    self._by_star[star_id] = ids
+                save_now = self._changed(1)
+        finally:
+            with self._lock:
+                left = self._inflight[star_id] - 1
+                if left:
+                    self._inflight[star_id] = left
+                else:
+                    del self._inflight[star_id]
+                    self._latest.pop(star_id, None)
+        if save_now:
+            try:
+                self.flush()
+            except OSError:
+                pass  # 로그는 _write 가 남겼고, flush 가 다시 하기를 걸어 두었다.
         return {"chunks": len(ids), "notes": notes}
 
     def remove(self, star_ids):
+        """별들을 지우고 지운 조각 수를 돌려준다. 바뀐 게 있으면 바로 저장하고, 실패하면 OSError."""
         removed = 0
         with self._lock:
             for star_id in dict.fromkeys(star_ids):
+                if star_id in self._latest:  # 진행 중인 upsert 를 낡게 만든다
+                    self._seq += 1
+                    self._latest[star_id] = self._seq
                 old = self._by_star.pop(star_id, [])
                 self._store.delete(old)
                 removed += len(old)
             if removed:
                 self._changed(0)
-                self.flush()
+            dirty = self._dirty
+        if dirty:
+            self.flush()
         return removed
 
     def reset(self):
+        """전부 지우고 바로 저장한다. 저장이 실패하면 OSError."""
         with self._lock:
+            self._epoch += 1
             self._store.store.clear()
             self._by_star.clear()
             self._changed(0)
-            self.flush()
+        self.flush()
 
     def stats(self):
         with self._lock:
@@ -308,8 +390,10 @@ class StarIndex:
         kwargs = {}
         if check is not None:
             kwargs["filter"] = lambda doc: check(doc.metadata)
+        # 질문 임베딩(네트워크)은 잠금 밖에서.
+        vector = self.embeddings.embed_query(query)
         with self._lock:
-            hits = self._store.similarity_search_with_score(query, k=k, **kwargs)
+            hits = self._store.similarity_search_with_score_by_vector(vector, k=k, **kwargs)
         return [(_copy(doc), score) for doc, score in hits]
 
     def chunks_for(self, star_ids):
@@ -336,50 +420,68 @@ class StarIndex:
     # ---------- 저장 ----------
 
     def _changed(self, count):
+        """잠금 안에서 부른다. 지금 바로 저장해야 하면 True(부른 쪽이 잠금 밖에서 flush)."""
         self._dirty = True
+        self._version += 1
         self._pending += count
         if self._pending >= self.save_every:
-            try:
-                self.flush()
-            except OSError:
-                pass  # 로그는 _save 가 남겼다. 다음 타이머 · flush 에서 다시 쓴다.
-            if not self._dirty:
-                return
-        self._schedule()
+            return True
+        self._schedule(self.save_delay)
+        return False
 
-    def _schedule(self):
+    def _schedule(self, delay):
         if self._closed:
             return
         if self._timer is not None:
             self._timer.cancel()
-        self._timer = threading.Timer(self.save_delay, self._on_timer)
+        self._timer = threading.Timer(delay, self._on_timer)
         self._timer.daemon = True
         self._timer.start()
 
     def _on_timer(self):
         try:
             self.flush()
-        except Exception:  # noqa: BLE001 — _save 가 로그를 남겼다
-            with self._lock:
-                self._schedule()
+        except Exception:  # noqa: BLE001 — _write 가 로그를 남겼고 flush 가 다시 하기를 걸었다
+            pass
 
     def flush(self):
-        """바뀐 게 있으면 지금 저장한다. 저장했으면 True. 실패하면 OSError 를 그대로 올린다."""
-        with self._lock:
-            if self._timer is not None:
-                self._timer.cancel()
-                self._timer = None
-            if not self._dirty:
-                return False
-            self._save()
-            self._dirty = False
-            self._pending = 0
+        """바뀐 게 있으면 지금 저장한다. 저장했으면 True.
+
+        실패하면 dirty 로 두고 다시 하기를 건 뒤 OSError 를 그대로 올린다.
+        """
+        with self._save_lock:
+            with self._lock:
+                if self._timer is not None:
+                    self._timer.cancel()
+                    self._timer = None
+                if not self._dirty:
+                    return False
+                # 항목 dict 는 바꿔 끼우기만 하고 안을 고치지 않으므로 얕은 사본이면 된다.
+                snapshot = dict(self._store.store)
+                version = self._version
+            try:
+                self._write(snapshot)
+            except OSError:
+                with self._lock:
+                    self._failures += 1
+                    step = min(self._failures, len(self.retry_delays)) - 1
+                    self._schedule(self.retry_delays[step])
+                raise
+            with self._lock:
+                self._failures = 0
+                if self._version == version:
+                    self._dirty = False
+                    self._pending = 0
+                # 쓰는 동안 바뀌었으면 dirty 로 둔다(그 변경이 타이머를 걸어 두었다).
             return True
 
-    def _save(self):
+    def _write(self, snapshot):
+        """잠금 없이 부른다. InMemoryVectorStore.dump 와 같은 구조를 들여쓰기 없이 쓴다."""
         try:
-            self._store.dump(str(self.tmp_path))
-            with open(self.tmp_path, "rb+") as f:
+            data = dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
+            with open(self.tmp_path, "w", encoding="utf-8") as f:
+                f.write(data)
+                f.flush()
                 os.fsync(f.fileno())
             for attempt in range(REPLACE_RETRIES):
                 try:
@@ -402,10 +504,13 @@ class StarIndex:
         """타이머를 멈추고 남은 변경을 저장한다(프로세스가 끝날 때)."""
         with self._lock:
             self._closed = True
-            try:
-                self.flush()
-            except OSError:
-                pass
+            if self._timer is not None:
+                self._timer.cancel()
+                self._timer = None
+        try:
+            self.flush()
+        except OSError:
+            pass
 
 
 def _chunk_no(chunk_id):

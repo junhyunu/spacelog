@@ -287,6 +287,95 @@ def test_zip_cap_default_is_50mb():
     assert MAX_ZIP_BYTES == 50 * 1024 * 1024
 
 
+def _xml_total(path, pattern):
+    import re
+
+    rx = re.compile(pattern)
+    with zipfile.ZipFile(path) as z:
+        return sum(i.file_size for i in z.infolist() if rx.match(i.filename))
+
+
+@pytest.mark.parametrize(
+    "ext, maker, pattern",
+    [
+        ("docx", make_docx, r"^word/[^/]+\.xml$"),
+        ("pptx", make_pptx, r"^ppt/slides/[^/]+\.xml$"),
+    ],
+)
+def test_zip_cap_ignores_media(d, monkeypatch, ext, maker, pattern):
+    import extract
+
+    p = maker(d / f"with media.{ext}")
+    cap = _xml_total(p, pattern) + 1000
+    monkeypatch.setattr(extract, "MAX_ZIP_BYTES", cap)
+    media = "word/media/big.bin" if ext == "docx" else "ppt/media/big.bin"
+    with zipfile.ZipFile(p, "a", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(media, b"\x00" * (cap * 2))
+    text, note = extract_text(str(p), ext)
+    assert text and note is None
+
+
+def test_nul_bytes_are_stripped(d):
+    p = d / "nul.txt"
+    p.write_bytes("토\x00성 고리\x00".encode("utf-8"))
+    text, note = extract_text(str(p), "txt")
+    assert text == "토성 고리"
+    assert note is None
+
+
+@pytest.mark.parametrize("bom, codec", [("﻿", "utf-16-le"), ("﻿", "utf-16-be")])
+def test_utf16_with_bom(d, bom, codec):
+    p = d / f"{codec}.txt"
+    p.write_bytes((bom + "유니코드 메모장 파일").encode(codec))
+    text, note = extract_text(str(p), "txt")
+    assert text == "유니코드 메모장 파일"
+    assert note is None
+
+
+def make_pdf_pages(path, pages):
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+
+    writer = PdfWriter()
+    font = writer._add_object(
+        DictionaryObject(
+            {
+                NameObject("/Type"): NameObject("/Font"),
+                NameObject("/Subtype"): NameObject("/Type1"),
+                NameObject("/BaseFont"): NameObject("/Helvetica"),
+            }
+        )
+    )
+    for line in pages:
+        page = writer.add_blank_page(width=612, height=792)
+        page[NameObject("/Resources")] = DictionaryObject(
+            {NameObject("/Font"): DictionaryObject({NameObject("/F1"): font})}
+        )
+        stream = DecodedStreamObject()
+        stream.set_data(f"BT /F1 12 Tf 72 720 Td ({line}) Tj ET".encode("latin-1"))
+        page[NameObject("/Contents")] = writer._add_object(stream)
+    with open(path, "wb") as f:
+        writer.write(f)
+    return path
+
+
+def test_pdf_stops_after_max_pages(d, monkeypatch):
+    import extract
+
+    monkeypatch.setattr(extract, "MAX_PDF_PAGES", 2)
+    p = make_pdf_pages(d / "pages.pdf", ["First page words", "Second page words", "Third page words"])
+    text, note = extract_text(str(p), "pdf")
+    assert "Second page words" in text
+    assert "Third page words" not in text
+    assert note == "partial"
+
+
+def test_pdf_max_pages_default():
+    import extract
+
+    assert extract.MAX_PDF_PAGES == 2000
+
+
 @pytest.mark.parametrize("ext", ["hwp", "png", "jpg", "zip", "mp4", "exe", ""])
 def test_unsupported(d, ext):
     p = d / f"file.{ext or 'noext'}"

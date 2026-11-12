@@ -15,12 +15,28 @@ import zipfile
 from xml.etree import ElementTree
 
 DEFAULT_LIMIT = 200_000
-# docx · pptx · xlsx · hwpx 는 zip 이다. 읽을 항목의 압축 푼 크기 합이 이것을 넘으면 읽지 않는다(zip 폭탄).
+# docx · pptx · xlsx · hwpx 는 zip 이다. 실제로 읽는 XML 항목의 압축 푼 크기 합이 이것을 넘으면 읽지 않는다(zip 폭탄).
+# 그림 · 동영상 같은 미디어 항목은 세지 않는다.
 MAX_ZIP_BYTES = 50 * 1024 * 1024
 # zip 이 아닌 형식(pdf)의 파일 크기 한도.
 MAX_FILE_BYTES = 200 * 1024 * 1024
 # PDF 에서 공백을 뺀 글자가 이보다 적으면 스캔(이미지) PDF 로 본다.
 MIN_PDF_CHARS = 20
+# PDF 는 이 쪽 수까지만 읽는다(넘으면 partial).
+MAX_PDF_PAGES = 2000
+
+# 형식마다 실제로 읽는 XML 항목(크기 한도에 세는 것).
+_ZIP_PARTS = {
+    "docx": re.compile(r"^word/[^/]+\.xml$", re.IGNORECASE),
+    "pptx": re.compile(r"^ppt/(slides|notesSlides)/[^/]+\.xml$", re.IGNORECASE),
+    "xlsx": re.compile(r"^xl/([^/]+|worksheets/[^/]+)\.xml$", re.IGNORECASE),
+}
+
+_BOMS = (
+    (codecs.BOM_UTF8, "utf-8"),
+    (codecs.BOM_UTF16_LE, "utf-16-le"),
+    (codecs.BOM_UTF16_BE, "utf-16-be"),
+)
 
 TEXT_EXTS = {"txt", "md", "csv", "json", "log"}
 ZIP_EXTS = {"docx", "xlsx", "pptx", "hwpx"}
@@ -48,6 +64,7 @@ class _Collector:
         self.limit = limit
         self.parts = []
         self.size = 0
+        self.partial = False  # 한도(쪽 수 등) 때문에 일부만 읽었다
 
     def add(self, text):
         if not text:
@@ -100,7 +117,7 @@ def extract_text(path, ext, limit=DEFAULT_LIMIT):
             special = None
         if special:
             return "", special
-        text = "".join(collector.parts).strip()
+        text = "".join(collector.parts).replace("\x00", "").strip()
     except _TooLarge:
         return "", "error:too_large"
     except _Encrypted:
@@ -118,7 +135,7 @@ def extract_text(path, ext, limit=DEFAULT_LIMIT):
 
     if len(text) > limit:
         return text[:limit], "partial"
-    return text, None
+    return text, "partial" if collector.partial else None
 
 
 def _looks_corrupt(err):
@@ -139,8 +156,15 @@ def _read_text(path, out):
     truncated = len(raw) > cap
     if truncated:
         raw = raw[:cap]
+    # BOM 이 있으면 그 인코딩을 믿는다(메모장의 "유니코드" 저장은 utf-16 LE + BOM).
+    encodings = ("utf-8", "cp949")
+    for bom, encoding in _BOMS:
+        if raw.startswith(bom):
+            raw = raw[len(bom):]
+            encodings = (encoding,)
+            break
     text = None
-    for encoding in ("utf-8-sig", "cp949"):
+    for encoding in encodings:
         try:
             # final=False 면 잘린 끝의 반쪽 글자는 버린다(오류로 보지 않는다).
             text = codecs.getincrementaldecoder(encoding)().decode(raw, final=not truncated)
@@ -148,7 +172,7 @@ def _read_text(path, out):
         except UnicodeDecodeError:
             continue
     if text is None:
-        text = raw.decode("utf-8", errors="replace")
+        text = raw.decode(encodings[0], errors="replace")
     out.add(text)
 
 
@@ -167,7 +191,10 @@ def _read_pdf(path, out):
         if not ok:
             raise _Encrypted
     seen = 0
-    for page in reader.pages:
+    for n, page in enumerate(reader.pages):
+        if n >= MAX_PDF_PAGES:
+            out.partial = True
+            break
         try:
             text = page.extract_text() or ""
         except Exception:  # noqa: BLE001 — 한 쪽이 깨져도 나머지는 읽는다
@@ -191,16 +218,18 @@ def _check_zip(zf, names):
             raise _TooLarge
 
 
-def _check_whole_zip(path):
+def _check_parts(path, kind):
+    """읽을 XML 항목만 세어 크기 한도를 본다(미디어는 세지 않는다)."""
+    pattern = _ZIP_PARTS[kind]
     with zipfile.ZipFile(path) as zf:
-        _check_zip(zf, zf.namelist())
+        _check_zip(zf, [name for name in zf.namelist() if pattern.match(name)])
 
 
 # ---------- docx ----------
 
 
 def _read_docx(path, out):
-    _check_whole_zip(path)
+    _check_parts(path, "docx")
     from docx import Document
     from docx.table import Table
 
@@ -231,7 +260,7 @@ def _docx_table(table, out):
 
 
 def _read_xlsx(path, out):
-    _check_whole_zip(path)
+    _check_parts(path, "xlsx")
     from openpyxl import load_workbook
 
     wb = load_workbook(path, read_only=True, data_only=True)
@@ -253,7 +282,7 @@ def _read_xlsx(path, out):
 
 
 def _read_pptx(path, out):
-    _check_whole_zip(path)
+    _check_parts(path, "pptx")
     from pptx import Presentation
 
     prs = Presentation(path)

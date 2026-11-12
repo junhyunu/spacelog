@@ -4,7 +4,7 @@ import json
 import threading
 
 import pytest
-from langchain_core.embeddings import DeterministicFakeEmbedding
+from langchain_core.embeddings import DeterministicFakeEmbedding, Embeddings
 
 from index import StarIndex
 
@@ -69,9 +69,11 @@ def test_long_body_is_split(idx):
         assert len(doc.page_content) <= 800 + 100  # 행성 줄 · 파일 이름 머리 여유
 
 
-def test_metadata_fields_and_ids(idx, tmp_path):
-    f = tmp_path / "첨부 폴더" / "관측 노트.txt"
-    f.parent.mkdir()
+def test_metadata_fields_and_ids(idx, data_dir):
+    vault = data_dir / "vault"
+    vault.mkdir()
+    tmp_path = vault
+    f = vault / "관측 노트.txt"
     f.write_text("토성 고리 관측 기록", encoding="utf-8")
     out = idx.upsert(
         star(
@@ -389,3 +391,293 @@ def test_concurrent_upserts_and_searches(idx):
         t.join()
     assert errors == []
     assert idx.stats() == {"chunks": 45, "stars": 15}
+
+
+# ---------- 경쟁(race): 느린 임베딩으로 순서를 강제한다 ----------
+
+
+class GatedEmbedding(Embeddings):
+    """글에 표지(marker)가 들어 있으면 entered 를 켜고 release 가 켜질 때까지 멈춘다."""
+
+    def __init__(self):
+        self.inner = DeterministicFakeEmbedding(size=64)
+        self.gates = {}
+
+    def gate(self, marker):
+        entered, release = threading.Event(), threading.Event()
+        self.gates[marker] = (entered, release)
+        return entered, release
+
+    def _wait(self, texts):
+        for marker, (entered, release) in list(self.gates.items()):
+            if any(marker in t for t in texts):
+                entered.set()
+                assert release.wait(10)
+
+    def embed_documents(self, texts):
+        self._wait(texts)
+        return self.inner.embed_documents(texts)
+
+    def embed_query(self, text):
+        self._wait([text])
+        return self.inner.embed_query(text)
+
+
+def _bg(fn, *args):
+    out = {}
+
+    def run():
+        try:
+            out["value"] = fn(*args)
+        except Exception as err:  # noqa: BLE001
+            out["error"] = err
+
+    t = threading.Thread(target=run)
+    t.start()
+    return t, out
+
+
+@pytest.fixture
+def gated():
+    return GatedEmbedding()
+
+
+@pytest.mark.parametrize("existed", [True, False])
+def test_upsert_racing_remove_does_not_resurrect(data_dir, gated, existed):
+    a = StarIndex(data_dir, gated, save_delay=60)
+    if existed:
+        a.upsert(star("s1"))
+    entered, release = gated.gate("SLOW")
+    t, out = _bg(a.upsert, star("s1", body="SLOW 새 본문"))
+    assert entered.wait(10)
+    a.remove(["s1"])
+    release.set()
+    t.join(10)
+    assert "error" not in out
+    assert out["value"]["discarded"] is True
+    assert out["value"]["chunks"] == 0
+    assert a.stats() == {"chunks": 0, "stars": 0}
+    a.close()
+    assert StarIndex(data_dir, gated).stats() == {"chunks": 0, "stars": 0}
+
+
+def test_upsert_racing_reset_is_discarded(data_dir, gated):
+    a = StarIndex(data_dir, gated, save_delay=60)
+    a.upsert(star("s1"))
+    entered, release = gated.gate("SLOW")
+    t, out = _bg(a.upsert, star("s2", body="SLOW 본문"))
+    assert entered.wait(10)
+    a.reset()
+    release.set()
+    t.join(10)
+    assert out["value"]["discarded"] is True
+    assert a.stats() == {"chunks": 0, "stars": 0}
+    a.close()
+    assert StarIndex(data_dir, gated).stats() == {"chunks": 0, "stars": 0}
+
+
+def test_out_of_order_upserts_later_started_wins(data_dir, gated):
+    a = StarIndex(data_dir, gated, save_delay=60)
+    entered, release = gated.gate("OLD")
+    t, out = _bg(a.upsert, star("s1", body="OLD 옛 본문"))
+    assert entered.wait(10)
+    newer = a.upsert(star("s1", body="NEW 새 본문"))
+    assert "discarded" not in newer
+    release.set()
+    t.join(10)
+    assert out["value"]["discarded"] is True
+    bodies = [d.page_content for d in a.chunks_for(["s1"]) if d.metadata["source"] == "body"]
+    assert bodies == ["NEW 새 본문"]
+    a.close()
+
+
+def test_upsert_after_remove_is_kept(idx):
+    idx.upsert(star("s1"))
+    idx.remove(["s1"])
+    out = idx.upsert(star("s1"))
+    assert out == {"chunks": 3, "notes": []}
+    assert idx.stats() == {"chunks": 3, "stars": 1}
+
+
+def test_search_embeds_outside_the_lock(data_dir, gated):
+    a = StarIndex(data_dir, gated, save_delay=60)
+    a.upsert(star("s1"))
+    entered, release = gated.gate("QUERY")
+    t, out = _bg(a.search, "QUERY 본문", 5)
+    assert entered.wait(10)
+    # 검색이 임베딩에서 멈춰 있어도 바꾸기 · 통계는 기다리지 않는다
+    done = threading.Event()
+    t2, _ = _bg(lambda: (a.upsert(star("s2")), done.set()))
+    assert done.wait(5)
+    assert a.stats() == {"chunks": 6, "stars": 2}
+    release.set()
+    t.join(10)
+    t2.join(10)
+    assert "error" not in out and out["value"]
+    a.close()
+
+
+def test_search_by_vector_still_filters(idx):
+    idx.upsert(star("s1", planet="p1"))
+    idx.upsert(star("s2", planet="p2"))
+    hits = idx.search("s1 메모", k=10, star_filter={"planet_id": "p2"})
+    assert hits and {d.metadata["star_id"] for d, _ in hits} == {"s2"}
+
+
+# ---------- 실패한 저장 다시 하기 ----------
+
+
+def _fail_replace_once(monkeypatch):
+    import index as index_mod
+
+    real = index_mod.os.replace
+    calls = {"n": 0}
+
+    def flaky(src, dst):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OSError("disk full")
+        return real(src, dst)
+
+    monkeypatch.setattr(index_mod.os, "replace", flaky)
+    return calls
+
+
+def test_failed_debounced_save_is_retried(data_dir, emb, monkeypatch):
+    calls = _fail_replace_once(monkeypatch)
+    a = StarIndex(data_dir, emb, save_delay=0.05, retry_delays=(0.05, 0.1))
+    a.upsert(star())
+    path = data_dir / "rag" / "index.json"
+    done = threading.Event()
+    for _ in range(100):
+        if path.exists():
+            done.set()
+            break
+        done.wait(0.05)
+    assert done.is_set()
+    assert calls["n"] == 2
+    assert a.flush() is False  # 깨끗해졌다
+    a.close()
+
+
+def test_retry_delays_back_off(data_dir, emb):
+    a = StarIndex(data_dir, emb)
+    assert a.retry_delays == (5.0, 30.0)
+    a.close()
+
+
+def test_remove_flushes_when_dirty_even_if_nothing_removed(data_dir, emb):
+    a = StarIndex(data_dir, emb, save_delay=60)
+    a.upsert(star("s1"))
+    assert a.remove(["nope"]) == 0
+    assert StarIndex(data_dir, emb).stats() == {"chunks": 3, "stars": 1}
+    a.close()
+
+
+def test_remove_raises_when_immediate_save_fails(data_dir, emb, monkeypatch):
+    a = StarIndex(data_dir, emb, save_delay=60, retry_delays=(60, 60))
+    a.upsert(star("s1"))
+    a.upsert(star("s2"))
+    _fail_replace_once(monkeypatch)
+    with pytest.raises(OSError):
+        a.remove(["s1"])
+    assert a.stats() == {"chunks": 3, "stars": 1}  # 메모리에서는 지워졌다
+    assert a.remove([]) == 0  # 아직 dirty 이므로 다시 저장한다
+    assert StarIndex(data_dir, emb).stats() == {"chunks": 3, "stars": 1}
+    a.close()
+
+
+def test_reset_raises_when_immediate_save_fails(data_dir, emb, monkeypatch):
+    a = StarIndex(data_dir, emb, save_delay=60, retry_delays=(60, 60))
+    a.upsert(star("s1"))
+    _fail_replace_once(monkeypatch)
+    with pytest.raises(OSError):
+        a.reset()
+    assert a.flush() is True
+    assert StarIndex(data_dir, emb).stats() == {"chunks": 0, "stars": 0}
+    a.close()
+
+
+# ---------- 잠금 밖에서 저장 ----------
+
+
+def test_saved_file_is_compact_and_round_trips(data_dir, emb):
+    a = StarIndex(data_dir, emb, save_delay=60)
+    a.upsert(star("s1"))
+    a.upsert(star("s2", body="줄바꿈\n\n있는 본문"))
+    a.flush()
+    raw = (data_dir / "rag" / "index.json").read_text(encoding="utf-8")
+    assert "\n" not in raw
+    assert '": ' not in raw  # indent · 공백 없음
+    b = StarIndex(data_dir, emb)
+    assert b.stats() == a.stats()
+    for sid in ("s1", "s2"):
+        assert [(d.id, d.page_content, d.metadata) for d in b.chunks_for([sid])] == [
+            (d.id, d.page_content, d.metadata) for d in a.chunks_for([sid])
+        ]
+    assert b.search("s2 메모", k=1)[0][0].page_content == "s2 메모"
+    a.close()
+    b.close()
+
+
+def test_save_writes_outside_the_lock_and_stays_dirty_if_changed(data_dir, emb, monkeypatch):
+    import index as index_mod
+
+    a = StarIndex(data_dir, emb, save_delay=60)
+    a.upsert(star("s1"))
+    writing, go = threading.Event(), threading.Event()
+    real = index_mod.os.replace
+
+    def slow_replace(src, dst):
+        writing.set()
+        assert go.wait(10)
+        return real(src, dst)
+
+    monkeypatch.setattr(index_mod.os, "replace", slow_replace)
+    t, out = _bg(a.flush)
+    assert writing.wait(10)
+    # 저장이 파일을 쓰는 중에도 바꾸기 · 찾기가 된다
+    done = threading.Event()
+    t2, _ = _bg(lambda: (a.upsert(star("s2")), a.search("본문", 3), done.set()))
+    assert done.wait(5)
+    go.set()
+    t.join(10)
+    t2.join(10)
+    assert out["value"] is True
+    monkeypatch.undo()
+    # s2 는 저장 뒤에 들어왔으므로 아직 dirty
+    assert StarIndex(data_dir, emb).stats() == {"chunks": 3, "stars": 1}
+    assert a.flush() is True
+    assert StarIndex(data_dir, emb).stats() == {"chunks": 6, "stars": 2}
+    a.close()
+
+
+# ---------- 첨부 경로는 <data_dir>/vault 안이어야 한다 ----------
+
+
+def test_attachment_outside_vault_is_not_read(idx, data_dir, tmp_path):
+    vault = data_dir / "vault"
+    vault.mkdir()
+    inside = vault / "안.txt"
+    inside.write_text("보관함 안 글", encoding="utf-8")
+    secret = data_dir / ".env"  # 가짜 .env (진짜 .env 는 건드리지 않는다)
+    secret.write_text("SECRET=sk-outside", encoding="utf-8")
+    outside = tmp_path / "밖.txt"
+    outside.write_text("보관함 밖 글", encoding="utf-8")
+    atts = [
+        {"id": "a1", "kind": "file", "file_name": "안.txt", "file_ext": "txt", "path": str(inside)},
+        {"id": "a2", "kind": "file", "file_name": ".env", "file_ext": "txt",
+         "path": str(vault) + "\\..\\.env"},
+        {"id": "a3", "kind": "file", "file_name": "env2.txt", "file_ext": "txt", "path": "vault\\..\\.env"},
+        {"id": "a4", "kind": "file", "file_name": "밖.txt", "file_ext": "txt", "path": str(outside)},
+        {"id": "a5", "kind": "file", "file_name": "상대.txt", "file_ext": "txt", "path": "vault/안.txt"},
+    ]
+    out = idx.upsert(star(attachments=atts))
+    assert out["notes"] == [
+        {"attachment_id": "a2", "note": "error:outside_vault"},
+        {"attachment_id": "a3", "note": "error:outside_vault"},
+        {"attachment_id": "a4", "note": "error:outside_vault"},
+    ]
+    files = [d.page_content for d in idx.chunks_for(["s1"]) if d.metadata["source"] == "file"]
+    assert files == ["안.txt\n보관함 안 글", ".env", "env2.txt", "밖.txt", "상대.txt\n보관함 안 글"]
+    assert not any("sk-outside" in c or "밖 글" in c for c in files)
