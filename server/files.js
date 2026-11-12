@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import multipart from '@fastify/multipart';
-import { ApiError, MEMO_MAX, checkMemo, firstLine, insertStar, isHttpUrl, planetExists } from './stars.js';
+import { ApiError, checkMemo, firstLine, insertStar, isHttpUrl, planetExists } from './stars.js';
 import { makeThumb, removeFiles, saveUpload } from './vault.js';
 
 export { parseRange } from './attachments.js';
@@ -56,22 +56,6 @@ export function parseFileName(raw) {
 // 앞뒤 공백을 떼고 200자로 자른다(자른 뒤 끝에 남은 공백도 뗀다).
 const cutTitle = (s) => [...s.trim()].slice(0, TITLE_MAX).join('').trim();
 
-// titles 필드(JSON 문자열 배열)를 읽어 파일 순서대로의 제목을 돌려준다.
-function parseTitles(raw, wasTruncated) {
-  if (wasTruncated) throw new ApiError(400, 'invalid_titles');
-  if (raw === undefined) return [];
-  let titles;
-  try {
-    titles = JSON.parse(raw);
-  } catch {
-    throw new ApiError(400, 'invalid_titles');
-  }
-  if (!Array.isArray(titles) || titles.some((t) => t !== null && typeof t !== 'string')) {
-    throw new ApiError(400, 'invalid_titles');
-  }
-  return titles.map((t) => (typeof t === 'string' ? cutTitle(t) : ''));
-}
-
 // 별 만들기의 글 필드를 검사해 정리한다(JSON · multipart 공통). 벗어나면 ApiError(400).
 // src = { planet_id, title?, body?, memo?, links?: string[] }
 function parseStarFields(db, src) {
@@ -96,20 +80,6 @@ function parseStarFields(db, src) {
   if (!planetExists(db, src.planet_id)) throw new ApiError(400, 'unknown_planet');
   out.planet_id = src.planet_id;
   return out;
-}
-
-// 호환: 화면을 새 첨부 구조로 바꾸면 지운다. 옛 JSON { type: 'text'|'link', body | url } 를 새 필드로 바꾼다.
-function legacyFields(src) {
-  if (src.type === 'text') {
-    if (typeof src.body !== 'string' || src.body.trim() === '') throw new ApiError(400, 'empty_body');
-    return { ...src, links: undefined };
-  }
-  if (src.type === 'link') {
-    const url = typeof src.url === 'string' ? src.url.trim() : '';
-    if (!isHttpUrl(url)) throw new ApiError(400, 'invalid_url');
-    return { ...src, body: undefined, links: [url] };
-  }
-  throw new ApiError(400, 'invalid_type');
 }
 
 // multipart 글 필드(문자열) → parseStarFields 가 받는 모양. 잘린 필드는 받지 않는다.
@@ -148,7 +118,6 @@ export function registerFiles(app) {
 
   // multipart 본문은 버퍼에 모으지 않고 흘려 읽으므로 Fastify 의 bodyLimit(1MB)에 걸리지 않는다.
   // 상한을 넘은 파일은 오류로 끊지 않고 file.truncated 로 알아내 그 파일만 건너뛴다.
-  // 개수 상한(files · parts)에 걸리면 그때까지 담은 것은 남기고 나머지를 too_many 로 알린다(호환 올리기).
   app.register(multipart, {
     throwFileSizeLimit: false,
     limits: { fileSize: maxBytes, files: app.config.maxFiles, parts: 1000, fields: 10, fieldSize: BODY_MAX_BYTES },
@@ -255,13 +224,10 @@ export function registerFiles(app) {
     let linkTitles = Promise.resolve([]);
     try {
       let fields;
-      let legacy = false;
       const skipped = [];
       if (!req.isMultipart()) {
         const src = req.body && typeof req.body === 'object' ? req.body : {};
-        // 호환: 화면을 새 첨부 구조로 바꾸면 지운다. type 이 있으면 옛 요청이고 별을 그대로 돌려준다.
-        legacy = src.type !== undefined;
-        fields = parseStarFields(db, legacy ? legacyFields(src) : src);
+        fields = parseStarFields(db, src);
         linkTitles = Promise.all(fields.links.map(linkTitleFor));
       } else {
         const raw = {};
@@ -330,132 +296,16 @@ export function registerFiles(app) {
       const titles = await linkTitles;
       const links = fields.links.map((url, i) => ({ kind: 'link', url, link_title: titles[i] }));
       if (!fields.body && files.length === 0 && links.length === 0 && skipped.length === 0) {
-        throw new ApiError(400, legacy ? 'empty_body' : 'empty_star');
+        throw new ApiError(400, 'empty_star');
       }
       const result = await commit(fields, files, links, skipped);
       if (result.nothing) return reply.code(409).send({ error: 'nothing_to_save', skipped });
-      return reply.code(201).send(legacy ? result.star : { star: result.star, skipped });
+      return reply.code(201).send({ star: result.star, skipped });
     } catch (err) {
       await Promise.all(files.map(removeQuiet));
       // 끝나지 않은 링크 제목 요청이 남아 있어도 기다리지 않는다(각각 3초 안에 스스로 끝난다).
       linkTitles.catch(() => {});
       return fail(reply, err);
     }
-  });
-
-  // 호환: 화면을 새 첨부 구조로 바꾸면 지운다. 파일마다 별 1개(첨부 1개, 첨부 id = 별 id).
-  app.post('/api/stars/upload', async (req, reply) => {
-    if (!req.isMultipart()) return reply.code(400).send({ error: 'not_multipart' });
-
-    const fields = {};
-    const truncated = new Set();
-    const created = [];
-    const skipped = [];
-    const seen = new Set();
-    let titles = [];
-    let checked = false;
-    let fileCount = 0;
-    // 한번 정해지면 남은 조각은 읽어서 버리기만 한다(연결이 깨끗이 끝나도록).
-    let error = null;
-    // 예상하지 못한 오류가 있었는가. 하나도 담지 못했을 때만 500 으로 알린다.
-    let failed = false;
-
-    // 파일 하나를 보관함에 쓰고 별로 남긴다. 건너뛴 이유가 있으면 skipped 에 적는다.
-    async function store(part, index) {
-      const id = crypto.randomUUID();
-      const res = await storePart(part, id, (hash) => seen.has(hash) || hashExists(hash));
-      if (!res.attachment) {
-        skipped.push({ file_name: res.name.fileName, reason: res.reason });
-        return;
-      }
-      const { stem, ...attachment } = res.attachment;
-      try {
-        // 파일을 받는 사이 행성이 지워졌을 수 있다.
-        if (!planetExists(db, fields.planet_id)) throw new ApiError(400, 'unknown_planet');
-        created.push(insertStar(db, {
-          id,
-          title: titles[index] || stem,
-          memo: fields.memo ?? '',
-          planet_id: fields.planet_id,
-          attachments: [attachment],
-        }));
-        // 빈 파일은 hash 가 null 이다(중복을 따지지 않는다).
-        if (attachment.file_hash) seen.add(attachment.file_hash);
-      } catch (err) {
-        // 기록을 남기지 못했으면 방금 쓴 사본 · 축소본도 치운다.
-        await removeQuiet(attachment);
-        if (err?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-          // 다른 요청이 같은 파일을 먼저 담았다.
-          skipped.push({ file_name: attachment.file_name, reason: 'duplicate' });
-          return;
-        }
-        throw err;
-      }
-    }
-
-    try {
-      for await (const part of req.parts()) {
-        if (part.type !== 'file') {
-          // 글 필드는 파일보다 먼저 온다. 파일이 시작된 뒤에 온 것은 쓰지 않는다.
-          if (!checked && typeof part.value === 'string') {
-            fields[part.fieldname] = part.value;
-            if (part.valueTruncated) truncated.add(part.fieldname);
-          }
-          continue;
-        }
-        if (error || part.fieldname !== 'files') {
-          part.file.resume();
-          continue;
-        }
-        if (!checked) {
-          // 첫 파일을 쓰기 전에 글 필드를 모두 검사한다.
-          checked = true;
-          try {
-            titles = parseTitles(fields.titles, truncated.has('titles'));
-            if (truncated.has('memo') || [...(fields.memo ?? '')].length > MEMO_MAX) throw new ApiError(400, 'invalid_memo');
-            if (!planetExists(db, fields.planet_id)) throw new ApiError(400, 'unknown_planet');
-          } catch (err) {
-            if (!(err instanceof ApiError)) throw err;
-            error = err;
-            part.file.resume();
-            continue;
-          }
-        }
-
-        const index = fileCount++;
-        try {
-          await store(part, index);
-        } catch (err) {
-          // 이미 담은 별이 있으면 오류 상태로 가리지 않는다. 이 파일만 실패로 적고 다음 파일로 간다.
-          const { fileName } = parseFileName(part.filename);
-          if (err instanceof ApiError && created.length === 0) {
-            error = err;
-          } else {
-            failed = true;
-            console.error(`upload: failed to store "${fileName}"`, err);
-            skipped.push({ file_name: fileName, reason: 'failed' });
-          }
-          part.file.resume();
-        }
-      }
-    } catch (err) {
-      // 조각을 읽다가 끊겼다(개수 상한 또는 깨진 본문). 남은 본문은 읽어서 버린다.
-      req.raw.resume();
-      const limitHit = err?.code === 'FST_FILES_LIMIT' || err?.code === 'FST_PARTS_LIMIT';
-      if (!error && limitHit && fileCount > 0) {
-        // 상한 뒤의 파일은 읽지 않으므로 이름을 알 수 없다.
-        skipped.push({ file_name: null, reason: 'too_many' });
-      } else if (!error && created.length > 0) {
-        console.error('upload: request ended early', err);
-        skipped.push({ file_name: null, reason: 'failed' });
-      } else if (!error) {
-        throw err;
-      }
-    }
-
-    if (error) return fail(reply, error);
-    if (fileCount === 0) return reply.code(400).send({ error: 'no_files' });
-    if (failed && created.length === 0) return reply.code(500).send({ error: 'server_error' });
-    return { created, skipped };
   });
 }

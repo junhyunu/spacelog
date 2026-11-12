@@ -178,8 +178,6 @@ test('old database: backup first, one attachment per file/image/link star, files
   const thumb = await app.inject({ url: `/api/attachments/${IDS.image}/thumb`, headers: HOST });
   expect(thumb.statusCode).toBe(200);
   expect(thumb.headers['content-type']).toBe('image/webp');
-  // 호환 경로도 같은 파일을 준다.
-  expect((await app.inject({ url: `/api/stars/${IDS.file}/file`, headers: HOST })).body).toBe('%PDF-1.4 old');
 
   // 옛 파일과 같은 내용은 이제 첨부 기준으로 중복이다.
   expect(db.prepare("SELECT 1 FROM attachments WHERE file_hash = 'hash-file'").get()).toBeDefined();

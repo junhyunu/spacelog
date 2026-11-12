@@ -44,7 +44,6 @@ export function starType(attachments) {
 // 별 행과 그 첨부 행들을 응답 모양으로 바꾼다. search_text 와 보관함 경로는 내보내지 않는다.
 export function toStarJson(row, attachments = []) {
   const atts = [...attachments].sort(byPosition);
-  const first = atts[0];
   const thumb = atts.find((a) => a.kind === 'image' && a.thumb_path);
   return {
     id: row.id,
@@ -58,12 +57,6 @@ export function toStarJson(row, attachments = []) {
     thumb_attachment_id: thumb ? thumb.id : null,
     attachment_count: atts.length,
     attachments: atts.map(toAttachmentJson),
-    // 호환: 화면을 새 첨부 구조로 바꾸면 지운다. 지금 화면은 별 하나에 파일 · 링크 하나로 읽는다(첫 첨부).
-    url: first?.url ?? null,
-    link_title: first?.link_title ?? null,
-    file_name: first?.file_name ?? null,
-    file_ext: first?.file_ext ?? null,
-    file_size: first?.file_size ?? null,
   };
 }
 

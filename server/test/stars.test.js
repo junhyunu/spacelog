@@ -5,11 +5,10 @@ import { MEMO_MAX, buildSearchText, insertStar, toStarJson } from '../stars.js';
 import { cleanup, makeApp } from './helpers.js';
 
 const HOST = { host: '127.0.0.1:4747' };
-// 별 응답의 칸. url · link_title · file_* 는 지금 화면을 위한 호환 칸(첫 첨부)이다.
+// 별 응답의 칸.
 const STAR_KEYS = [
   'id', 'type', 'title', 'body', 'memo', 'planet_id', 'created_at', 'has_thumb', 'thumb_attachment_id',
   'attachment_count', 'attachments',
-  'url', 'link_title', 'file_name', 'file_ext', 'file_size',
 ].sort();
 const ATTACHMENT_KEYS = ['id', 'kind', 'position', 'file_name', 'file_ext', 'file_size', 'url', 'link_title', 'has_thumb'].sort();
 
@@ -43,11 +42,19 @@ function call(method, url, payload, target = app) {
   return target.inject({ method, url, headers: HOST, ...(payload === undefined ? {} : { payload }) });
 }
 
-async function post(body, target = app) {
-  const res = await call('POST', '/api/stars', body, target);
-  expect(res.statusCode, res.body).toBe(201);
-  return res.json();
+// 시험을 짧게 쓰려고 { type: 'text' | 'link', url? } 모양으로 적고 새 요청 { body?, links? } 로 바꿔 보낸다.
+function toCreate({ type, url, ...rest }) {
+  return type === 'link' ? { ...rest, links: [url] } : rest;
 }
+
+// → 만든 별
+async function post(body, target = app) {
+  const res = await call('POST', '/api/stars', toCreate(body), target);
+  expect(res.statusCode, res.body).toBe(201);
+  return res.json().star;
+}
+
+const linkOf = (star) => star.attachments.find((a) => a.kind === 'link');
 
 function dbRow(id) {
   return app.db.prepare('SELECT * FROM stars WHERE id = ?').get(id);
@@ -74,11 +81,6 @@ test('text star: title defaults to first line, max 40 chars', async () => {
     thumb_attachment_id: null,
     attachment_count: 0,
     attachments: [],
-    url: null,
-    link_title: null,
-    file_name: null,
-    file_ext: null,
-    file_size: null,
   });
   expect(new Date(star.created_at).toISOString()).toBe(star.created_at);
 
@@ -95,11 +97,16 @@ test('text star: title defaults to first line, max 40 chars', async () => {
   expect(fetched).toEqual([]);
 });
 
-test('text star: blank body → 400 empty_body', async () => {
-  for (const body of ['', '   \n\t ', undefined, null, 5, ['a']]) {
-    const res = await call('POST', '/api/stars', { type: 'text', title: '제목', body, planet_id: planet.id });
+test('blank body and no attachment → 400 empty_star; a body that is not a string → 400 invalid_body', async () => {
+  for (const body of ['', '   \n\t ', undefined, null]) {
+    const res = await call('POST', '/api/stars', { title: '제목', body, planet_id: planet.id });
     expect(res.statusCode, JSON.stringify(body)).toBe(400);
-    expect(res.json()).toEqual({ error: 'empty_body' });
+    expect(res.json()).toEqual({ error: 'empty_star' });
+  }
+  for (const body of [5, ['a']]) {
+    const res = await call('POST', '/api/stars', { title: '제목', body, planet_id: planet.id });
+    expect(res.statusCode, JSON.stringify(body)).toBe(400);
+    expect(res.json()).toEqual({ error: 'invalid_body' });
   }
   expect(app.db.prepare('SELECT COUNT(*) AS c FROM stars').get().c).toBe(0);
 });
@@ -108,14 +115,14 @@ test('link star: uses fetched title', async () => {
   const star = await post({ type: 'link', url: 'https://example.com/a?b=1', planet_id: planet.id });
   expect(star.type).toBe('link');
   expect(star.title).toBe('가짜 제목');
-  expect(star.link_title).toBe('가짜 제목');
-  expect(star.url).toBe('https://example.com/a?b=1');
+  expect(linkOf(star).link_title).toBe('가짜 제목');
+  expect(linkOf(star).url).toBe('https://example.com/a?b=1');
   expect(star.body).toBeNull();
   expect(fetched).toEqual(['https://example.com/a?b=1']);
 
   const named = await post({ type: 'link', title: '내가 붙인 이름', url: 'http://example.com', planet_id: planet.id });
   expect(named.title).toBe('내가 붙인 이름');
-  expect(named.link_title).toBe('가짜 제목');
+  expect(linkOf(named).link_title).toBe('가짜 제목');
 });
 
 test('link star: falls back to url when fetch returns null', async () => {
@@ -124,7 +131,7 @@ test('link star: falls back to url when fetch returns null', async () => {
   const p = createPlanet(other.app.db, { name: 'p' });
   const star = await post({ type: 'link', url: 'https://example.com/x', planet_id: p.id }, other.app);
   expect(star.title).toBe('https://example.com/x');
-  expect(star.link_title).toBeNull();
+  expect(linkOf(star).link_title).toBeNull();
 });
 
 test('link star: falls back to url when fetchTitle throws or returns junk', async () => {
@@ -137,14 +144,14 @@ test('link star: falls back to url when fetchTitle throws or returns junk', asyn
   const p = createPlanet(throwing.app.db, { name: 'p' });
   const star = await post({ type: 'link', url: 'https://example.com/x', planet_id: p.id }, throwing.app);
   expect(star.title).toBe('https://example.com/x');
-  expect(star.link_title).toBeNull();
+  expect(linkOf(star).link_title).toBeNull();
 
   const junk = await makeApp({ fetchTitle: async () => '   ' });
   extra.push(junk);
   const q = createPlanet(junk.app.db, { name: 'q' });
   const blank = await post({ type: 'link', url: 'https://example.com/y', planet_id: q.id }, junk.app);
   expect(blank.title).toBe('https://example.com/y');
-  expect(blank.link_title).toBeNull();
+  expect(linkOf(blank).link_title).toBeNull();
 });
 
 test('fetchTitle defaults to fetchLinkTitle', async () => {
@@ -153,12 +160,17 @@ test('fetchTitle defaults to fetchLinkTitle', async () => {
   expect(other.app.config.fetchTitle).toBe(fetchLinkTitle);
 });
 
-test('link star: ftp:// and javascript: → 400 invalid_url', async () => {
-  const bad = ['ftp://example.com/a', 'javascript:alert(1)', 'example.com', '', '  ', 'http://', 'https:// bad host', undefined, 5, 'file:///c:/x'];
+test('link star: ftp:// and javascript: → 400 invalid_url; not a string → 400 invalid_links', async () => {
+  const bad = ['ftp://example.com/a', 'javascript:alert(1)', 'example.com', '', '  ', 'http://', 'https:// bad host', 'file:///c:/x'];
   for (const url of bad) {
-    const res = await call('POST', '/api/stars', { type: 'link', url, planet_id: planet.id });
+    const res = await call('POST', '/api/stars', { links: [url], planet_id: planet.id });
     expect(res.statusCode, String(url)).toBe(400);
     expect(res.json()).toEqual({ error: 'invalid_url' });
+  }
+  for (const links of [[undefined], [5], 'https://example.com']) {
+    const res = await call('POST', '/api/stars', { links, planet_id: planet.id });
+    expect(res.statusCode, JSON.stringify(links)).toBe(400);
+    expect(res.json()).toEqual({ error: 'invalid_links' });
   }
   expect(fetched).toEqual([]);
   expect(app.db.prepare('SELECT COUNT(*) AS c FROM stars').get().c).toBe(0);
@@ -166,10 +178,10 @@ test('link star: ftp:// and javascript: → 400 invalid_url', async () => {
 
 test('unknown planet → 400', async () => {
   for (const planet_id of ['nope', undefined, 5, '']) {
-    const text = await call('POST', '/api/stars', { type: 'text', body: '본문', planet_id });
+    const text = await call('POST', '/api/stars', { body: '본문', planet_id });
     expect(text.statusCode, String(planet_id)).toBe(400);
     expect(text.json()).toEqual({ error: 'unknown_planet' });
-    const link = await call('POST', '/api/stars', { type: 'link', url: 'https://example.com', planet_id });
+    const link = await call('POST', '/api/stars', { links: ['https://example.com'], planet_id });
     expect(link.statusCode, String(planet_id)).toBe(400);
     expect(link.json()).toEqual({ error: 'unknown_planet' });
   }
@@ -178,14 +190,11 @@ test('unknown planet → 400', async () => {
   expect(app.db.prepare('SELECT COUNT(*) AS c FROM stars').get().c).toBe(0);
 });
 
-test('invalid type, title, memo → 400', async () => {
+test('invalid title, memo → 400', async () => {
   const cases = [
-    [{ type: 'file', body: 'x' }, 'invalid_type'],
-    [{ type: 'image', body: 'x' }, 'invalid_type'],
-    [{ type: 5, body: 'x' }, 'invalid_type'],
-    [{ type: 'text', body: 'x', title: 5 }, 'invalid_title'],
-    [{ type: 'text', body: 'x', memo: { a: 1 } }, 'invalid_memo'],
-    [{ type: 'link', url: 'https://example.com', title: ['a'] }, 'invalid_title'],
+    [{ body: 'x', title: 5 }, 'invalid_title'],
+    [{ body: 'x', memo: { a: 1 } }, 'invalid_memo'],
+    [{ links: ['https://example.com'], title: ['a'] }, 'invalid_title'],
   ];
   for (const [body, code] of cases) {
     const res = await call('POST', '/api/stars', { planet_id: planet.id, ...body });
@@ -209,7 +218,7 @@ test('memo over 20000 characters → 400 invalid_memo on create and patch (code 
       { type: 'text', body: '본문', memo, planet_id: planet.id },
       { type: 'link', url: 'https://example.com', memo, planet_id: planet.id },
     ]) {
-      const res = await call('POST', '/api/stars', body);
+      const res = await call('POST', '/api/stars', toCreate(body));
       expect(res.statusCode, body.type).toBe(400);
       expect(res.json()).toEqual({ error: 'invalid_memo' });
     }
@@ -392,7 +401,7 @@ test('response never leaks vault_path, file_hash, search_text', async () => {
   expect(dbRow(fileStar.id).search_text).toBe('사진\n메모\n사진.png');
   expect(Object.keys(toStarJson(dbRow(fileStar.id), [att])).sort()).toEqual(STAR_KEYS);
 
-  const created = await call('POST', '/api/stars', { type: 'text', body: '본문', planet_id: planet.id });
+  const created = await call('POST', '/api/stars', { body: '본문', planet_id: planet.id });
   const responses = [
     created,
     await call('GET', '/api/stars'),
@@ -406,7 +415,7 @@ test('response never leaks vault_path, file_hash, search_text', async () => {
       expect(res.body, leaked).not.toContain(leaked);
     }
     const data = res.json();
-    for (const star of Array.isArray(data) ? data : [data]) {
+    for (const star of Array.isArray(data) ? data : data.star ? [data.star] : [data]) {
       expect(Object.keys(star).sort()).toEqual(STAR_KEYS);
       for (const a of star.attachments) expect(Object.keys(a).sort()).toEqual(ATTACHMENT_KEYS);
     }

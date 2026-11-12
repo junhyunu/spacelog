@@ -504,10 +504,10 @@ test('attachment routes serve, open and reveal each attachment by its own id', a
     expect(missing.json()).toEqual({ error: 'not_found' });
   }
 
-  // 호환 경로는 첫 첨부(pdf)를 다룬다.
-  expect((await call('GET', `/api/stars/${star.id}/file`)).body).toBe('%PDF-1.4 body');
-  expect((await call('POST', `/api/stars/${star.id}/open`)).json()).toEqual({ action: 'opened' });
-  expect(opened.at(-1)).toEqual(['open', path.join(dataDir, 'vault', `${pdf.id}.pdf`)]);
+  // 별 id 로 첨부를 다루던 옛 경로는 없다.
+  for (const [method, action] of [['GET', 'file'], ['GET', 'thumb'], ['POST', 'open'], ['POST', 'reveal']]) {
+    expect((await call(method, `/api/stars/${star.id}/${action}`)).statusCode, action).toBe(404);
+  }
 });
 
 // ---- 지우기 · 청소 ----

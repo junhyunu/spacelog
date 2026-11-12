@@ -65,13 +65,6 @@ export function registerAttachments(app) {
     return row;
   };
 
-  // 호환: 화면을 새 첨부 구조로 바꾸면 지운다. 별의 첫 첨부. 별이 없거나 첨부가 없으면 404 not_found.
-  const firstAttachmentOf = (starId) => {
-    const row = db.prepare('SELECT * FROM attachments WHERE star_id = ? ORDER BY position LIMIT 1').get(starId);
-    if (!row) throw new ApiError(404, 'not_found');
-    return row;
-  };
-
   // 첨부의 보관함 사본 절대 경로. 사본이 없는 종류(링크)면 400 no_file, 디스크에 없거나 보관함 밖이면 404 file_missing.
   async function vaultCopy(att) {
     if (!att.vault_path) throw new ApiError(400, 'no_file');
@@ -152,22 +145,16 @@ export function registerAttachments(app) {
     return { action: kind === 'open' ? 'opened' : 'revealed' };
   }
 
-  const route = (find, handler) => async (req, reply) => {
+  const route = (handler) => async (req, reply) => {
     try {
-      return await handler(req, reply, find(req.params.id));
+      return await handler(req, reply, getAttachment(req.params.id));
     } catch (err) {
       return fail(reply, err);
     }
   };
 
-  for (const [prefix, find] of [
-    ['/api/attachments', getAttachment],
-    // 호환: 화면을 새 첨부 구조로 바꾸면 지운다. 별 id 로 첫 첨부를 다룬다.
-    ['/api/stars', firstAttachmentOf],
-  ]) {
-    app.get(`${prefix}/:id/file`, route(find, sendFile));
-    app.get(`${prefix}/:id/thumb`, route(find, sendThumb));
-    app.post(`${prefix}/:id/open`, route(find, (req, reply, att) => launch(att, 'open')));
-    app.post(`${prefix}/:id/reveal`, route(find, (req, reply, att) => launch(att, 'reveal')));
-  }
+  app.get('/api/attachments/:id/file', route(sendFile));
+  app.get('/api/attachments/:id/thumb', route(sendThumb));
+  app.post('/api/attachments/:id/open', route((req, reply, att) => launch(att, 'open')));
+  app.post('/api/attachments/:id/reveal', route((req, reply, att) => launch(att, 'reveal')));
 }
