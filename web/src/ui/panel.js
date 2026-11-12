@@ -9,7 +9,8 @@
 //   'leftPanelPlanet'                        멀어졌다 → 닫는다(조망으로 돌아가지 않는다)
 //   'leavingWorld' · 'leaveWorld'            닫는다
 //   'planetDeleted'   planetId               그 행성 패널이면 닫고 조망으로
-//   'data'                                   다시 그린다. 행성이 사라졌으면 닫는다
+//   'data'                                   다시 그린다. 행성이 사라졌으면 닫고 조망으로,
+//                                            상세의 별이 지워졌으면 목록으로 돌아간다
 // store.state.panelPlanetId · detailStarId를 맞춘다(controls.js · hud.js가 읽는다).
 // 새 별 강조: 목록 항목은 <button class="rec" data-id="별 id">다. 저장 뒤(Task 11)에는
 // flashStars([id, …])를 부르면 그 항목이 1.2초 핑크가 된다('data'로 다시 그려진 뒤에도 남는다).
@@ -24,7 +25,7 @@ import { registerEscape } from './escape.js';
 import { clearGuestStar } from './hud.js';
 import { confirmDeletePlanet } from './planetDelete.js';
 import { openPlanetForm } from './planetForm.js';
-import { mergeDesc, panelStars, thumbKind } from './planetLogic.js';
+import { detailKey, mergeDesc, mergeErrorText, mergeFailure, panelStars, thumbKind } from './planetLogic.js';
 import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
@@ -36,7 +37,7 @@ let ready = false;
 let planetId = null; // 열려 있는 행성. 닫혀 있으면 null
 let view = 'list'; // 'list' | 'detail'
 let detailStar = null; // 상세에 그려진 별
-let detailKey = ''; // 상세를 마지막으로 그린 내용(같으면 다시 그리지 않는다: 쓰던 메모를 지키려고)
+let shownKey = ''; // 상세를 마지막으로 그린 내용(detailKey). 같으면 renderDetail을 부르지 않는다
 let menuOpen = false;
 let openSeq = 0;
 const flashing = new Map(); // 별 id → 강조가 끝나는 시각
@@ -106,17 +107,18 @@ function renderList(planet) {
 /* ---------- 상세 ---------- */
 
 function showDetail(planet) {
-  // 같은 내용이면 그대로 둔다(상세에서 쓰던 글 · 초점을 지킨다)
-  const next = JSON.stringify([detailStar, planet.id, planet.name, planet.color_index, store.state.planets.length]);
-  if (next === detailKey && panelEl().firstChild) return;
-  detailKey = next;
+  // 같은 내용이면 그대로 둔다. 열쇠에 메모는 없다: 메모만 바뀐 'data'(자동 저장 뒤)로는 상세를 건드리지 않는다.
+  // 행성은 모두(이름 · 색) 본다: 이 별의 행성 머리와 옮기기 목록에 보인다
+  const next = detailKey(detailStar, store.state.planets);
+  if (next === shownKey && panelEl().firstChild) return;
+  shownKey = next;
   renderDetail(panelEl(), detailStar, planet, { onBack: backToList, onClose: () => closePanel({ overview: true }) });
 }
 
 function setDetail(star) {
   view = 'detail';
   detailStar = star;
-  detailKey = '';
+  shownKey = '';
   menuOpen = false;
   store.state.detailStarId = String(star.id);
   // 손님 별(기간 밖)이 아닌 다른 별을 열었으면 손님 별은 숨는다
@@ -128,7 +130,7 @@ function leaveDetail() {
   if (view === 'detail') flushMemo().catch(() => {});
   view = 'list';
   detailStar = null;
-  detailKey = '';
+  shownKey = '';
   store.state.detailStarId = null;
 }
 
@@ -148,7 +150,7 @@ export function renderPanel() {
   if (planetId === null) return;
   const planet = planetOf();
   if (!planet) {
-    closePanel();
+    closePanel({ overview: true }); // 다른 곳에서 지워진 행성
     return;
   }
   panelEl().style.setProperty('--accent', PLANET_COLORS[planet.color_index]?.deep ?? '');
@@ -204,7 +206,7 @@ export function openPanel(id, starId) {
         renderPanel();
       },
       (err) => {
-        if (seq === openSeq && err?.code !== 'offline') toast('별을 찾지 못했어요');
+        if (seq === openSeq && err?.code !== 'offline') toast('그 별을 찾지 못했어요');
       },
     );
   }
@@ -215,8 +217,8 @@ export function openPanel(id, starId) {
  * 멀리 날아가서 닫힐 때는 비행을 건드리지 않는다(손님 별은 hud.js가 정리한다).
  */
 export function closePanel({ overview = false } = {}) {
+  openSeq += 1; // 받던 별(api.star)이 뒤늦게 와도 다시 열지 않는다
   if (planetId === null) return;
-  openSeq += 1;
   leaveDetail();
   planetId = null;
   menuOpen = false;
@@ -272,8 +274,18 @@ async function merge(planet) {
   if (!into) return;
   try {
     await api.mergePlanet(planet.id, into);
-  } catch {
-    toast('합치지 못했어요. 다시 눌러 주세요');
+  } catch (err) {
+    const why = mergeFailure(err);
+    if (why === 'stale') {
+      // 두 행성 중 하나가 그사이 사라졌다: 다시 받고, 이 행성이 없어졌으면 패널을 닫는다
+      try {
+        await store.reload();
+      } catch {
+        /* 연결 실패 카드는 api.js가 띄운다 */
+      }
+      if (same(planetId, planet.id) && !planetOf()) closePanel({ overview: true });
+    }
+    toast(mergeErrorText(why));
     return;
   }
   if (same(planetId, planet.id)) closePanel({ overview: true });
@@ -281,9 +293,33 @@ async function merge(planet) {
   store.reload().catch(() => {});
 }
 
-function menuAct(act, planet) {
+const menuButton = () => panelEl().querySelector('[data-act="menu"]');
+
+// 메뉴를 접는다. 목록을 다시 그리지 않고 메뉴만 뗀다(누르던 항목이 바뀌지 않게).
+// focus가 true이거나 초점이 메뉴 안에 있었으면 ⋯ 버튼으로 옮긴다
+function closeMenu({ focus = false } = {}) {
+  if (!menuOpen) return;
   menuOpen = false;
-  renderPanel();
+  const menu = panelEl().querySelector('#pMenu');
+  const btn = menuButton();
+  const inside = Boolean(menu?.contains(document.activeElement));
+  menu?.remove();
+  btn?.setAttribute('aria-expanded', 'false');
+  if (btn && (focus || inside)) btn.focus({ preventScroll: true });
+}
+
+// 메뉴 밖을 누르면 접는다(⋯ 버튼은 스스로 여닫는다)
+function onPointerDownOutside(e) {
+  if (!menuOpen) return;
+  const t = e.target instanceof Element ? e.target : null;
+  if (t && (t.closest('#pMenu') || t.closest('#panel [data-act="menu"]'))) return;
+  closeMenu();
+}
+
+function menuAct(act, planet) {
+  // 창을 열기 전에 초점을 ⋯ 버튼에 둔다: 창이 닫히면 거기로 돌아온다(메뉴 항목은 사라진다)
+  closeMenu({ focus: true });
+  if (menuButton() !== document.activeElement) menuButton()?.focus({ preventScroll: true });
   if (act === 'new') openPlanetForm({});
   else if (act === 'edit') openPlanetForm({ planet });
   else if (act === 'merge') merge(planet);
@@ -306,13 +342,19 @@ function onClick(e) {
     if (!m.disabled) menuAct(m.dataset.m, planet);
     return;
   }
-  const act = e.target.closest('[data-act]')?.dataset.act;
+  const actEl = e.target.closest('[data-act]');
+  const act = actEl?.dataset.act;
   if (act === 'close') closePanel({ overview: true });
-  else if (act === 'edit') openPlanetForm({ planet });
-  else if (act === 'menu') {
-    menuOpen = !menuOpen;
-    renderPanel();
-    if (menuOpen) panelEl().querySelector('.menu button:not(:disabled)')?.focus({ preventScroll: true });
+  else if (act === 'edit') {
+    actEl.focus({ preventScroll: true }); // 창이 닫히면 ✎로 돌아오게(누른 버튼에 초점이 가지 않는 브라우저도 있다)
+    openPlanetForm({ planet });
+  } else if (act === 'menu') {
+    if (menuOpen) closeMenu({ focus: true });
+    else {
+      menuOpen = true;
+      renderPanel();
+      panelEl().querySelector('.menu button:not(:disabled)')?.focus({ preventScroll: true });
+    }
     return;
   }
   const row = e.target.closest('.rec[data-id]');
@@ -333,17 +375,44 @@ function onImgError(e) {
   if (box) box.innerHTML = ico(img.dataset.fallback, 17);
 }
 
+// 별을 눌렀다. 목록에 없는 별은 서버에서 받는데, 그사이 패널을 닫았거나 다른 별 · 행성을 골랐으면
+// (openSeq가 바뀐다) 뒤늦게 온 답으로 패널을 열지 않는다
 async function onPickStar(starId) {
   if (starId === null || starId === undefined || !store.state.inWorld) return;
+  const seq = ++openSeq;
   let star = store.state.stars.find((s) => same(s.id, starId));
   if (!star) {
     try {
       star = await api.star(starId);
-    } catch {
+    } catch (err) {
+      // 연결이 끊긴 것은 연결 실패 카드가 알린다
+      if (seq === openSeq && store.state.inWorld && err?.code !== 'offline') toast('그 별을 찾지 못했어요');
       return;
     }
   }
-  if (star && store.state.inWorld) openPanel(star.planet_id, star.id);
+  if (!star || seq !== openSeq || !store.state.inWorld) return;
+  openPanel(star.planet_id, star.id);
+}
+
+// 상세에 열린 별이 다시 받은 목록에 없다: 기간 밖 손님 별일 수도, 다른 곳에서 지워졌을 수도 있다.
+// 서버에 물어 지워졌으면(404) 목록으로 돌아간다
+function checkDetailStar() {
+  if (planetId === null || view !== 'detail' || !detailStar) return;
+  const id = detailStar.id;
+  if (store.state.stars.some((s) => same(s.id, id))) return;
+  const still = () => planetId !== null && view === 'detail' && same(detailStar?.id, id);
+  api.star(id).then(
+    (star) => {
+      if (!star || !still()) return;
+      detailStar = star; // 다른 행성으로 옮겨졌으면 renderPanel이 목록으로 돌린다
+      renderPanel();
+    },
+    (err) => {
+      if (err?.status !== 404 || !still()) return;
+      backToList();
+      toast('그 별은 지워졌어요');
+    },
+  );
 }
 
 /** 패널을 준비한다(한 번만). */
@@ -365,8 +434,12 @@ export function initPanel() {
   });
   store.on('data', () => {
     if (!store.state.inWorld) closePanel();
-    else renderPanel();
+    else {
+      renderPanel();
+      checkDetailStar();
+    }
   });
+  document.addEventListener('pointerdown', onPointerDownOutside, true);
 
   // Esc: 상세에서 목록(30) → 패널 닫기(20, 메뉴가 열려 있으면 메뉴부터)
   registerEscape(30, () => {
@@ -376,11 +449,8 @@ export function initPanel() {
   });
   registerEscape(20, () => {
     if (planetId === null) return false;
-    if (menuOpen) {
-      menuOpen = false;
-      renderPanel();
-      panelEl().querySelector('[data-act="menu"]')?.focus({ preventScroll: true });
-    } else closePanel({ overview: true });
+    if (menuOpen) closeMenu({ focus: true });
+    else closePanel({ overview: true });
     return true;
   });
 }

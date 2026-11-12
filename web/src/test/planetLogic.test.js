@@ -2,6 +2,16 @@ import { describe, expect, test, vi } from 'vitest';
 import { createEscapeStack } from '../ui/escape.js';
 import {
   canSubmitPlanet,
+  cleanText,
+  counterText,
+  deleteErrorText,
+  deleteFailure,
+  detailKey,
+  mergeErrorText,
+  mergeFailure,
+  planetFieldError,
+  planetGone,
+  textLength,
   deleteMode,
   deleteRequest,
   deleteTitle,
@@ -82,11 +92,48 @@ describe('planet form', () => {
     expect(canSubmitPlanet({ name: '가'.repeat(20) })).toBe(true);
     expect(canSubmitPlanet({ name: '가'.repeat(21) })).toBe(false);
   });
+  test('canSubmitPlanet: description at most 20 characters', () => {
+    expect(canSubmitPlanet({ name: '공부', description: '가'.repeat(20) })).toBe(true);
+    expect(canSubmitPlanet({ name: '공부', description: '가'.repeat(21) })).toBe(false);
+  });
+  test('counts like the server: an emoji is one character', () => {
+    expect('🚀'.repeat(20).length).toBe(40);
+    expect(textLength('🚀'.repeat(20))).toBe(20);
+    expect(canSubmitPlanet({ name: '🚀'.repeat(20) })).toBe(true);
+    expect(canSubmitPlanet({ name: '🚀'.repeat(21) })).toBe(false);
+    expect(counterText('🚀🚀')).toBe('2/20');
+  });
+  test('counts like the server: decomposed Hangul is composed first', () => {
+    const nfd = '행성'.normalize('NFD');
+    expect(nfd.length).toBe(6);
+    expect(textLength(nfd)).toBe(2);
+    expect(cleanText(nfd)).toBe('행성');
+    expect(canSubmitPlanet({ name: '가'.repeat(20).normalize('NFD') })).toBe(true);
+  });
+  test('a name of only invisible characters is empty', () => {
+    expect(cleanText('​‌‍⁠﻿')).toBe('');
+    expect(canSubmitPlanet({ name: '​​' })).toBe(false);
+    expect(canSubmitPlanet({ name: ' ​\t ' })).toBe(false);
+    expect(textLength('공​부\n')).toBe(2);
+    expect(counterText(' ​ ')).toBe('0/20');
+  });
+  test('planetFieldError: only when over the limit', () => {
+    expect(planetFieldError({ name: '', description: '' })).toBe('');
+    expect(planetFieldError({ name: '가'.repeat(21) })).toBe('이름은 20자까지 쓸 수 있어요');
+    expect(planetFieldError({ name: '공부', description: '가'.repeat(21) })).toBe('설명은 20자까지 쓸 수 있어요');
+  });
   test('planetSaveError', () => {
     expect(planetSaveError({ status: 400, code: 'invalid_name' })).toBe('이름은 1~20자로 써 주세요');
-    expect(planetSaveError({ status: 400, code: 'invalid_description' })).toBe('한 줄 설명은 20자까지 쓸 수 있어요');
-    expect(planetSaveError({ status: 0, code: 'offline' })).toBe('저장하지 못했어요. 다시 눌러 주세요');
+    expect(planetSaveError({ status: 400, code: 'invalid_description' })).toBe('설명은 20자까지 쓸 수 있어요');
+    expect(planetSaveError({ status: 400, code: 'invalid_look' })).toBe('색이나 장식을 다시 골라 주세요');
+    expect(planetSaveError({ status: 0, code: 'offline' })).toBe('서버와 연결이 끊겨서 저장하지 못했어요');
+    expect(planetSaveError({ status: 500, code: 'internal' })).toBe('저장하지 못했어요. 다시 눌러 주세요');
     expect(planetSaveError(undefined)).toBe('저장하지 못했어요. 다시 눌러 주세요');
+  });
+  test('planetGone: a 404 while editing', () => {
+    expect(planetGone({ status: 404, code: 'not_found' }, true)).toBe(true);
+    expect(planetGone({ status: 404, code: 'not_found' }, false)).toBe(false);
+    expect(planetGone({ status: 400, code: 'invalid_name' }, true)).toBe(false);
   });
   test('planetSavedToast', () => {
     expect(planetSavedToast({ created: true, name: '공부' })).toBe("행성 '공부'을(를) 만들었어요");
@@ -94,6 +141,55 @@ describe('planet form', () => {
   });
   test('mergeDesc', () => {
     expect(mergeDesc(1500, '여행')).toBe("별 1,500개가 '여행'(으)로 옮겨가고 이 행성은 사라져요. 되돌릴 수 없어요.");
+  });
+});
+
+describe('stale delete and merge', () => {
+  test('deleteFailure', () => {
+    expect(deleteFailure({ status: 404, code: 'not_found' })).toBe('gone');
+    expect(deleteFailure({ status: 409, code: 'not_empty' })).toBe('stale');
+    expect(deleteFailure({ status: 400, code: 'invalid_target' })).toBe('stale');
+    expect(deleteFailure({ status: 0, code: 'offline' })).toBe('offline');
+    expect(deleteFailure({ status: 500, code: 'internal' })).toBe('error');
+    expect(deleteFailure(undefined)).toBe('error');
+  });
+  test('deleteErrorText', () => {
+    expect(deleteErrorText('offline')).toBe('서버와 연결이 끊겨서 지우지 못했어요');
+    expect(deleteErrorText('error')).toBe('지우지 못했어요. 다시 눌러 주세요');
+  });
+  test('mergeFailure', () => {
+    expect(mergeFailure({ status: 404, code: 'not_found' })).toBe('stale');
+    expect(mergeFailure({ status: 400, code: 'invalid_target' })).toBe('stale');
+    expect(mergeFailure({ status: 0, code: 'offline' })).toBe('offline');
+    expect(mergeFailure({ status: 500, code: 'internal' })).toBe('error');
+  });
+  test('mergeErrorText', () => {
+    expect(mergeErrorText('stale')).toBe('그사이 내용이 바뀌었어요. 다시 확인해 주세요');
+    expect(mergeErrorText('offline')).toBe('서버와 연결이 끊겨서 합치지 못했어요');
+    expect(mergeErrorText('error')).toBe('합치지 못했어요. 다시 눌러 주세요');
+  });
+});
+
+describe('detailKey', () => {
+  const planets = [
+    { id: 'p1', name: '공부', color_index: 1 },
+    { id: 'p2', name: '여행', color_index: 2 },
+  ];
+  const star = { id: 's1', planet_id: 'p1', title: '제목', memo: '처음' };
+  test('a memo change alone does not change the key', () => {
+    expect(detailKey({ ...star, memo: '고친 메모' }, planets)).toBe(detailKey(star, planets));
+  });
+  test('a title change does', () => {
+    expect(detailKey({ ...star, title: '새 제목' }, planets)).not.toBe(detailKey(star, planets));
+  });
+  test('renaming or recolouring any planet does, with the same count', () => {
+    const renamed = [planets[0], { ...planets[1], name: '휴가' }];
+    const recoloured = [{ ...planets[0], color_index: 5 }, planets[1]];
+    expect(detailKey(star, renamed)).not.toBe(detailKey(star, planets));
+    expect(detailKey(star, recoloured)).not.toBe(detailKey(star, planets));
+  });
+  test('no star or planets', () => {
+    expect(() => detailKey(null, undefined)).not.toThrow();
   });
 });
 

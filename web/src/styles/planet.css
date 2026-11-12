@@ -20,6 +20,8 @@
 #planetForm .err,#planetDel .err{margin:0;font-size:13px;font-weight:700;line-height:1.5;color:var(--danger-text)}
 #planetForm input[type="text"],#planetDel select{font:600 14px var(--f-body);border:var(--line-thin) solid var(--ink);border-radius:10px;padding:8px 10px;background:var(--white);color:var(--ink);width:100%;min-height:44px;box-sizing:border-box}
 #planetForm :focus-visible,#planetDel :focus-visible{outline:var(--line) solid var(--sky);outline-offset:2px}
+/* 저장 · 지우는 중에는 창 자체가 초점을 쥔다(tabindex="-1"): 테두리는 그리지 않는다 */
+#planetForm .card:focus,#planetDel .card:focus{outline:none}
 #planetForm input[type="checkbox"],#planetDel input[type="radio"]{width:20px;height:20px;margin:0;flex:none;accent-color:var(--ink)}
 
 /* ---------- 행성 꾸미기 창 (스펙 6-6) ---------- */
@@ -28,6 +30,10 @@
 #planetForm header h3{flex:1;min-width:0;font-family:var(--f-display);font-weight:400;font-size:20px;line-height:1.2}
 #planetForm header .x{width:34px;height:34px;padding:0;flex:none}
 #planetForm .fld{display:flex;flex-direction:column;gap:var(--gap-1);min-width:0}
+/* 글자 수 "n/20": 칸 아래 오른쪽. 넘으면 붉게 */
+#planetForm .cnt{align-self:flex-end;font:500 11.5px var(--f-mono);color:var(--mute);font-variant-numeric:tabular-nums}
+#planetForm .cnt.over{color:var(--danger-text);font-weight:700}
+#planetForm input[aria-invalid="true"]{border-color:var(--danger-text)}
 /* 색 원 16개: 8개씩 2줄. 보이는 원은 28px, 누르는 영역은 44px */
 #planetForm .swatches{display:grid;grid-template-columns:repeat(8,minmax(0,44px));justify-content:space-between}
 #planetForm .sw{width:100%;aspect-ratio:1;max-width:44px;padding:0;border:0;background:transparent;display:grid;place-items:center;cursor:pointer;border-radius:50%}

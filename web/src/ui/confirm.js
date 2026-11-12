@@ -1,5 +1,5 @@
 // 화면 안 확인 창(#confirm). 브라우저의 confirm · prompt는 쓰지 않는다(DESIGN.md 4장).
-// 기본 포커스는 취소, Esc · 바깥 클릭 = 취소, 입력창 · 선택 상자에서 Enter = 확정.
+// 기본 포커스는 취소(노랑 확인의 한 줄 입력만 입력창), Esc · 바깥 클릭 = 취소, 한 줄 입력에서 Enter = 확정.
 import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
@@ -52,11 +52,13 @@ function wire() {
     if (e.target === e.currentTarget && downOnBackdrop && current) current.finish(null);
     downOnBackdrop = false;
   });
+  // Enter = 확정은 한 줄 입력에서만. 선택 상자의 Enter는 브라우저에 맡긴다(고르다가 확정되지 않게).
+  // 한글 조합을 끝내는 Enter(isComposing · keyCode 229)는 확정이 아니다
   $('cExtra').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.isComposing) {
-      e.preventDefault();
-      $('cYes').click();
-    }
+    if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
+    if (!(e.target instanceof HTMLInputElement) || e.target.type !== 'text') return;
+    e.preventDefault();
+    $('cYes').click();
   });
   $('cNo').addEventListener('click', () => current?.finish(null));
   $('cYes').addEventListener('click', () => current?.confirm());
@@ -122,7 +124,8 @@ export function ask({ title, desc = '', confirmLabel = '확인', confirmKind = '
   yes.className = `btn ${confirmKind === 'yellow' ? 'yellow' : 'pink'}`;
 
   box.hidden = false;
-  if (input) {
+  // 되돌릴 수 없는 일(핑크)은 입력이 있어도 취소에서 시작한다
+  if (input && confirmKind === 'yellow') {
     field.focus();
     field.select();
   } else {

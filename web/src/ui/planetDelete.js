@@ -8,8 +8,19 @@ import { store } from '../store.js';
 import { setInputBlocked } from '../three/controls.js';
 import { esc } from '../util.js';
 import { registerEscape } from './escape.js';
-import { trapTab, wireBackdrop } from './planetForm.js';
-import { deleteMode, deleteRequest, deleteTitle, deleteToast, deleteWarning, moveLabel, removeLabel } from './planetLogic.js';
+import { keepFocusIn, trapTab, wireBackdrop } from './planetForm.js';
+import {
+  STALE_TOAST,
+  deleteErrorText,
+  deleteFailure,
+  deleteMode,
+  deleteRequest,
+  deleteTitle,
+  deleteToast,
+  deleteWarning,
+  moveLabel,
+  removeLabel,
+} from './planetLogic.js';
 import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
@@ -62,6 +73,23 @@ function paintBody() {
   }
 }
 
+// 그사이 내용이 바뀌어(빈 줄 알았던 행성에 별이 생김 · 옮길 행성이 사라짐) 서버가 거절했다:
+// 창을 닫고 다시 받은 뒤, 행성이 아직 있으면 새 내용으로 다시 묻는다
+async function restart(c, open) {
+  if (open) c.finish(false);
+  let fresh = true;
+  try {
+    await store.reload();
+  } catch {
+    fresh = false; // 연결 실패 카드는 api.js가 띄운다
+  }
+  toast(STALE_TOAST);
+  if (!open || !fresh || current || !store.state.inWorld) return;
+  const planets = store.state.planets;
+  const planet = planets.find((p) => String(p.id) === String(c.planet.id));
+  if (planet) confirmDeletePlanet(planet, planets);
+}
+
 async function confirm() {
   const c = current;
   if (!c || c.busy) return;
@@ -75,25 +103,35 @@ async function confirm() {
   c.busy = true;
   showError('');
   paintBusy();
+  keepFocusIn($('planetDel')); // 버튼이 잠겼다: 초점을 창 안에 둔다
   let gone = false; // 그 사이 이미 지워진 행성
   try {
     await api.deletePlanet(c.planet.id, request);
   } catch (err) {
-    if (current !== c) return;
-    if (err?.status === 404) gone = true;
-    else {
+    // 창이 그사이 닫혔어도(우주에서 나감) 결과는 알린다
+    const open = current === c;
+    const why = deleteFailure(err);
+    if (why === 'stale') {
+      await restart(c, open);
+      return;
+    }
+    if (why === 'gone') gone = true;
+    else if (!open) {
+      toast(deleteErrorText(why));
+      return;
+    } else {
       c.busy = false;
-      showError('지우지 못했어요. 다시 눌러 주세요');
+      showError(deleteErrorText(why));
       paintBusy();
       $('pdYes').focus();
       return;
     }
   }
-  if (current !== c) return;
   const intoName = c.others.find((p) => String(p.id) === String(into))?.name ?? '';
-  c.finish(!gone);
+  if (current === c) c.finish(!gone);
   store.emit('planetDeleted', c.planet.id);
   toast(gone ? '이미 지워진 행성이에요' : deleteToast({ name: c.planet.name, choice, count: c.planet.count_total, intoName }));
+  // 지우는 사이 우주에서 나갔어도 홈이 새 값을 보이게 다시 받는다
   store.reload().catch(() => {});
 }
 

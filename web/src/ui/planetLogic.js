@@ -1,7 +1,7 @@
 // W-02 행성 패널 · 행성 꾸미기 창 · 행성 삭제 창의 순수 함수(DOM 없음).
 // 문구는 스펙 6-6 · 6-7 그대로다. 조사는 "을(를)" · "(으)로"로 쓴다.
 
-const NAME_MAX = 20;
+const TEXT_MAX = 20; // 이름 · 한 줄 설명
 const num = (v) => (Number(v) || 0).toLocaleString('ko-KR');
 const key = (v) => (v === null || v === undefined ? null : String(v));
 
@@ -40,17 +40,68 @@ export function deleteRequest({ mode, choice, into } = {}) {
 
 /* ---------- 행성 꾸미기 창 (스펙 6-6) ---------- */
 
-/** 확정 버튼을 누를 수 있는지: 앞뒤 공백을 뗀 이름이 1~20자. */
-export function canSubmitPlanet({ name } = {}) {
-  const n = [...String(name ?? '').trim()].length;
-  return n >= 1 && n <= NAME_MAX;
+/** 서버(server/planets.js의 clean)와 같은 정리: NFC로 맞추고, 보이지 않는 글자를 빼고, 앞뒤 공백을 뗀다. */
+export const cleanText = (value) =>
+  String(value ?? '')
+    .normalize('NFC')
+    .replace(/[\u0000-\u001f\u007f​-‍⁠﻿]/g, '')
+    .trim();
+
+/** 서버가 세는 글자 수(정리한 뒤의 코드 포인트 수). 이모지 하나는 1자, 풀어 쓴 한글(NFD)도 합쳐서 센다. */
+export const textLength = (value) => [...cleanText(value)].length;
+
+/** 칸 옆의 "n/20". */
+export const counterText = (value, max = TEXT_MAX) => `${textLength(value)}/${max}`;
+
+/** 확정 버튼을 누를 수 있는지: 정리한 이름이 1~20자이고 설명이 20자 이하. */
+export function canSubmitPlanet({ name, description } = {}) {
+  const n = textLength(name);
+  return n >= 1 && n <= TEXT_MAX && textLength(description) <= TEXT_MAX;
+}
+
+/** 쓰는 중에 보일 글자 수 안내. 넘지 않았으면 ''. */
+export function planetFieldError({ name, description } = {}) {
+  if (textLength(name) > TEXT_MAX) return '이름은 20자까지 쓸 수 있어요';
+  if (textLength(description) > TEXT_MAX) return '설명은 20자까지 쓸 수 있어요';
+  return '';
 }
 
 /** 저장 실패 때 창 안에 보일 글. */
 export function planetSaveError(err) {
+  if (err?.code === 'offline') return '서버와 연결이 끊겨서 저장하지 못했어요';
   if (err?.status === 400 && err.code === 'invalid_name') return '이름은 1~20자로 써 주세요';
-  if (err?.status === 400 && err.code === 'invalid_description') return '한 줄 설명은 20자까지 쓸 수 있어요';
+  if (err?.status === 400 && err.code === 'invalid_description') return '설명은 20자까지 쓸 수 있어요';
+  if (err?.status === 400 && err.code === 'invalid_look') return '색이나 장식을 다시 골라 주세요';
   return '저장하지 못했어요. 다시 눌러 주세요';
+}
+
+/** 꾸미던 행성이 그사이 지워졌는지(고칠 때의 404). */
+export const planetGone = (err, editing) => Boolean(editing) && err?.status === 404;
+
+export const STALE_TOAST = '그사이 내용이 바뀌었어요. 다시 확인해 주세요';
+
+/**
+ * 행성 삭제가 실패한 까닭.
+ * 'gone' 이미 지워짐(404) / 'stale' 그사이 별이 생겼거나 옮길 행성이 사라짐 / 'offline' / 'error'
+ */
+export function deleteFailure(err) {
+  if (err?.status === 404) return 'gone';
+  if ((err?.status === 409 && err.code === 'not_empty') || (err?.status === 400 && err.code === 'invalid_target')) return 'stale';
+  return err?.code === 'offline' ? 'offline' : 'error';
+}
+
+export const deleteErrorText = (kind) =>
+  kind === 'offline' ? '서버와 연결이 끊겨서 지우지 못했어요' : '지우지 못했어요. 다시 눌러 주세요';
+
+/** 합치기가 실패한 까닭. 'stale' 두 행성 중 하나가 사라짐 / 'offline' / 'error' */
+export function mergeFailure(err) {
+  if (err?.status === 404 || (err?.status === 400 && err.code === 'invalid_target')) return 'stale';
+  return err?.code === 'offline' ? 'offline' : 'error';
+}
+
+export function mergeErrorText(kind) {
+  if (kind === 'stale') return STALE_TOAST;
+  return kind === 'offline' ? '서버와 연결이 끊겨서 합치지 못했어요' : '합치지 못했어요. 다시 눌러 주세요';
 }
 
 export function planetSavedToast({ created, name } = {}) {
@@ -90,6 +141,15 @@ export function moveIndex(index, keyName, count, cols) {
 }
 
 /* ---------- 행성 패널 (DESIGN.md W-02) ---------- */
+
+/**
+ * 별 상세를 다시 그려야 하는지 가르는 열쇠. 메모는 뺀다(메모 칸은 상세가 쥐고 있고,
+ * 자동 저장 뒤의 'data'가 쓰던 글을 건드리지 않게). 행성은 이름 · 색까지 본다(옮기기 목록에 보인다).
+ */
+export function detailKey(star, planets) {
+  const { memo: _memo, ...rest } = star ?? {};
+  return JSON.stringify([rest, (planets ?? []).map((p) => [String(p.id), p.name, p.color_index])]);
+}
 
 /**
  * 목록 썸네일의 종류. 'thumb'이면 실제 이미지 축소본(api.thumbUrl), 그 밖에는 아이콘 이름.
