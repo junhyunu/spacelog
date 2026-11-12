@@ -26,10 +26,14 @@ const MAX_SPEED = 15;
 const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight'];
 
 const keys = {};
-let camYaw = 0;
-let camPitch = 0.5;
-let OV = BASE_OVERVIEW; // 조망 거리. 행성 자리가 바뀌면 다시 계산한다
+const OV_YAW = 0; // 조망 자세
+const OV_PITCH = 0.5;
+let camYaw = OV_YAW;
+let camPitch = OV_PITCH;
+let OV = BASE_OVERVIEW; // 조망 거리. 행성 자리 · 창 크기가 바뀌면 다시 계산한다
 let ovVersion = -1;
+let ovAspect = 0;
+let ovFov = 0;
 let camDist = OV;
 let camDistTarget = OV;
 let mode = 'overview'; // 'overview' | 'fly'
@@ -83,11 +87,17 @@ function isBlocked() {
 }
 
 /* ---------- 조망 거리 ---------- */
+// 행성 자리(syncUniverse 뒤) · 창 크기 · 시야각이 바뀌면 다시 계산한다. 프레임마다 불러도 된다.
+// 조망 거리 그대로 보고 있었다면 새 거리로 부드럽게 따라간다(camDist는 건드리지 않는다).
 function refreshOverview(force) {
   const v = layoutVersion();
-  if (!force && v === ovVersion) return;
+  const aspect = camera && camera.aspect > 0 ? camera.aspect : 16 / 9;
+  const fovDeg = camera && camera.fov > 0 ? camera.fov : 58;
+  if (!force && v === ovVersion && aspect === ovAspect && fovDeg === ovFov) return;
   ovVersion = v;
-  const next = overviewDistance(planetPositions());
+  ovAspect = aspect;
+  ovFov = fovDeg;
+  const next = overviewDistance(planetPositions(), { aspect, fovDeg, pitch: OV_PITCH, yaw: OV_YAW });
   const followed = mode === 'overview' && camDistTarget === OV; // 조망 거리 그대로 보고 있었다
   OV = next;
   if (followed) camDistTarget = OV;
@@ -145,8 +155,8 @@ export function enterOverview() {
   player.position.set(0, 0, 10);
   vel.set(0, 0, 0);
   mode = 'overview';
-  camYaw = 0;
-  camPitch = 0.5;
+  camYaw = OV_YAW;
+  camPitch = OV_PITCH;
   refreshOverview(true);
   camDist = OV * 0.8;
   camDistTarget = OV;
@@ -200,6 +210,9 @@ function bindInput() {
     keys[e.code] = false;
   });
   addEventListener('blur', clearKeys);
+  // scene.js의 resize(카메라 비율 갱신)가 먼저 등록돼 있어 그 뒤에 돈다. 순서가 바뀌어도
+  // 프레임마다 도는 refreshOverview(false)가 바뀐 비율을 알아챈다.
+  addEventListener('resize', () => refreshOverview(false));
 
   const cv = renderer.domElement;
   let drag = null;

@@ -59,18 +59,132 @@ test('slotPosition tolerates a missing or broken slot', () => {
   expect(slotPosition(4.9)).toEqual([30, -10, 28]);
 });
 
-test('overviewDistance is 62 for the first ten, grows beyond', () => {
-  expect(overviewDistance([...Array(10)].map((_, i) => slotPosition(i)))).toBe(62);
-  expect(overviewDistance([slotPosition(10)])).toBeGreaterThan(62);
-});
+/* ---------- overviewDistance: every planet inside the view frustum ---------- */
 
-test('overviewDistance keeps growing with each outer ring', () => {
-  const d1 = overviewDistance([slotPosition(10)]);
-  const d2 = overviewDistance([slotPosition(18)]);
-  expect(d2).toBeGreaterThan(d1);
-});
+const COUNTS = [1, 4, 10, 12, 18, 30];
+const ASPECTS = [16 / 9, 4 / 3, 1, 9 / 16];
+const MARGIN = 9;
+const FOV = 58;
+const slots = (n) => [...Array(n)].map((_, i) => slotPosition(i));
+
+// Independent check (angles, not plane distances): the camera orbits (0,2,-6) the way
+// controls.js does, and a sphere is inside a pair of side planes when the angle to its
+// centre plus its angular radius stays within the half field of view.
+function outside(positions, distance, { aspect, fovDeg = FOV, pitch = 0.5, yaw = 0, margin = MARGIN }) {
+  const center = [0, 2, -6];
+  const cp = Math.cos(pitch);
+  const cam = [
+    center[0] + Math.sin(yaw) * cp * distance,
+    center[1] + Math.sin(pitch) * distance,
+    center[2] + Math.cos(yaw) * cp * distance,
+  ];
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const unit = (a) => a.map((v) => v / Math.hypot(...a));
+  const fwd = unit(sub(center, cam));
+  const right = unit(cross(fwd, [0, 1, 0]));
+  const up = cross(right, fwd);
+  const halfV = (fovDeg * Math.PI) / 360;
+  const halfH = Math.atan(Math.tan(halfV) * aspect);
+  const out = [];
+  positions.forEach((p, i) => {
+    const rel = sub(p, cam);
+    const depth = dot(rel, fwd);
+    const fits = (side, half) => {
+      const reach = Math.hypot(side, depth);
+      if (depth <= 0 || reach <= margin) return false;
+      return Math.atan2(Math.abs(side), depth) + Math.asin(margin / reach) <= half + 1e-9;
+    };
+    if (!fits(dot(rel, right), halfH) || !fits(dot(rel, up), halfV)) out.push(i);
+  });
+  return out;
+}
 
 test('overviewDistance of no planets is 62', () => {
   expect(overviewDistance([])).toBe(62);
   expect(overviewDistance()).toBe(62);
+  expect(overviewDistance([], { aspect: 9 / 16 })).toBe(62);
+});
+
+test('overviewDistance never goes below 62', () => {
+  expect(overviewDistance([[0, 2, -6]])).toBe(62);
+});
+
+// The prototype's 62 does not hold its own four sample planets with margin 9: slot 3
+// (close to the camera, high up) is cut at the top. So the fit decides, not 62.
+test('the four prototype planets need a little more than 62 on a 16:9 screen', () => {
+  expect(outside(slots(4), 62, { aspect: 16 / 9 })).toEqual([3]);
+  const d = overviewDistance(slots(4));
+  expect(d).toBeGreaterThan(62);
+  expect(d).toBeLessThan(70);
+  expect(outside(slots(4), d, { aspect: 16 / 9 })).toEqual([]);
+});
+
+test('planets that fit at 62 keep the prototype distance', () => {
+  expect(overviewDistance(slots(3))).toBe(62);
+});
+
+for (const n of COUNTS) {
+  for (const aspect of ASPECTS) {
+    test(`every planet is inside the view: ${n} planets, aspect ${aspect.toFixed(2)}`, () => {
+      const positions = slots(n);
+      const d = overviewDistance(positions, { aspect });
+      expect(d).toBeGreaterThanOrEqual(62);
+      expect(outside(positions, d, { aspect })).toEqual([]);
+    });
+
+    test(`distance is not wastefully large: ${n} planets, aspect ${aspect.toFixed(2)}`, () => {
+      const positions = slots(n);
+      const d = overviewDistance(positions, { aspect });
+      if (d > 62) expect(outside(positions, d * 0.9, { aspect }).length).toBeGreaterThan(0);
+    });
+  }
+}
+
+test('overviewDistance defaults to a 16:9 screen, 58° fov, pitch 0.5, yaw 0, margin 9', () => {
+  const positions = slots(12);
+  expect(overviewDistance(positions)).toBe(
+    overviewDistance(positions, { aspect: 16 / 9, fovDeg: 58, pitch: 0.5, yaw: 0, margin: 9 }),
+  );
+});
+
+test('overviewDistance follows the given yaw, pitch and fov', () => {
+  const positions = slots(12);
+  for (const opts of [
+    { aspect: 16 / 9, yaw: 1.2, pitch: 0.9 },
+    { aspect: 4 / 3, yaw: -2.5, pitch: -0.4 },
+    { aspect: 1, fovDeg: 40 },
+  ]) {
+    const d = overviewDistance(positions, opts);
+    expect(outside(positions, d, opts)).toEqual([]);
+    expect(outside(positions, d * 0.9, opts).length).toBeGreaterThan(0);
+  }
+});
+
+test('adding planets never brings the camera closer', () => {
+  for (const aspect of ASPECTS) {
+    let prev = 62;
+    for (let n = 0; n <= 40; n++) {
+      const d = overviewDistance(slots(n), { aspect });
+      expect(d, `${n} planets, aspect ${aspect}`).toBeGreaterThanOrEqual(prev);
+      prev = d;
+    }
+  }
+});
+
+test('a narrower screen never brings the camera closer', () => {
+  for (const n of COUNTS) {
+    let prev = 0;
+    for (const aspect of [21 / 9, ...ASPECTS, 0.4]) {
+      const d = overviewDistance(slots(n), { aspect });
+      expect(d, `${n} planets, aspect ${aspect}`).toBeGreaterThanOrEqual(prev);
+      prev = d;
+    }
+  }
+});
+
+test('overviewDistance is deterministic', () => {
+  const positions = slots(18);
+  expect(overviewDistance(positions, { aspect: 4 / 3 })).toBe(overviewDistance(positions, { aspect: 4 / 3 }));
 });
