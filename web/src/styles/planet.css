@@ -34,9 +34,10 @@
 #planetForm .cnt{align-self:flex-end;font:500 11.5px var(--f-mono);color:var(--mute);font-variant-numeric:tabular-nums}
 #planetForm .cnt.over{color:var(--danger-text);font-weight:700}
 #planetForm input[aria-invalid="true"]{border-color:var(--danger-text)}
-/* 색 원 16개: 8개씩 2줄. 보이는 원은 28px, 누르는 영역은 44px */
+/* 색 원 16개: 8개씩 2줄. 보이는 원은 28px, 누르는 영역은 44px.
+   창이 좁아 칸이 44px보다 좁아지면 누르는 영역이 옆 칸과 조금 겹친다(원끼리는 겹치지 않는다). */
 #planetForm .swatches{display:grid;grid-template-columns:repeat(8,minmax(0,44px));justify-content:space-between}
-#planetForm .sw{width:100%;aspect-ratio:1;max-width:44px;padding:0;border:0;background:transparent;display:grid;place-items:center;cursor:pointer;border-radius:50%}
+#planetForm .sw{width:44px;height:44px;justify-self:center;padding:0;border:0;background:transparent;display:grid;place-items:center;cursor:pointer;border-radius:50%}
 #planetForm .sw span{width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);box-sizing:border-box}
 #planetForm .sw[aria-checked="true"] span{border-width:var(--line);box-shadow:0 0 0 3px var(--panel),0 0 0 6px var(--sky)}
 #planetForm .sw:focus-visible{outline-offset:-2px}
@@ -56,5 +57,8 @@
 #planetDel #pdInto,#planetDel #pdWarn{margin-left:28px;width:calc(100% - 28px)}
 
 @media (max-width:420px){
+  /* 380px에서도 색 원 8칸이 44px씩 들어가게: 바깥 여백을 줄이고 색 줄만 카드 여백으로 11px씩 내민다 */
+  #planetForm{padding:8px}
   #planetForm .card{padding:14px}
+  #planetForm .swatches{margin-inline:-11px}
 }

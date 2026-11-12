@@ -1,5 +1,5 @@
 /* 시안(spacelog-prototype.html)의 <style>을 옮긴 것. 값은 tokens.css의 변수를 쓴다.
-   뺀 것: 탐사선 창 · 칩 · 체크박스 · 시안 상태 선택 상자 · 제자리 이름 입력칸. */
+   뺀 것: 탐사선 창 · 칩 · 체크박스 · 시안 상태 선택 상자 · 제자리 이름 입력칸 · 패널의 발 · 태그 · 추가 입력줄. */
 [hidden]{display:none!important}
 html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var(--panel);font-family:var(--f-body)}
 #stage{position:fixed;inset:0}
@@ -18,7 +18,6 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 #brand{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));left:calc(14px + env(safe-area-inset-left,0px));padding:12px 16px;display:flex;flex-direction:column;gap:6px;max-width:min(300px,calc(100vw - 28px))}
 #brand h1{margin:0;font-family:var(--f-display);font-weight:400;font-size:26px;line-height:1;letter-spacing:.01em}
 #brand h1 span{color:var(--violet)}
-#brand p{margin:0;font-size:12.5px;color:var(--mute);line-height:1.45}
 #brand .stats{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;font-weight:700}
 #brand .stats b{background:var(--ink);color:var(--yellow);border-radius:999px;padding:2px 9px;font-variant-numeric:tabular-nums}
 #brand .btn{font-size:13px;padding:6px 10px;align-self:flex-start;margin-top:2px}
@@ -52,29 +51,20 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 #panel .eyebrow{font-family:var(--f-display);font-size:12px;color:var(--violet);letter-spacing:.06em}
 .recs{display:flex;flex-direction:column;gap:7px}
 .rec{display:flex;gap:10px;align-items:center;text-align:left;font:600 14px var(--f-body);color:var(--ink);background:#fff;border:2.5px solid var(--ink);border-radius:12px;padding:8px 10px;cursor:pointer}
-.rec .s{color:#e0a800;font-size:16px;flex:none;-webkit-text-stroke:1px var(--ink)}
 .rec .d{margin-left:auto;font:500 11.5px var(--f-mono);color:var(--mute);flex:none;font-variant-numeric:tabular-nums}
 .rec .t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rec.on{background:var(--yellow)}
 .rec.new{animation:flash 1.2s}
 @keyframes flash{0%,40%{background:var(--pink);color:#fff}}
 .detail{background:var(--panel-2);border:2.5px dashed var(--ink);border-radius:12px;padding:12px;font-size:14px;line-height:1.6}
-.detail h3{margin:0 0 4px;font-size:15px}
-.detail .tags{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
-.detail .tags span{font:600 11.5px var(--f-mono);background:var(--ink);color:var(--panel);border-radius:6px;padding:1px 7px}
-.add{display:flex;gap:6px}
-.add input{flex:1;min-width:0;border:2.5px solid var(--ink);border-radius:10px;padding:8px 10px;font:500 14px var(--f-body);background:#fff;color:var(--ink)}
-#panel footer{padding:12px 16px 16px;border-top:3px solid var(--ink);display:flex;flex-direction:column;gap:8px;background:var(--panel-2)}
-#panel footer .row{display:flex;gap:8px}
-#panel footer .row .btn{flex:1}
-#panel footer small{color:var(--mute);font-size:11.5px}
 
 /* 알약 탭 (W-05 종류 탭에서 쓴다) */
 .tabs{display:flex;gap:6px;margin-left:auto}
 .tabs button{font:700 13px var(--f-body);border:2.5px solid var(--ink);border-radius:999px;padding:5px 12px;background:#fff;color:var(--ink);cursor:pointer}
 .tabs button.on{background:var(--ink);color:var(--yellow)}
 
-#toast{position:fixed;left:50%;top:calc(18px + env(safe-area-inset-top,0px));transform:translateX(-50%);padding:9px 16px;font-weight:700;font-size:14px;background:var(--yellow);pointer-events:none;white-space:nowrap;max-width:calc(100vw - 28px);overflow:hidden;text-overflow:ellipsis}
+/* 토스트: 짧으면 한 줄, 길면 가운데 맞춰 3줄까지 줄을 바꾼다 */
+#toast{position:fixed;left:50%;top:calc(18px + env(safe-area-inset-top,0px));transform:translateX(-50%);padding:9px 16px;font-weight:700;font-size:14px;line-height:1.45;background:var(--yellow);pointer-events:none;text-align:center;width:max-content;max-width:min(560px,92vw);box-sizing:border-box}
+#toast span{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden;overflow-wrap:anywhere}
 
 /* layers */
 #stage{z-index:1}
@@ -109,8 +99,7 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 .pdot{width:16px;height:16px;border-radius:50%;border:2.5px solid var(--ink);flex:none}
 .rec .n2{margin-left:auto;font-family:var(--f-display);font-size:12px;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px;font-variant-numeric:tabular-nums}
 .hlist .rec{min-height:44px}
-.btn.sm{font-size:13px;padding:6px 10px;gap:6px;position:relative}
-.btn.sm::after{content:"";position:absolute;inset:-6px}
+.btn.sm{font-size:13px;padding:6px 10px;gap:6px}
 .hcard .btn{max-width:100%}
 .hcard .btn .t{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .hcard h3{overflow-wrap:anywhere}
@@ -133,16 +122,17 @@ body.world-entering :is(#brand,#help,#dock,#period,#wLog,#redis,#worldMsg,#near)
 @keyframes spin{to{transform:rotate(1turn)}}
 
 /* W-01 additions */
-.badge{font-family:var(--f-display);font-size:12px;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px;font-variant-numeric:tabular-nums;min-width:22px;text-align:center;display:inline-block}
 #hLog,#wLog{display:flex;align-items:center;gap:8px}
-#period{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);padding:5px;display:flex;gap:6px;align-items:center;z-index:2;flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 28px)}
+#period{position:fixed;top:calc(14px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);padding:5px;display:flex;gap:6px;row-gap:18px;align-items:center;z-index:2;flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 28px)}
 .seg{display:flex;gap:4px}
 .seg button{font:700 13px var(--f-body);border:0;border-radius:999px;padding:6px 12px;background:transparent;color:var(--ink);cursor:pointer}
 .seg button:hover{background:var(--panel-2)}
 .seg button.on{background:var(--ink);color:var(--yellow)}
 .seg button:focus-visible{outline:3px solid var(--sky);outline-offset:1px}
 .range{display:flex;gap:4px;align-items:center;font-size:12px;padding-right:4px}
-.range input{font:500 12px var(--f-mono);border:2px solid var(--ink);border-radius:8px;padding:3px 5px;background:#fff;color:var(--ink)}
+/* 날짜 칸: 보이는 상자(안쪽 그림자 테두리)는 그대로, 위아래 투명 테두리로 누르는 영역만 44px로 넓힌다 */
+.range input{font:500 12px var(--f-mono);height:44px;box-sizing:border-box;margin:-9px 0;border:solid transparent;border-width:9px 0;border-radius:8px/17px;background:#fff padding-box;box-shadow:inset 0 0 0 2px var(--ink);padding:3px 7px;color:var(--ink)}
+.range input:focus-visible{outline-offset:-7px}
 #help .ht{display:none;font-family:var(--f-display);font-weight:400;font-size:14px}
 #help .keys{display:flex;gap:10px;flex-wrap:wrap}
 #help.big{flex-direction:column;align-items:flex-start;padding:12px 14px;font-size:13px;gap:8px}
@@ -174,12 +164,8 @@ body.world-entering :is(#brand,#help,#dock,#period,#wLog,#redis,#worldMsg,#near)
 .menu button:hover:not(:disabled){background:var(--yellow)}
 .menu button:disabled{color:#9a94bd;cursor:not-allowed}
 .lbl{font-family:var(--f-display);font-size:12px;color:var(--violet);letter-spacing:.06em}
-.rec.row{padding:4px 6px 4px 10px;gap:8px;cursor:default}
-.recb{flex:1;min-width:0;display:flex;align-items:center;gap:10px;border:0;background:transparent;font:inherit;color:inherit;text-align:left;padding:4px 2px;cursor:pointer;border-radius:8px}
-.recb:focus-visible{outline:3px solid var(--sky)}
 .th{width:34px;height:34px;flex:none;border:2.5px solid var(--ink);border-radius:8px;background:var(--panel-2);display:grid;place-items:center;font:700 9.5px var(--f-mono);color:var(--ink);overflow:hidden;box-sizing:border-box}
 .empty{border:2.5px dashed #b7b0e0;border-radius:12px;padding:18px;text-align:center;color:var(--mute);font-size:13.5px;line-height:1.6}
-#panel footer .btn{width:100%}
 .pv{border:2.5px solid var(--ink);border-radius:12px;overflow:hidden;flex:none}
 .pv.img{aspect-ratio:4/3;max-width:100%;display:flex;align-items:flex-end;padding:10px;box-sizing:border-box}
 .pv.img span{background:#fff;border:2px solid var(--ink);border-radius:6px;padding:1px 6px;font:600 12px var(--f-mono)}
@@ -202,18 +188,20 @@ body.world-entering :is(#brand,#help,#dock,#period,#wLog,#redis,#worldMsg,#near)
 .linkdel{align-self:flex-start;border:0;background:transparent;color:#c2185b;font:700 13px var(--f-body);cursor:pointer;padding:4px 0;text-decoration:underline;text-underline-offset:3px}
 
 /* 공통 보정 */
+/* 누르는 영역 44px(DESIGN.md 4장): 보이는 크기는 그대로 두고 가운데에 맞춘 투명한 영역만 넓힌다.
+   position:fixed인 버튼(#near · #wLog)은 id 규칙이 이겨 그대로 fixed다. W-05 종류 탭은 save.css가 따로 넓힌다. */
+.btn,.seg button,.ic,.linkdel{position:relative}
+:is(.btn,.seg button,.ic,.linkdel)::after{content:"";position:absolute;left:50%;top:50%;width:max(100%,44px);height:max(100%,44px);transform:translate(-50%,-50%)}
 body{word-break:keep-all}
 .card{color-scheme:light}
 .btn,kbd,.seg button,.tabs button{white-space:nowrap}
 .i{flex:none;vertical-align:-3px}
-.btn.x{display:grid;place-items:center;position:relative}
-.btn.x::after,.ic::after{content:"";position:absolute;inset:-6px}
-.ic{position:relative;display:inline-grid;place-items:center;width:32px;height:32px;vertical-align:-6px}
+.btn.x{display:grid;place-items:center}
+.ic{display:inline-grid;place-items:center;width:32px;height:32px;vertical-align:-6px}
 .th{color:var(--ink)}
 .na{color:#8a84ad}
 #panel{--accent:var(--violet)}
 #panel .lbl{color:var(--accent)}
-#panel .rec.on{background:color-mix(in srgb,var(--accent) 16%,#fff);border-color:var(--accent)}
 #panel *:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 #panel .planet-ico{box-shadow:inset -8px -8px 0 rgba(0,0,0,.18),0 0 0 3px var(--panel),0 0 0 6px var(--accent)}
 
@@ -223,7 +211,7 @@ body{word-break:keep-all}
 #confirm h3{margin:0;font-size:17px;line-height:1.4;overflow-wrap:anywhere}
 #confirm p{margin:0;font-size:13.5px;color:var(--mute);line-height:1.6}
 #confirm .row{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
-#confirm input,#confirm select{font:600 14px var(--f-body);border:2.5px solid var(--ink);border-radius:10px;padding:8px 10px;background:#fff;color:var(--ink);width:100%;box-sizing:border-box}
+#confirm input,#confirm select{font:600 14px var(--f-body);border:2.5px solid var(--ink);border-radius:10px;padding:8px 10px;background:#fff;color:var(--ink);width:100%;min-height:44px;box-sizing:border-box}
 .btn.yellow{background:var(--yellow);color:var(--ink)}
 
 /* W-01 조작 UI (hud.js) */
@@ -233,8 +221,6 @@ body{word-break:keep-all}
 .dock button{flex:none;min-height:44px;max-width:260px;box-sizing:border-box}
 .dock button .t{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .dock #wNewPlanet{font-family:var(--f-display);font-weight:400;min-width:0;min-height:0;align-self:flex-start;border-radius:var(--r-btn);padding:6px 10px;gap:6px;background:var(--panel-2)}
-.seg button{position:relative}
-.seg button::after{content:"";position:absolute;inset:-8px 0}
 #worldMsg p{margin:0;font-size:13.5px;line-height:1.6;color:var(--mute)}
 #worldMsg .btn{display:flex;align-items:center;gap:8px}
 #worldMsg .btn.sm{gap:6px}
@@ -249,21 +235,25 @@ body{word-break:keep-all}
   /* 좁으면 줄임표 대신 줄을 바꾼다 */
   #wBanner{top:auto;bottom:calc(100% + 11px);white-space:normal;text-align:center;border-radius:20px}
   #wBanner span{overflow:visible;text-wrap:balance}
-  body:has(#wBanner:not([hidden])) #near{bottom:calc(258px + env(safe-area-inset-bottom,0px))}
+  body:has(#wBanner:not([hidden])) #near{bottom:calc(272px + env(safe-area-inset-bottom,0px))}
   #dock{max-height:none;margin:0}
   .dock #wNewPlanet{align-self:center}
-  /* 목록(가로 스크롤 막대 포함)과 겹치지 않게 12px 띄운다 */
-  #period{top:auto;bottom:calc(148px + env(safe-area-inset-bottom,0px))}
+  /* 목록(가로 스크롤 막대 포함, 높이 70px)과 겹치지 않게 12px 띄운다.
+     left:50%로 두면 너비가 화면의 절반으로 묶여 날짜 칸이 일찍 줄을 바꾸므로 양쪽 여백 + auto로 가운데에 둔다 */
+  #period{top:auto;bottom:calc(162px + env(safe-area-inset-bottom,0px));left:var(--edge);right:var(--edge);width:fit-content;margin-inline:auto;transform:none;max-width:none}
   #redis{display:none}
-  #near{bottom:calc(202px + env(safe-area-inset-bottom,0px))}
+  #near{bottom:calc(216px + env(safe-area-inset-bottom,0px))}
   .home-grid{grid-template-columns:minmax(0,1fr)}
   .bh-wrap{width:250px;height:250px}
   #help{display:none}
-  #brand p{display:none}
   #dock{flex-direction:row;left:0;right:0;bottom:calc(80px + env(safe-area-inset-bottom,0px));overflow-x:auto;padding:4px 14px 8px}
   #dock .label{display:none}
   .dock button{min-width:auto}
   #near{font-size:14px}
+  /* 아래 시트가 덮는 기간 탭 · 목록 · 착륙 안내는 시트가 열린 동안 숨긴다(가려진 채 초점을 받지 않게) */
+  body:has(#panel:not([hidden])) :is(#period,#dock,#near){visibility:hidden}
+  /* 우주 안에서는 토스트를 왼쪽 위 로고 카드 아래로 내린다 */
+  body:has(#brand:not([hidden])) #toast{top:calc(150px + env(safe-area-inset-top,0px))}
   #panel{top:auto;left:calc(10px + env(safe-area-inset-left,0px));right:calc(10px + env(safe-area-inset-right,0px));width:auto;height:62vh;bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:4}
 }
 @media (prefers-reduced-motion:reduce){#panel{animation:none}.rec.new{animation:none}}
