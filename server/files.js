@@ -1,76 +1,24 @@
 import crypto from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
 import multipart from '@fastify/multipart';
-import { insertStar } from './stars.js';
-import { isOpenableExt, makeThumb, removeFiles, resolveThumb, resolveVault, saveUpload } from './vault.js';
+import { ApiError, MEMO_MAX, checkMemo, firstLine, insertStar, isHttpUrl, planetExists } from './stars.js';
+import { makeThumb, removeFiles, saveUpload } from './vault.js';
+
+export { parseRange } from './attachments.js';
 
 const FILE_NAME_MAX = 200;
 const FALLBACK_NAME = 'untitled';
 const TITLE_MAX = 200;
-const MEMO_MAX = 20000;
-const FIELD_BYTES_MAX = 1024 * 1024;
+/** 본문 상한(UTF-8 바이트). multipart 글 필드 하나의 상한도 이것이다. */
+export const BODY_MAX_BYTES = 1024 * 1024;
+/** 별 하나의 첨부(파일 + 링크) 상한. */
+export const MAX_ATTACHMENTS = 50;
 
-// 이미지 별로 다루는(축소본을 만드는) 확장자. svg 는 스크립트를 담을 수 있어 파일 별로 둔다.
+// 이미지 첨부로 다루는(축소본을 만드는) 확장자. svg 는 스크립트를 담을 수 있어 파일로 둔다.
 const RASTER_EXTS = new Set('png jpg jpeg gif webp bmp avif tif tiff heic'.split(' '));
 
-// 브라우저가 보낸 MIME 과 확장자가 둘 다 이미지일 때만 이미지 별이다.
+// 브라우저가 보낸 MIME 과 확장자가 둘 다 이미지일 때만 이미지다.
 export function isImageUpload(mimetype, ext) {
   return String(mimetype ?? '').toLowerCase().startsWith('image/') && RASTER_EXTS.has(String(ext ?? '').toLowerCase());
-}
-
-// /file 응답이 문서로 열렸을 때의 정책. <img> · <video> 로 불러 쓸 때는 적용되지 않는다(CSP 는 문서에만 걸린다).
-// 내려받기와 text/plain: 스크립트 · 플러그인 · 하위 자원을 모두 막는다.
-const CSP_LOCKED = "sandbox; default-src 'none'";
-// 새 탭에서 바로 여는 이미지 · 소리 · 영상 · PDF: 브라우저가 만드는 보기 화면(이미지 문서, 미디어 문서,
-// PDF 보기)이 같은 주소의 자원을 다시 불러 쓰므로 그것만 허용한다. sandbox 는 PDF 보기를 막으므로 뺀다.
-// script-src 는 열지 않으므로 스크립트는 여전히 돌지 않는다.
-const CSP_MEDIA = "default-src 'none'; img-src 'self'; media-src 'self'; object-src 'self'; style-src 'unsafe-inline'";
-
-// Range 헤더를 읽는다. 범위 하나(bytes=a-b · bytes=a- · bytes=-n)만 받는다.
-// 돌려주는 값: { start, end }(끝 포함) | 'unsatisfiable'(416) | null(무시하고 전체를 보낸다 — 여러 범위 · 틀린 모양).
-export function parseRange(header, size) {
-  if (typeof header !== 'string') return null;
-  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
-  if (!m || (m[1] === '' && m[2] === '')) return null;
-  const first = m[1] === '' ? null : Number(m[1]);
-  const last = m[2] === '' ? null : Number(m[2]);
-  if ((first !== null && !Number.isSafeInteger(first)) || (last !== null && !Number.isSafeInteger(last))) return null;
-  if (first === null) {
-    // 뒤에서 last 바이트
-    if (last === 0 || size === 0) return 'unsatisfiable';
-    return { start: Math.max(0, size - last), end: size - 1 };
-  }
-  if (last !== null && last < first) return null;
-  if (first >= size) return 'unsatisfiable';
-  return { start: first, end: last === null ? size - 1 : Math.min(last, size - 1) };
-}
-
-class ApiError extends Error {
-  constructor(status, code) {
-    super(code);
-    this.status = status;
-    this.code = code;
-  }
-}
-
-// 브라우저 안에서 바로 보여 줘도 되는 종류. 여기 없는 확장자는 내려받기(attachment)로만 준다.
-// HTML · SVG 처럼 스크립트가 돌 수 있는 것은 넣지 않는다.
-const INLINE_TYPES = {
-  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
-  avif: 'image/avif', bmp: 'image/bmp', ico: 'image/x-icon',
-  pdf: 'application/pdf',
-  txt: 'text/plain; charset=utf-8', md: 'text/plain; charset=utf-8', csv: 'text/plain; charset=utf-8',
-  log: 'text/plain; charset=utf-8', json: 'text/plain; charset=utf-8',
-  mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac',
-  mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', m4v: 'video/mp4', ogv: 'video/ogg',
-};
-// <img> 로는 보이지만(스크립트는 돌지 않는다) 주소로 직접 열면 내려받게 한다.
-const ATTACHMENT_TYPES = { svg: 'image/svg+xml' };
-
-// RFC 5987 ext-value. encodeURIComponent 가 남기는 ' ( ) * 도 바꾼다.
-function encodeRfc5987(value) {
-  return encodeURIComponent(value).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 }
 
 // 받은 파일 이름을 정리한다. 경로가 섞여 있으면 마지막 조각만, 200자를 넘으면 확장자를 남기고 자른다.
@@ -78,7 +26,7 @@ function encodeRfc5987(value) {
 export function parseFileName(raw) {
   // 제어 문자(C0 · DEL · C1)와 글자 방향을 뒤집는 문자(이름 끝을 다른 확장자처럼 보이게 한다)를 뺀다.
   const cleaned = String(raw ?? '').normalize('NFC')
-    .replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '');
+    .replace(/[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g, '');
   let name = cleaned.split(/[\\/]/).map((s) => s.trim()).filter((s) => s !== '').pop() ?? '';
   if (name === '') name = FALLBACK_NAME;
 
@@ -105,7 +53,10 @@ export function parseFileName(raw) {
   return { fileName: name, ext, stem };
 }
 
-// titles 필드(JSON 문자열 배열)를 읽어 파일 순서대로의 제목을 돌려준다. 각 제목은 앞뒤 공백을 떼고 200자로 자른다.
+// 앞뒤 공백을 떼고 200자로 자른다(자른 뒤 끝에 남은 공백도 뗀다).
+const cutTitle = (s) => [...s.trim()].slice(0, TITLE_MAX).join('').trim();
+
+// titles 필드(JSON 문자열 배열)를 읽어 파일 순서대로의 제목을 돌려준다.
 function parseTitles(raw, wasTruncated) {
   if (wasTruncated) throw new ApiError(400, 'invalid_titles');
   if (raw === undefined) return [];
@@ -118,7 +69,74 @@ function parseTitles(raw, wasTruncated) {
   if (!Array.isArray(titles) || titles.some((t) => t !== null && typeof t !== 'string')) {
     throw new ApiError(400, 'invalid_titles');
   }
-  return titles.map((t) => (typeof t === 'string' ? [...t.trim()].slice(0, TITLE_MAX).join('').trim() : ''));
+  return titles.map((t) => (typeof t === 'string' ? cutTitle(t) : ''));
+}
+
+// 별 만들기의 글 필드를 검사해 정리한다(JSON · multipart 공통). 벗어나면 ApiError(400).
+// src = { planet_id, title?, body?, memo?, links?: string[] }
+function parseStarFields(db, src) {
+  const out = { title: '', body: null, memo: '', links: [] };
+  if (src.title !== undefined && src.title !== null) {
+    if (typeof src.title !== 'string') throw new ApiError(400, 'invalid_title');
+    out.title = cutTitle(src.title);
+  }
+  if (src.body !== undefined && src.body !== null) {
+    if (typeof src.body !== 'string' || Buffer.byteLength(src.body, 'utf8') > BODY_MAX_BYTES) {
+      throw new ApiError(400, 'invalid_body');
+    }
+    out.body = src.body.trim() === '' ? null : src.body;
+  }
+  if (src.memo !== undefined && src.memo !== null) out.memo = checkMemo(src.memo);
+  if (src.links !== undefined && src.links !== null) {
+    if (!Array.isArray(src.links) || src.links.some((u) => typeof u !== 'string')) throw new ApiError(400, 'invalid_links');
+    out.links = src.links.map((u) => u.trim());
+    if (out.links.some((u) => !isHttpUrl(u))) throw new ApiError(400, 'invalid_url');
+    if (out.links.length > MAX_ATTACHMENTS) throw new ApiError(400, 'too_many_attachments');
+  }
+  if (!planetExists(db, src.planet_id)) throw new ApiError(400, 'unknown_planet');
+  out.planet_id = src.planet_id;
+  return out;
+}
+
+// 호환: 화면을 새 첨부 구조로 바꾸면 지운다. 옛 JSON { type: 'text'|'link', body | url } 를 새 필드로 바꾼다.
+function legacyFields(src) {
+  if (src.type === 'text') {
+    if (typeof src.body !== 'string' || src.body.trim() === '') throw new ApiError(400, 'empty_body');
+    return { ...src, links: undefined };
+  }
+  if (src.type === 'link') {
+    const url = typeof src.url === 'string' ? src.url.trim() : '';
+    if (!isHttpUrl(url)) throw new ApiError(400, 'invalid_url');
+    return { ...src, body: undefined, links: [url] };
+  }
+  throw new ApiError(400, 'invalid_type');
+}
+
+// multipart 글 필드(문자열) → parseStarFields 가 받는 모양. 잘린 필드는 받지 않는다.
+function multipartFields(raw, truncated) {
+  if (truncated.has('body')) throw new ApiError(400, 'invalid_body');
+  if (truncated.has('memo')) throw new ApiError(400, 'invalid_memo');
+  let links;
+  if (raw.links !== undefined && raw.links !== '') {
+    if (truncated.has('links')) throw new ApiError(400, 'invalid_links');
+    try {
+      links = JSON.parse(raw.links);
+    } catch {
+      throw new ApiError(400, 'invalid_links');
+    }
+    if (!Array.isArray(links)) throw new ApiError(400, 'invalid_links');
+  }
+  return { planet_id: raw.planet_id, title: raw.title, body: raw.body, memo: raw.memo, links };
+}
+
+// 제목을 비웠을 때: 본문 첫 줄(40자) → 첫 파일 이름(확장자 뺌) → 첫 링크 제목 → 첫 주소.
+function defaultTitle(body, attachments) {
+  const fromBody = body ? firstLine(body) : '';
+  if (fromBody) return fromBody;
+  const file = attachments.find((a) => a.kind !== 'link');
+  if (file) return cutTitle(file.stem);
+  const link = attachments.find((a) => a.kind === 'link');
+  return link ? cutTitle(link.link_title ?? link.url) : '';
 }
 
 export function registerFiles(app) {
@@ -128,41 +146,195 @@ export function registerFiles(app) {
 
   // multipart 본문은 버퍼에 모으지 않고 흘려 읽으므로 Fastify 의 bodyLimit(1MB)에 걸리지 않는다.
   // 상한을 넘은 파일은 오류로 끊지 않고 file.truncated 로 알아내 그 파일만 건너뛴다.
-  // 개수 상한(files · parts)에 걸리면 그때까지 담은 것은 남기고 나머지를 too_many 로 알린다.
+  // 개수 상한(files · parts)에 걸리면 그때까지 담은 것은 남기고 나머지를 too_many 로 알린다(호환 올리기).
   app.register(multipart, {
     throwFileSizeLimit: false,
-    limits: { fileSize: maxBytes, files: app.config.maxFiles, parts: 1000, fields: 10, fieldSize: FIELD_BYTES_MAX },
+    limits: { fileSize: maxBytes, files: app.config.maxFiles, parts: 1000, fields: 10, fieldSize: BODY_MAX_BYTES },
   });
 
-  // 별 · 행성 삭제가 부르는 보관함 정리.
-  app.removeStarFiles = (star) => removeFiles(dataDir, star);
+  const removeQuiet = (att) => removeFiles(dataDir, att).catch((err) => {
+    console.error(`cannot remove files of unsaved attachment ${att.id}`, err);
+  });
+
+  // 별 · 행성 삭제가 부르는 보관함 정리. star 는 별 행 + attachments(첨부 행들).
+  // 모든 첨부를 지워 보고, 실패가 있으면 첫 오류를 던진다.
+  app.removeStarFiles = async (star) => {
+    let firstError = null;
+    // 별 행 자체의 vault_path · thumb_path 는 옮기기 전(판 0) 칸이다. 옮긴 뒤에는 비어 있다.
+    for (const target of [star, ...(star?.attachments ?? [])]) {
+      try {
+        await removeFiles(dataDir, target);
+      } catch (err) {
+        firstError ??= err;
+      }
+    }
+    if (firstError) throw firstError;
+  };
 
   const fail = (reply, err) => {
     if (err instanceof ApiError) return reply.code(err.status).send({ error: err.code });
     throw err;
   };
 
-  const planetExists = (id) =>
-    typeof id === 'string' && id !== '' && db.prepare('SELECT 1 FROM planets WHERE id = ?').get(id) !== undefined;
-  const hashExists = (hash) => db.prepare('SELECT 1 FROM stars WHERE file_hash = ?').get(hash) !== undefined;
+  const hashExists = (hash) => db.prepare('SELECT 1 FROM attachments WHERE file_hash = ?').get(hash) !== undefined;
 
-  // 별의 보관함 사본 절대 경로. 별이 없으면 404, 사본이 없는 종류면 400, 디스크에 없으면 404.
-  async function vaultCopy(id) {
-    const row = db.prepare('SELECT * FROM stars WHERE id = ?').get(id);
-    if (!row) throw new ApiError(404, 'not_found');
-    if (!row.vault_path) throw new ApiError(400, 'no_file');
-    let abs;
-    let stat;
+  // 링크 제목을 못 가져오면(오류 포함) null. 저장은 그래도 된다.
+  async function linkTitleFor(url) {
     try {
-      abs = resolveVault(dataDir, row.vault_path);
-      stat = await fs.promises.stat(abs);
+      const title = await app.config.fetchTitle(url);
+      return typeof title === 'string' && title.trim() !== '' ? title.trim() : null;
     } catch {
-      throw new ApiError(404, 'file_missing');
+      return null;
     }
-    if (!stat.isFile()) throw new ApiError(404, 'file_missing');
-    return { row, abs, size: stat.size };
   }
 
+  // 파일 조각 하나를 보관함에 vault/<id>.<ext> 로 쓴다(흘려 쓰며 해시, 임시 파일은 saveUpload 가 치운다).
+  // → { attachment, stem } | { reason: 'too_large' | 'duplicate', hash? }. attachment 를 돌려준 뒤에는 부르는 쪽이 파일을 책임진다.
+  async function storePart(part, id, isDuplicate) {
+    const name = parseFileName(part.filename);
+    const saved = await saveUpload(dataDir, part.file, { id, ext: name.ext, maxBytes, isDuplicate });
+    if (saved.tooLarge) return { name, reason: 'too_large' };
+    if (saved.duplicate) return { name, reason: 'duplicate', hash: saved.hash };
+    const kind = isImageUpload(part.mimetype, name.ext) ? 'image' : 'file';
+    // makeThumb 는 실패해도 던지지 않는다(null).
+    const thumbPath = kind === 'image' ? await makeThumb(dataDir, saved.vaultPath, id) : null;
+    return {
+      name,
+      attachment: {
+        id,
+        kind,
+        stem: name.stem,
+        file_name: name.fileName,
+        file_ext: name.ext.toUpperCase(),
+        file_size: saved.size,
+        file_hash: saved.hash,
+        vault_path: saved.vaultPath,
+        thumb_path: thumbPath,
+      },
+    };
+  }
+
+  // 파일이 모두 디스크에 있고 링크 제목도 다 받은 뒤 부른다. 별과 첨부를 한 트랜잭션으로 넣는다.
+  // 그 사이 다른 요청이 같은 파일을 먼저 담았으면(UNIQUE) 그 첨부만 빼고 다시 넣는다.
+  // → { star } | { nothing: true }. files 에서 뺀 첨부의 파일은 여기서 지운다.
+  async function commit(fields, files, links, skipped) {
+    for (;;) {
+      const attachments = [...files, ...links];
+      if (!fields.body && attachments.length === 0) return { nothing: true };
+      try {
+        const star = insertStar(db, {
+          title: fields.title || defaultTitle(fields.body, attachments),
+          body: fields.body,
+          memo: fields.memo,
+          planet_id: fields.planet_id,
+          attachments: attachments.map(({ stem, ...a }) => a),
+        });
+        return { star };
+      } catch (err) {
+        if (err?.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') throw new ApiError(400, 'unknown_planet');
+        if (err?.code !== 'SQLITE_CONSTRAINT_UNIQUE') throw err;
+        const taken = files.filter((a) => a.file_hash && hashExists(a.file_hash));
+        if (taken.length === 0) throw err;
+        for (const att of taken) {
+          files.splice(files.indexOf(att), 1);
+          skipped.push({ file_name: att.file_name, reason: 'duplicate' });
+          await removeQuiet(att);
+        }
+      }
+    }
+  }
+
+  // POST /api/stars — 글 + 첨부 파일 + 링크 → 별 하나(spec 6-9).
+  // JSON { planet_id, title?, body?, links?: string[], memo? } 또는
+  // multipart(글 필드 planet_id · title · body · links(JSON 문자열 배열) · memo 를 먼저, 그다음 파일 조각 files 여러 개).
+  // 첨부 순서: 파일(올린 순서) 다음 링크(준 순서). → 201 { star, skipped: [{ file_name, reason }] }
+  app.post('/api/stars', async (req, reply) => {
+    const files = []; // 디스크에 쓴 첨부. 별을 남기지 못하면 모두 지운다.
+    let linkTitles = Promise.resolve([]);
+    try {
+      let fields;
+      let legacy = false;
+      const skipped = [];
+      if (!req.isMultipart()) {
+        const src = req.body && typeof req.body === 'object' ? req.body : {};
+        // 호환: 화면을 새 첨부 구조로 바꾸면 지운다. type 이 있으면 옛 요청이고 별을 그대로 돌려준다.
+        legacy = src.type !== undefined;
+        fields = parseStarFields(db, legacy ? legacyFields(src) : src);
+        linkTitles = Promise.all(fields.links.map(linkTitleFor));
+      } else {
+        const raw = {};
+        const truncated = new Set();
+        const seen = new Set();
+        let error = null;
+        let fileCount = 0;
+        const check = () => {
+          fields = parseStarFields(db, multipartFields(raw, truncated));
+          // 파일을 받는 동안 링크 제목을 함께 가져온다.
+          linkTitles = Promise.all(fields.links.map(linkTitleFor));
+        };
+        try {
+          for await (const part of req.parts()) {
+            if (part.type !== 'file') {
+              // 글 필드는 파일보다 먼저 온다. 검사한 뒤(첫 파일 뒤)에 온 것은 쓰지 않는다.
+              if (!fields && typeof part.value === 'string') {
+                raw[part.fieldname] = part.value;
+                if (part.valueTruncated) truncated.add(part.fieldname);
+              }
+              continue;
+            }
+            if (!error && !fields && part.fieldname === 'files') {
+              try {
+                check();
+              } catch (err) {
+                if (!(err instanceof ApiError)) throw err;
+                error = err;
+              }
+            }
+            if (error || part.fieldname !== 'files') {
+              part.file.resume();
+              continue;
+            }
+            fileCount += 1;
+            if (fields.links.length + fileCount > MAX_ATTACHMENTS) {
+              error = new ApiError(400, 'too_many_attachments');
+              part.file.resume();
+              continue;
+            }
+            const res = await storePart(part, crypto.randomUUID(), (hash) => seen.has(hash) || hashExists(hash));
+            if (res.attachment) {
+              files.push(res.attachment);
+              if (res.attachment.file_hash) seen.add(res.attachment.file_hash);
+            } else if (!(res.reason === 'duplicate' && seen.has(res.hash))) {
+              // 같은 요청 안에서 같은 파일을 또 넣은 것은 하나만 남기고 알리지 않는다.
+              skipped.push({ file_name: res.name.fileName, reason: res.reason });
+            }
+          }
+        } catch (err) {
+          // 조각을 읽다가 끊겼다(연결이 끊김 · 깨진 본문 · 개수 상한). 남은 본문은 읽어서 버린다.
+          req.raw.resume();
+          throw error ?? err;
+        }
+        if (error) throw error;
+        if (!fields) check(); // 파일 조각이 없었다
+      }
+
+      const titles = await linkTitles;
+      const links = fields.links.map((url, i) => ({ kind: 'link', url, link_title: titles[i] }));
+      if (!fields.body && files.length === 0 && links.length === 0 && skipped.length === 0) {
+        throw new ApiError(400, legacy ? 'empty_body' : 'empty_star');
+      }
+      const result = await commit(fields, files, links, skipped);
+      if (result.nothing) return reply.code(409).send({ error: 'nothing_to_save', skipped });
+      return reply.code(201).send(legacy ? result.star : { star: result.star, skipped });
+    } catch (err) {
+      await Promise.all(files.map(removeQuiet));
+      // 끝나지 않은 링크 제목 요청이 남아 있어도 기다리지 않는다(각각 3초 안에 스스로 끝난다).
+      linkTitles.catch(() => {});
+      return fail(reply, err);
+    }
+  });
+
+  // 호환: 화면을 새 첨부 구조로 바꾸면 지운다. 파일마다 별 1개(첨부 1개, 첨부 id = 별 id).
   app.post('/api/stars/upload', async (req, reply) => {
     if (!req.isMultipart()) return reply.code(400).send({ error: 'not_multipart' });
 
@@ -180,52 +352,32 @@ export function registerFiles(app) {
     let failed = false;
 
     // 파일 하나를 보관함에 쓰고 별로 남긴다. 건너뛴 이유가 있으면 skipped 에 적는다.
-    async function store(part, index, { fileName, ext, stem }) {
+    async function store(part, index) {
       const id = crypto.randomUUID();
-      const saved = await saveUpload(dataDir, part.file, {
-        id,
-        ext,
-        maxBytes,
-        isDuplicate: (hash) => seen.has(hash) || hashExists(hash),
-      });
-      if (saved.tooLarge) {
-        skipped.push({ file_name: fileName, reason: 'too_large' });
+      const res = await storePart(part, id, (hash) => seen.has(hash) || hashExists(hash));
+      if (!res.attachment) {
+        skipped.push({ file_name: res.name.fileName, reason: res.reason });
         return;
       }
-      if (saved.duplicate) {
-        skipped.push({ file_name: fileName, reason: 'duplicate' });
-        return;
-      }
-
-      let thumbPath = null;
+      const { stem, ...attachment } = res.attachment;
       try {
-        const isImage = isImageUpload(part.mimetype, ext);
-        if (isImage) thumbPath = await makeThumb(dataDir, saved.vaultPath, id);
         // 파일을 받는 사이 행성이 지워졌을 수 있다.
-        if (!planetExists(fields.planet_id)) throw new ApiError(400, 'unknown_planet');
+        if (!planetExists(db, fields.planet_id)) throw new ApiError(400, 'unknown_planet');
         created.push(insertStar(db, {
           id,
-          type: isImage ? 'image' : 'file',
           title: titles[index] || stem,
-          file_name: fileName,
-          file_ext: ext.toUpperCase(),
-          file_size: saved.size,
-          file_hash: saved.hash,
-          vault_path: saved.vaultPath,
-          thumb_path: thumbPath,
           memo: fields.memo ?? '',
           planet_id: fields.planet_id,
+          attachments: [attachment],
         }));
         // 빈 파일은 hash 가 null 이다(중복을 따지지 않는다).
-        if (saved.hash) seen.add(saved.hash);
+        if (attachment.file_hash) seen.add(attachment.file_hash);
       } catch (err) {
         // 기록을 남기지 못했으면 방금 쓴 사본 · 축소본도 치운다.
-        await removeFiles(dataDir, { vault_path: saved.vaultPath, thumb_path: thumbPath }).catch((cleanupErr) => {
-          console.error(`upload: cannot remove files of unsaved star ${id}`, cleanupErr);
-        });
+        await removeQuiet(attachment);
         if (err?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
           // 다른 요청이 같은 파일을 먼저 담았다.
-          skipped.push({ file_name: fileName, reason: 'duplicate' });
+          skipped.push({ file_name: attachment.file_name, reason: 'duplicate' });
           return;
         }
         throw err;
@@ -252,7 +404,7 @@ export function registerFiles(app) {
           try {
             titles = parseTitles(fields.titles, truncated.has('titles'));
             if (truncated.has('memo') || [...(fields.memo ?? '')].length > MEMO_MAX) throw new ApiError(400, 'invalid_memo');
-            if (!planetExists(fields.planet_id)) throw new ApiError(400, 'unknown_planet');
+            if (!planetExists(db, fields.planet_id)) throw new ApiError(400, 'unknown_planet');
           } catch (err) {
             if (!(err instanceof ApiError)) throw err;
             error = err;
@@ -262,17 +414,17 @@ export function registerFiles(app) {
         }
 
         const index = fileCount++;
-        const name = parseFileName(part.filename);
         try {
-          await store(part, index, name);
+          await store(part, index);
         } catch (err) {
           // 이미 담은 별이 있으면 오류 상태로 가리지 않는다. 이 파일만 실패로 적고 다음 파일로 간다.
+          const { fileName } = parseFileName(part.filename);
           if (err instanceof ApiError && created.length === 0) {
             error = err;
           } else {
             failed = true;
-            console.error(`upload: failed to store "${name.fileName}"`, err);
-            skipped.push({ file_name: name.fileName, reason: 'failed' });
+            console.error(`upload: failed to store "${fileName}"`, err);
+            skipped.push({ file_name: fileName, reason: 'failed' });
           }
           part.file.resume();
         }
@@ -297,81 +449,4 @@ export function registerFiles(app) {
     if (failed && created.length === 0) return reply.code(500).send({ error: 'server_error' });
     return { created, skipped };
   });
-
-  app.get('/api/stars/:id/file', async (req, reply) => {
-    try {
-      const { row, abs, size } = await vaultCopy(req.params.id);
-      const ext = path.extname(abs).slice(1).toLowerCase();
-      const inlineType = Object.hasOwn(INLINE_TYPES, ext) ? INLINE_TYPES[ext] : null;
-      const type = inlineType ?? (Object.hasOwn(ATTACHMENT_TYPES, ext) ? ATTACHMENT_TYPES[ext] : 'application/octet-stream');
-      const name = encodeRfc5987(row.file_name || row.title || 'file');
-      reply
-        .header('Content-Type', type)
-        .header('Content-Disposition', `${inlineType ? 'inline' : 'attachment'}; filename*=UTF-8''${name}`)
-        .header('X-Content-Type-Options', 'nosniff')
-        .header('Content-Security-Policy', inlineType && !inlineType.startsWith('text/') ? CSP_MEDIA : CSP_LOCKED)
-        .header('Accept-Ranges', 'bytes');
-
-      const range = parseRange(req.headers.range, size);
-      if (range === 'unsatisfiable') {
-        return reply
-          .code(416)
-          .header('Content-Type', 'application/json; charset=utf-8')
-          .header('Content-Disposition', 'inline')
-          .header('Content-Range', `bytes */${size}`)
-          .send({ error: 'range_not_satisfiable' });
-      }
-      if (range) {
-        return reply
-          .code(206)
-          .header('Content-Range', `bytes ${range.start}-${range.end}/${size}`)
-          .header('Content-Length', range.end - range.start + 1)
-          .send(fs.createReadStream(abs, range));
-      }
-      return reply.header('Content-Length', size).send(fs.createReadStream(abs));
-    } catch (err) {
-      return fail(reply, err);
-    }
-  });
-
-  app.get('/api/stars/:id/thumb', async (req, reply) => {
-    const row = db.prepare('SELECT thumb_path FROM stars WHERE id = ?').get(req.params.id);
-    if (!row || !row.thumb_path) return reply.code(404).send({ error: 'not_found' });
-    let abs;
-    let stat;
-    try {
-      abs = resolveThumb(dataDir, row.thumb_path);
-      stat = await fs.promises.stat(abs);
-      if (!stat.isFile()) throw new Error('not a file');
-    } catch {
-      return reply.code(404).send({ error: 'file_missing' });
-    }
-    return reply
-      .header('Content-Type', 'image/webp')
-      .header('Content-Length', stat.size)
-      .header('X-Content-Type-Options', 'nosniff')
-      .header('Cache-Control', 'private, max-age=31536000, immutable')
-      .send(fs.createReadStream(abs));
-  });
-
-  // 요청은 별 id 만 받는다. 경로는 DB 에서 읽고 보관함 안인지 확인한 것만 넘긴다.
-  async function launch(reply, id, wanted) {
-    try {
-      const { abs } = await vaultCopy(id);
-      // 열어도 되는 종류(허용 목록)만 기본 프로그램으로 연다. 나머지는 폴더에서 보여 준다.
-      const kind = wanted === 'open' && isOpenableExt(path.extname(abs).slice(1)) ? 'open' : 'reveal';
-      try {
-        await app.config.opener[kind](abs);
-      } catch (err) {
-        console.error(`opener.${kind} failed for star ${id}`, err);
-        throw new ApiError(500, 'open_failed');
-      }
-      return { action: kind === 'open' ? 'opened' : 'revealed' };
-    } catch (err) {
-      return fail(reply, err);
-    }
-  }
-
-  app.post('/api/stars/:id/open', async (req, reply) => launch(reply, req.params.id, 'open'));
-  app.post('/api/stars/:id/reveal', async (req, reply) => launch(reply, req.params.id, 'reveal'));
 }

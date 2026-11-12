@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { attachmentsByStar } from './stars.js';
 
 export const DECOS = ['town', 'crystal', 'forest', 'rock', 'ice', 'volcano', 'mushroom', 'cactus', 'flower', 'cloud'];
 export const COLOR_COUNT = 16;
@@ -167,7 +168,7 @@ function moveStarsAndDelete(db, id, into) {
 export function registerPlanets(app) {
   const db = app.db;
 
-  // Task 4 가 보관함 정리로 바꾼다: app.removeStarFiles = (star) => removeFiles(dataDir, star)
+  // files.js 가 보관함 정리로 바꾼다. star 는 별 행에 attachments(첨부 행 목록)를 붙인 것이다.
   app.decorate('removeStarFiles', () => {});
 
   const fail = (reply, err) => {
@@ -242,6 +243,9 @@ export function registerPlanets(app) {
       if (mode === 'delete') {
         const removed = db.transaction(() => {
           const rows = db.prepare('SELECT * FROM stars WHERE planet_id = ?').all(id);
+          // 첨부 행은 별과 함께 지워지므로 먼저 한 번에 읽어 둔다.
+          const atts = attachmentsByStar(db, rows.map((r) => r.id));
+          for (const row of rows) row.attachments = atts.get(row.id);
           db.prepare('DELETE FROM stars WHERE planet_id = ?').run(id);
           db.prepare('DELETE FROM planets WHERE id = ?').run(id);
           return rows;

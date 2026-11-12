@@ -5,7 +5,7 @@ const TITLE_FROM_BODY_MAX = 40;
 /** 메모 글자 수(코드 포인트) 한도. 파일 올리기(files.js) · 화면(detailLogic.js)의 한도와 같다. */
 export const MEMO_MAX = 20000;
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(status, code) {
     super(code);
     this.status = status;
@@ -13,67 +13,131 @@ class ApiError extends Error {
   }
 }
 
-const COLUMNS = [
-  'id', 'type', 'title', 'body', 'url', 'link_title', 'file_name', 'file_ext', 'file_size', 'file_hash',
-  'vault_path', 'thumb_path', 'memo', 'planet_id', 'created_at', 'search_text',
+const STAR_COLUMNS = ['id', 'type', 'title', 'body', 'memo', 'planet_id', 'created_at', 'search_text'];
+const ATTACHMENT_COLUMNS = [
+  'id', 'star_id', 'kind', 'position', 'file_name', 'file_ext', 'file_size', 'file_hash',
+  'vault_path', 'thumb_path', 'url', 'link_title', 'created_at',
 ];
 
-// DB 행을 응답 모양으로 바꾼다. vault_path · thumb_path · file_hash · search_text 는 내보내지 않는다.
-export function toStarJson(row) {
+const byPosition = (a, b) => a.position - b.position;
+
+// 첨부 행을 응답 모양으로 바꾼다. vault_path · thumb_path · file_hash 는 내보내지 않는다.
+export function toAttachmentJson(row) {
   return {
     id: row.id,
-    type: row.type,
-    title: row.title,
-    body: row.body ?? null,
-    url: row.url ?? null,
-    link_title: row.link_title ?? null,
+    kind: row.kind,
+    position: row.position,
     file_name: row.file_name ?? null,
     file_ext: row.file_ext ?? null,
     file_size: row.file_size ?? null,
-    memo: row.memo ?? '',
-    planet_id: row.planet_id,
-    created_at: row.created_at,
+    url: row.url ?? null,
+    link_title: row.link_title ?? null,
     has_thumb: Boolean(row.thumb_path),
   };
 }
 
-// 제목 · 본문 · 메모 · 링크 제목 · 주소 · 파일 이름 중 있는 것을 줄바꿈으로 합친다.
-export function buildSearchText(star) {
-  return [star.title, star.body, star.memo, star.link_title, star.url, star.file_name]
-    .filter((part) => typeof part === 'string' && part !== '')
-    .join('\n');
+// 별의 type 은 계산한 값이다: 첨부가 없으면 text, 있으면 첫 첨부의 kind.
+export function starType(attachments) {
+  return attachments.length ? attachments[0].kind : 'text';
 }
 
-// 별 하나를 넣는다. id · created_at 이 없으면 만들고, search_text 는 항상 새로 만든다.
-// 값은 이미 검사된 것으로 본다(라우트가 검사한다). planet_id 가 없는 행성이면 DB 가 거절한다.
-export function insertStar(db, fields) {
-  const row = {
-    body: null,
-    url: null,
-    link_title: null,
-    file_name: null,
-    file_ext: null,
-    file_size: null,
-    file_hash: null,
-    vault_path: null,
-    thumb_path: null,
-    ...fields,
-    id: fields.id ?? crypto.randomUUID(),
-    memo: fields.memo ?? '',
-    created_at: fields.created_at ?? new Date().toISOString(),
+// 별 행과 그 첨부 행들을 응답 모양으로 바꾼다. search_text 와 보관함 경로는 내보내지 않는다.
+export function toStarJson(row, attachments = []) {
+  const atts = [...attachments].sort(byPosition);
+  const first = atts[0];
+  const thumb = atts.find((a) => a.kind === 'image' && a.thumb_path);
+  return {
+    id: row.id,
+    type: starType(atts),
+    title: row.title,
+    body: row.body ?? null,
+    memo: row.memo ?? '',
+    planet_id: row.planet_id,
+    created_at: row.created_at,
+    has_thumb: Boolean(thumb),
+    thumb_attachment_id: thumb ? thumb.id : null,
+    attachment_count: atts.length,
+    attachments: atts.map(toAttachmentJson),
+    // 호환: 화면을 새 첨부 구조로 바꾸면 지운다. 지금 화면은 별 하나에 파일 · 링크 하나로 읽는다(첫 첨부).
+    url: first?.url ?? null,
+    link_title: first?.link_title ?? null,
+    file_name: first?.file_name ?? null,
+    file_ext: first?.file_ext ?? null,
+    file_size: first?.file_size ?? null,
   };
-  row.search_text = buildSearchText(row);
-  db.prepare(
-    `INSERT INTO stars (${COLUMNS.join(', ')}) VALUES (${COLUMNS.map((c) => `@${c}`).join(', ')})`,
-  ).run(Object.fromEntries(COLUMNS.map((c) => [c, row[c]])));
-  return toStarJson(row);
+}
+
+// 제목 · 본문 · 메모, 그리고 첨부마다 파일 이름 · 링크 제목 · 주소 중 있는 것을 줄바꿈으로 합친다.
+export function buildSearchText(star, attachments = []) {
+  const parts = [star.title, star.body, star.memo];
+  for (const a of [...attachments].sort(byPosition)) parts.push(a.file_name, a.link_title, a.url);
+  return parts.filter((part) => typeof part === 'string' && part !== '').join('\n');
+}
+
+// 여러 별의 첨부를 질의 한 번으로 읽는다(목록이 별마다 따로 묻지 않도록). → Map<star_id, 행[]>(position 순)
+export function attachmentsByStar(db, starIds) {
+  const map = new Map(starIds.map((id) => [id, []]));
+  if (starIds.length === 0) return map;
+  const rows = db
+    .prepare('SELECT * FROM attachments WHERE star_id IN (SELECT value FROM json_each(?)) ORDER BY star_id, position')
+    .all(JSON.stringify(starIds));
+  for (const row of rows) map.get(row.star_id)?.push(row);
+  return map;
+}
+
+export function attachmentsOf(db, starId) {
+  return db.prepare('SELECT * FROM attachments WHERE star_id = ? ORDER BY position').all(starId);
+}
+
+// 별 행 목록 → 응답 목록. 첨부는 한 번에 읽는다.
+export function starsToJson(db, rows) {
+  const atts = attachmentsByStar(db, rows.map((r) => r.id));
+  return rows.map((row) => toStarJson(row, atts.get(row.id)));
+}
+
+// 별 하나와 첨부들을 한 트랜잭션으로 넣는다. id · created_at 이 없으면 만들고, search_text 는 항상 새로 만든다.
+// fields.attachments 의 순서가 position 이 된다. 값은 이미 검사된 것으로 본다(라우트가 검사한다).
+// planet_id 가 없는 행성이거나 같은 파일(file_hash)이 이미 있으면 DB 가 거절하고 아무것도 남지 않는다.
+export function insertStar(db, fields) {
+  const created = fields.created_at ?? new Date().toISOString();
+  const id = fields.id ?? crypto.randomUUID();
+  const atts = (fields.attachments ?? []).map((a, position) => ({
+    file_name: null, file_ext: null, file_size: null, file_hash: null,
+    vault_path: null, thumb_path: null, url: null, link_title: null,
+    ...a,
+    id: a.id ?? crypto.randomUUID(),
+    star_id: id,
+    position,
+    created_at: created,
+  }));
+  const row = {
+    id,
+    type: starType(atts),
+    title: fields.title,
+    body: fields.body ?? null,
+    memo: fields.memo ?? '',
+    planet_id: fields.planet_id,
+    created_at: created,
+  };
+  row.search_text = buildSearchText(row, atts);
+  const insStar = db.prepare(
+    `INSERT INTO stars (${STAR_COLUMNS.join(', ')}) VALUES (${STAR_COLUMNS.map((c) => `@${c}`).join(', ')})`,
+  );
+  const insAtt = db.prepare(
+    `INSERT INTO attachments (${ATTACHMENT_COLUMNS.join(', ')}) VALUES (${ATTACHMENT_COLUMNS.map((c) => `@${c}`).join(', ')})`,
+  );
+  db.transaction(() => {
+    insStar.run(row);
+    for (const a of atts) insAtt.run(Object.fromEntries(ATTACHMENT_COLUMNS.map((c) => [c, a[c]])));
+  })();
+  return toStarJson(row, atts);
 }
 
 function getRow(db, id) {
   return db.prepare('SELECT * FROM stars WHERE id = ?').get(id);
 }
 
-function planetExists(db, id) {
+export function planetExists(db, id) {
   return typeof id === 'string' && id !== '' && db.prepare('SELECT 1 FROM planets WHERE id = ?').get(id) !== undefined;
 }
 
@@ -90,20 +154,21 @@ function periodCond(query, cond, params) {
   }
 }
 
-// 문자열이 아니거나 한도를 넘는 메모는 받지 않는다. 글자 수는 올리기 라우트처럼 코드 포인트로 센다.
-function checkMemo(memo) {
+// 문자열이 아니거나 한도를 넘는 메모는 받지 않는다. 글자 수는 코드 포인트로 센다.
+export function checkMemo(memo) {
   if (typeof memo !== 'string') throw new ApiError(400, 'invalid_memo');
   if (memo.length > MEMO_MAX && [...memo].length > MEMO_MAX) throw new ApiError(400, 'invalid_memo');
   return memo;
 }
 
-function firstLine(body) {
+// 본문의 비어 있지 않은 첫 줄, 40자까지.
+export function firstLine(body) {
   const line = body.split(/\r?\n/).map((l) => l.trim()).find((l) => l !== '') ?? '';
   return [...line].slice(0, TITLE_FROM_BODY_MAX).join('');
 }
 
-function isHttpUrl(url) {
-  if (!/^https?:\/\//i.test(url)) return false;
+export function isHttpUrl(url) {
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return false;
   try {
     return Boolean(new URL(url).hostname);
   } catch {
@@ -111,33 +176,7 @@ function isHttpUrl(url) {
   }
 }
 
-// 글 · 링크 별 만들기 요청을 검사해 정리한 값을 돌려준다. 벗어나면 ApiError(400).
-function parseCreate(db, body) {
-  const src = body && typeof body === 'object' ? body : {};
-  if (src.type !== 'text' && src.type !== 'link') throw new ApiError(400, 'invalid_type');
-
-  const out = { type: src.type, title: '', memo: '' };
-  if (src.title !== undefined && src.title !== null) {
-    if (typeof src.title !== 'string') throw new ApiError(400, 'invalid_title');
-    out.title = src.title.trim();
-  }
-  if (src.memo !== undefined && src.memo !== null) out.memo = checkMemo(src.memo);
-
-  if (src.type === 'text') {
-    if (typeof src.body !== 'string' || src.body.trim() === '') throw new ApiError(400, 'empty_body');
-    out.body = src.body;
-  } else {
-    const url = typeof src.url === 'string' ? src.url.trim() : '';
-    if (!isHttpUrl(url)) throw new ApiError(400, 'invalid_url');
-    out.url = url;
-  }
-
-  if (!planetExists(db, src.planet_id)) throw new ApiError(400, 'unknown_planet');
-  out.planet_id = src.planet_id;
-  return out;
-}
-
-// 수정 요청에서 있는 것만 검사한다. 빈 제목은 받지 않는다(400 invalid_title).
+// 수정 요청에서 있는 것만 검사한다. 빈 제목은 받지 않는다(400 invalid_title). 본문 · 첨부는 고치지 않는다.
 function parsePatch(db, body) {
   const src = body && typeof body === 'object' ? body : {};
   const out = {};
@@ -161,16 +200,6 @@ export function registerStars(app) {
     throw err;
   };
 
-  // 링크 제목을 못 가져오면(오류 포함) null. 저장은 그래도 된다.
-  async function linkTitleFor(url) {
-    try {
-      const title = await app.config.fetchTitle(url);
-      return typeof title === 'string' && title.trim() !== '' ? title.trim() : null;
-    } catch {
-      return null;
-    }
-  }
-
   app.get('/api/stars', async (req) => {
     const cond = [];
     const params = {};
@@ -187,33 +216,13 @@ export function registerStars(app) {
       params.limit = Number(limit);
     }
     const where = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
-    return db
-      .prepare(`SELECT * FROM stars ${where} ORDER BY created_at DESC, id DESC ${tail}`)
-      .all(params)
-      .map(toStarJson);
+    return starsToJson(db, db.prepare(`SELECT * FROM stars ${where} ORDER BY created_at DESC, id DESC ${tail}`).all(params));
   });
 
   app.get('/api/stars/:id', async (req, reply) => {
     const row = getRow(db, req.params.id);
     if (!row) return reply.code(404).send({ error: 'not_found' });
-    return toStarJson(row);
-  });
-
-  app.post('/api/stars', async (req, reply) => {
-    try {
-      const fields = parseCreate(db, req.body);
-      if (fields.type === 'text') {
-        if (!fields.title) fields.title = firstLine(fields.body);
-      } else {
-        fields.link_title = await linkTitleFor(fields.url);
-        if (!fields.title) fields.title = fields.link_title ?? fields.url;
-        // 제목을 가져오는 사이 행성이 지워졌을 수 있다.
-        if (!planetExists(db, fields.planet_id)) throw new ApiError(400, 'unknown_planet');
-      }
-      return reply.code(201).send(insertStar(db, fields));
-    } catch (err) {
-      return fail(reply, err);
-    }
+    return toStarJson(row, attachmentsOf(db, row.id));
   });
 
   app.patch('/api/stars/:id', async (req, reply) => {
@@ -223,23 +232,29 @@ export function registerStars(app) {
         const row = getRow(db, id);
         if (!row) throw new ApiError(404, 'not_found');
         const next = { ...row, ...parsePatch(db, req.body) };
-        next.search_text = buildSearchText(next);
+        next.attachments = attachmentsOf(db, id);
+        next.search_text = buildSearchText(next, next.attachments);
         db.prepare(
           'UPDATE stars SET title = @title, memo = @memo, planet_id = @planet_id, search_text = @search_text WHERE id = @id',
         ).run({ id, title: next.title, memo: next.memo, planet_id: next.planet_id, search_text: next.search_text });
         return next;
       })();
-      return toStarJson(updated);
+      return toStarJson(updated, updated.attachments);
     } catch (err) {
       return fail(reply, err);
     }
   });
 
   app.delete('/api/stars/:id', async (req, reply) => {
-    const row = getRow(db, req.params.id);
-    if (!row || db.prepare('DELETE FROM stars WHERE id = ?').run(row.id).changes === 0) {
-      return reply.code(404).send({ error: 'not_found' });
-    }
+    // 첨부 행은 별과 함께(ON DELETE CASCADE) 지워지므로 지우기 전에 읽어 둔다.
+    const row = db.transaction(() => {
+      const found = getRow(db, req.params.id);
+      if (!found) return null;
+      found.attachments = attachmentsOf(db, found.id);
+      db.prepare('DELETE FROM stars WHERE id = ?').run(found.id);
+      return found;
+    })();
+    if (!row) return reply.code(404).send({ error: 'not_found' });
     // DB 가 확정된 뒤에 파일을 지운다. 파일 정리가 실패해도 삭제는 이미 끝난 것이다.
     try {
       await app.removeStarFiles(row);
@@ -264,7 +279,7 @@ export function registerStars(app) {
       const row = db
         .prepare('SELECT * FROM stars WHERE created_at < ? ORDER BY id LIMIT 1 OFFSET ?')
         .get(before, sum % c);
-      star = row ? toStarJson(row) : null;
+      star = row ? toStarJson(row, attachmentsOf(db, row.id)) : null;
     }
     return reply.type('application/json; charset=utf-8').send(JSON.stringify(star));
   });

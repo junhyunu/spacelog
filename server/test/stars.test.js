@@ -5,10 +5,13 @@ import { MEMO_MAX, buildSearchText, insertStar, toStarJson } from '../stars.js';
 import { cleanup, makeApp } from './helpers.js';
 
 const HOST = { host: '127.0.0.1:4747' };
+// 별 응답의 칸. url · link_title · file_* 는 지금 화면을 위한 호환 칸(첫 첨부)이다.
 const STAR_KEYS = [
-  'id', 'type', 'title', 'body', 'url', 'link_title', 'file_name', 'file_ext', 'file_size',
-  'memo', 'planet_id', 'created_at', 'has_thumb',
+  'id', 'type', 'title', 'body', 'memo', 'planet_id', 'created_at', 'has_thumb', 'thumb_attachment_id',
+  'attachment_count', 'attachments',
+  'url', 'link_title', 'file_name', 'file_ext', 'file_size',
 ].sort();
+const ATTACHMENT_KEYS = ['id', 'kind', 'position', 'file_name', 'file_ext', 'file_size', 'url', 'link_title', 'has_thumb'].sort();
 
 let app;
 let dataDir;
@@ -64,15 +67,18 @@ test('text star: title defaults to first line, max 40 chars', async () => {
     type: 'text',
     title: '첫 줄입니다',
     body: '첫 줄입니다\n둘째 줄',
+    memo: '',
+    planet_id: planet.id,
+    created_at: expect.any(String),
+    has_thumb: false,
+    thumb_attachment_id: null,
+    attachment_count: 0,
+    attachments: [],
     url: null,
     link_title: null,
     file_name: null,
     file_ext: null,
     file_size: null,
-    memo: '',
-    planet_id: planet.id,
-    created_at: expect.any(String),
-    has_thumb: false,
   });
   expect(new Date(star.created_at).toISOString()).toBe(star.created_at);
 
@@ -176,7 +182,6 @@ test('invalid type, title, memo → 400', async () => {
   const cases = [
     [{ type: 'file', body: 'x' }, 'invalid_type'],
     [{ type: 'image', body: 'x' }, 'invalid_type'],
-    [{ body: 'x' }, 'invalid_type'],
     [{ type: 5, body: 'x' }, 'invalid_type'],
     [{ type: 'text', body: 'x', title: 5 }, 'invalid_title'],
     [{ type: 'text', body: 'x', memo: { a: 1 } }, 'invalid_memo'],
@@ -279,11 +284,15 @@ test('create builds search_text from title, body, memo, link title, url', async 
   expect(dbRow(link.id).search_text).toBe('가짜 제목\n링크 메모\n가짜 제목\nhttps://example.com/a');
 });
 
-test('buildSearchText joins the present fields with newlines', () => {
+test('buildSearchText joins title, body, memo and each attachment (in position order) with newlines', () => {
   expect(
-    buildSearchText({ title: 't', body: 'b', memo: 'm', link_title: 'lt', url: 'u', file_name: 'f.pdf' }),
-  ).toBe('t\nb\nm\nlt\nu\nf.pdf');
-  expect(buildSearchText({ title: 't', body: null, memo: '', link_title: null, url: null, file_name: 'f.pdf' })).toBe('t\nf.pdf');
+    buildSearchText({ title: 't', body: 'b', memo: 'm' }, [
+      { position: 1, kind: 'link', link_title: 'lt', url: 'u' },
+      { position: 0, kind: 'file', file_name: 'f.pdf' },
+    ]),
+  ).toBe('t\nb\nm\nf.pdf\nlt\nu');
+  expect(buildSearchText({ title: 't', body: null, memo: '' }, [{ position: 0, file_name: 'f.pdf', url: null }])).toBe('t\nf.pdf');
+  expect(buildSearchText({ title: 't', body: null, memo: '' })).toBe('t');
 });
 
 test('patch memo updates search_text', async () => {
@@ -358,24 +367,30 @@ test('delete removes star', async () => {
 
 test('response never leaks vault_path, file_hash, search_text', async () => {
   const fileStar = insertStar(app.db, {
-    type: 'image',
     title: '사진',
-    file_name: '사진.png',
-    file_ext: 'PNG',
-    file_size: 12,
-    file_hash: 'abc123',
-    vault_path: 'vault/x.png',
-    thumb_path: 'thumbs/x.webp',
     memo: '메모',
     planet_id: planet.id,
+    attachments: [{
+      kind: 'image',
+      file_name: '사진.png',
+      file_ext: 'PNG',
+      file_size: 12,
+      file_hash: 'abc123',
+      vault_path: 'vault/x.png',
+      thumb_path: 'thumbs/x.webp',
+    }],
   });
   expect(Object.keys(fileStar).sort()).toEqual(STAR_KEYS);
+  expect(fileStar.type).toBe('image');
   expect(fileStar.has_thumb).toBe(true);
-  expect(fileStar.file_name).toBe('사진.png');
-  expect(dbRow(fileStar.id).vault_path).toBe('vault/x.png');
-  expect(dbRow(fileStar.id).file_hash).toBe('abc123');
+  expect(fileStar.thumb_attachment_id).toBe(fileStar.attachments[0].id);
+  expect(Object.keys(fileStar.attachments[0]).sort()).toEqual(ATTACHMENT_KEYS);
+  expect(fileStar.attachments[0].file_name).toBe('사진.png');
+  const att = app.db.prepare('SELECT * FROM attachments WHERE star_id = ?').get(fileStar.id);
+  expect(att.vault_path).toBe('vault/x.png');
+  expect(att.file_hash).toBe('abc123');
   expect(dbRow(fileStar.id).search_text).toBe('사진\n메모\n사진.png');
-  expect(Object.keys(toStarJson(dbRow(fileStar.id))).sort()).toEqual(STAR_KEYS);
+  expect(Object.keys(toStarJson(dbRow(fileStar.id), [att])).sort()).toEqual(STAR_KEYS);
 
   const created = await call('POST', '/api/stars', { type: 'text', body: '본문', planet_id: planet.id });
   const responses = [
@@ -393,6 +408,7 @@ test('response never leaks vault_path, file_hash, search_text', async () => {
     const data = res.json();
     for (const star of Array.isArray(data) ? data : [data]) {
       expect(Object.keys(star).sort()).toEqual(STAR_KEYS);
+      for (const a of star.attachments) expect(Object.keys(a).sort()).toEqual(ATTACHMENT_KEYS);
     }
   }
 });

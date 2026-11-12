@@ -14,8 +14,9 @@ import { cleanup, makeApp } from './helpers.js';
 
 const HOST = { host: '127.0.0.1:4747' };
 const STAR_KEYS = [
-  'id', 'type', 'title', 'body', 'url', 'link_title', 'file_name', 'file_ext', 'file_size',
-  'memo', 'planet_id', 'created_at', 'has_thumb',
+  'id', 'type', 'title', 'body', 'memo', 'planet_id', 'created_at', 'has_thumb', 'thumb_attachment_id',
+  'attachment_count', 'attachments',
+  'url', 'link_title', 'file_name', 'file_ext', 'file_size', // 호환 칸(첫 첨부)
 ].sort();
 
 let app;
@@ -92,6 +93,7 @@ function call(method, url, target = app) {
 }
 
 const dbRow = (id, target = app) => target.db.prepare('SELECT * FROM stars WHERE id = ?').get(id);
+const attRow = (id, target = app) => target.db.prepare('SELECT * FROM attachments WHERE id = ?').get(id);
 const starCount = (target = app) => target.db.prepare('SELECT COUNT(*) AS c FROM stars').get().c;
 const vaultFiles = (dir = dataDir) => fs.readdirSync(path.join(dir, 'vault')).sort();
 const thumbFiles = (dir = dataDir) => fs.readdirSync(path.join(dir, 'thumbs')).sort();
@@ -125,11 +127,14 @@ test('uploads two files → two stars sharing planet and memo', async () => {
     expect(new Date(star.created_at).toISOString()).toBe(star.created_at);
   }
   expect(vaultFiles()).toEqual(created.map((s) => `${s.id}.txt`).sort());
-  const row = dbRow(created[0].id);
+  // 호환 올리기: 파일마다 별 하나 + 첨부 하나. 첨부 id 는 별 id 와 같다(보관함 이름 <첨부 id>.<ext>).
+  const row = attRow(created[0].id);
+  expect(row.star_id).toBe(created[0].id);
+  expect(created[0].attachments.map((a) => [a.id, a.kind, a.position])).toEqual([[created[0].id, 'file', 0]]);
   expect(row.vault_path).toBe(`vault/${created[0].id}.txt`);
   expect(row.thumb_path).toBeNull();
   expect(row.file_hash).toBe(sha256(Buffer.from('aaa')));
-  expect(row.search_text).toBe('a\n같이 쓴 메모\na.txt');
+  expect(dbRow(created[0].id).search_text).toBe('a\n같이 쓴 메모\na.txt');
   expect(fs.readFileSync(path.join(dataDir, row.vault_path), 'utf8')).toBe('aaa');
 
   const list = await call('GET', '/api/stars');
@@ -145,7 +150,7 @@ test('png becomes image star with thumb', async () => {
   expect(star.type).toBe('image');
   expect(star.file_ext).toBe('PNG');
   expect(star.has_thumb).toBe(true);
-  expect(dbRow(star.id).thumb_path).toBe(`thumbs/${star.id}.webp`);
+  expect(attRow(star.id).thumb_path).toBe(`thumbs/${star.id}.webp`);
   expect(thumbFiles()).toEqual([`${star.id}.webp`]);
 
   const thumb = await call('GET', `/api/stars/${star.id}/thumb`);
@@ -231,7 +236,7 @@ test('path traversal name is reduced to last segment and stays in vault', async 
   expect(created.map((s) => s.title)).toEqual(['evil', 'evil2', 'evil3', 'evil4']);
   expect(vaultFiles()).toEqual(created.map((s) => `${s.id}.txt`).sort());
   for (const star of created) {
-    const abs = path.resolve(dataDir, dbRow(star.id).vault_path);
+    const abs = path.resolve(dataDir, attRow(star.id).vault_path);
     expect(path.dirname(abs)).toBe(path.resolve(dataDir, 'vault'));
     expect(fs.existsSync(abs)).toBe(true);
   }
@@ -262,7 +267,7 @@ test('no extension', async () => {
   expect(created[0].file_name).toBe('README');
   expect(created[0].title).toBe('README');
   expect(vaultFiles()).toEqual([created[0].id]);
-  expect(dbRow(created[0].id).vault_path).toBe(`vault/${created[0].id}`);
+  expect(attRow(created[0].id).vault_path).toBe(`vault/${created[0].id}`);
   const res = await call('GET', `/api/stars/${created[0].id}/file`);
   expect(res.statusCode).toBe(200);
   expect(res.headers['content-type']).toBe('application/octet-stream');
@@ -343,7 +348,7 @@ test('upload is not capped by the default 1 MB body limit', async () => {
   const { created, skipped } = await uploadOk([file('big.bin', big)]);
   expect(skipped).toEqual([]);
   expect(created[0].file_size).toBe(big.length);
-  expect(dbRow(created[0].id).file_hash).toBe(sha256(big));
+  expect(attRow(created[0].id).file_hash).toBe(sha256(big));
   const res = await call('GET', `/api/stars/${created[0].id}/file`);
   expect(res.rawPayload.equals(big)).toBe(true);
   expect(res.headers['content-length']).toBe(String(big.length));
@@ -476,16 +481,23 @@ test('isExecutableExt covers the listed extensions, any case', () => {
   }
 });
 
-test('open on text or link star → 400 no_file', async () => {
-  const text = insertStar(app.db, { type: 'text', title: '글', body: '본문', planet_id: planet.id });
-  const link = insertStar(app.db, { type: 'link', title: '링크', url: 'https://example.com', planet_id: planet.id });
-  for (const star of [text, link]) {
-    for (const [method, action] of [['POST', 'open'], ['POST', 'reveal'], ['GET', 'file']]) {
-      const res = await call(method, `/api/stars/${star.id}/${action}`);
-      expect(res.statusCode, `${star.type} ${action}`).toBe(400);
+// 호환 경로는 별의 첫 첨부를 다룬다: 첨부가 없는 글 별은 404 not_found, 첫 첨부가 링크면 400 no_file.
+test('compat routes: text star (no attachment) → 404 not_found, link star → 400 no_file', async () => {
+  const text = insertStar(app.db, { title: '글', body: '본문', planet_id: planet.id });
+  const link = insertStar(app.db, { title: '링크', planet_id: planet.id, attachments: [{ kind: 'link', url: 'https://example.com' }] });
+  for (const [method, action] of [['POST', 'open'], ['POST', 'reveal'], ['GET', 'file'], ['GET', 'thumb']]) {
+    const res = await call(method, `/api/stars/${text.id}/${action}`);
+    expect(res.statusCode, `text ${action}`).toBe(404);
+    expect(res.json()).toEqual({ error: 'not_found' });
+  }
+  for (const [method, action] of [['POST', 'open'], ['POST', 'reveal'], ['GET', 'file']]) {
+    for (const url of [`/api/stars/${link.id}/${action}`, `/api/attachments/${link.attachments[0].id}/${action}`]) {
+      const res = await call(method, url);
+      expect(res.statusCode, url).toBe(400);
       expect(res.json()).toEqual({ error: 'no_file' });
     }
   }
+  expect((await call('GET', `/api/attachments/${link.attachments[0].id}/thumb`)).statusCode).toBe(404);
   expect(opened).toEqual([]);
 });
 
@@ -513,22 +525,31 @@ test('a stored vault_path that points outside the vault is never served, opened 
   const outside = path.join(dataDir, 'secret.txt');
   fs.writeFileSync(outside, 'secret');
   const star = insertStar(app.db, {
-    type: 'file', title: '밖', file_name: 'secret.txt', file_ext: 'TXT', file_size: 6,
-    vault_path: '../' + path.basename(dataDir) + '/secret.txt', planet_id: planet.id,
+    title: '밖', planet_id: planet.id,
+    attachments: [{
+      kind: 'file', file_name: 'secret.txt', file_ext: 'TXT', file_size: 6,
+      vault_path: '../' + path.basename(dataDir) + '/secret.txt',
+    }],
   });
   const other = insertStar(app.db, {
-    type: 'file', title: '밖2', file_name: 'x.db', file_ext: 'DB', file_size: 1,
-    vault_path: 'vault/../spacelog.db', thumb_path: 'vault/../secret.txt', planet_id: planet.id,
+    title: '밖2', planet_id: planet.id,
+    attachments: [{
+      kind: 'image', file_name: 'x.db', file_ext: 'DB', file_size: 1,
+      vault_path: 'vault/../spacelog.db', thumb_path: 'vault/../secret.txt',
+    }],
   });
-  for (const id of [star.id, other.id]) {
-    for (const [method, action] of [['GET', 'file'], ['POST', 'open'], ['POST', 'reveal']]) {
-      const res = await call(method, `/api/stars/${id}/${action}`);
-      expect(res.statusCode, action).toBe(404);
-      expect(res.json()).toEqual({ error: 'file_missing' });
-      expect(res.body).not.toContain('secret');
+  for (const s of [star, other]) {
+    for (const base of [`/api/stars/${s.id}`, `/api/attachments/${s.attachments[0].id}`]) {
+      for (const [method, action] of [['GET', 'file'], ['POST', 'open'], ['POST', 'reveal']]) {
+        const res = await call(method, `${base}/${action}`);
+        expect(res.statusCode, action).toBe(404);
+        expect(res.json()).toEqual({ error: 'file_missing' });
+        expect(res.body).not.toContain('secret');
+      }
     }
   }
   expect((await call('GET', `/api/stars/${other.id}/thumb`)).statusCode).toBe(404);
+  expect((await call('GET', `/api/attachments/${other.attachments[0].id}/thumb`)).statusCode).toBe(404);
   expect(opened).toEqual([]);
   expect((await call('DELETE', `/api/stars/${star.id}`)).statusCode).toBe(204);
   expect((await call('DELETE', `/api/stars/${other.id}`)).statusCode).toBe(204);
@@ -624,7 +645,7 @@ test('corrupt image still saves without thumb', async () => {
   expect(created).toHaveLength(1);
   expect(created[0].type).toBe('image');
   expect(created[0].has_thumb).toBe(false);
-  expect(dbRow(created[0].id).thumb_path).toBeNull();
+  expect(attRow(created[0].id).thumb_path).toBeNull();
   expect(vaultFiles()).toEqual([`${created[0].id}.png`]);
   expect(thumbFiles()).toEqual([]);
   const thumb = await call('GET', `/api/stars/${created[0].id}/thumb`);
@@ -719,7 +740,7 @@ test('open uses an allowlist: only known document/media/archive types open, the 
     expect(res.statusCode, name).toBe(200);
     expect(res.json(), name).toEqual({ action: expected === 'open' ? 'opened' : 'revealed' });
     expect(opened.at(-1)[0], name).toBe(expected);
-    expect(opened.at(-1)[1], name).toBe(path.join(dataDir, dbRow(created[i].id).vault_path));
+    expect(opened.at(-1)[1], name).toBe(path.join(dataDir, attRow(created[i].id).vault_path));
   }
   expect(opened).toHaveLength(table.length);
 });
@@ -770,7 +791,7 @@ test('default file-count limit is 500', async () => {
 
 // 이름이 boom 으로 시작하는 파일은 DB 에 넣을 때 실패하게 한다.
 function failInsertsNamedBoom(target = app) {
-  target.db.exec(`CREATE TRIGGER boom BEFORE INSERT ON stars WHEN NEW.file_name LIKE 'boom%'
+  target.db.exec(`CREATE TRIGGER boom BEFORE INSERT ON attachments WHEN NEW.file_name LIKE 'boom%'
     BEGIN SELECT RAISE(ABORT, 'boom'); END;`);
 }
 
@@ -991,7 +1012,7 @@ test('empty files are never duplicates: two empty files → two stars with no ha
   const { created, skipped } = await uploadOk([file('empty1.txt', ''), file('empty2.log', '')]);
   expect(skipped).toEqual([]);
   expect(created.map((s) => [s.file_name, s.file_size])).toEqual([['empty1.txt', 0], ['empty2.log', 0]]);
-  for (const star of created) expect(dbRow(star.id).file_hash).toBeNull();
+  for (const star of created) expect(attRow(star.id).file_hash).toBeNull();
 
   const again = await uploadOk([file('empty3.txt', '')]);
   expect(again.skipped).toEqual([]);

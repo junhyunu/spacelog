@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import { registerAttachments } from './attachments.js';
 import { openDb } from './db.js';
 import { registerFiles } from './files.js';
 import { registerGuard } from './guard.js';
@@ -37,8 +38,10 @@ export function buildApp({
   // 먼저 돌던 서버가 받고 있는 임시 파일을 지우지 않기 위해서다.
   app.decorate('sweep', () => {
     try {
+      // 보관함 파일 이름은 <첨부 id>.<ext> 다. 옮기기 전 이름(<별 id>.<ext>)도 주인이 있는 것으로 본다.
+      const hasAttachment = db.prepare('SELECT 1 FROM attachments WHERE id = ?');
       const hasStar = db.prepare('SELECT 1 FROM stars WHERE id = ?');
-      return sweepVault(dataDir, (id) => hasStar.get(id) !== undefined);
+      return sweepVault(dataDir, (id) => hasAttachment.get(id) !== undefined || hasStar.get(id) !== undefined);
     } catch (err) {
       console.error('sweep failed', err);
       return { tmp: 0, orphans: 0 };
@@ -86,6 +89,7 @@ export function buildApp({
   registerStars(app);
   // registerPlanets 가 만든 removeStarFiles 를 바꾸므로 그 뒤에 둔다.
   registerFiles(app);
+  registerAttachments(app);
 
   return app;
 }
