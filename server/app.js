@@ -6,9 +6,11 @@ import { fetchLinkTitle } from './linkTitle.js';
 import { defaultOpener } from './opener.js';
 import { registerPlanets } from './planets.js';
 import { registerStars } from './stars.js';
+import { sweepVault } from './vault.js';
 
 export const DEFAULT_PORT = 4747;
 export const DEFAULT_MAX_FILE_BYTES = 500 * 1024 * 1024;
+export const DEFAULT_MAX_FILES = 500;
 
 // 서버를 만든다. 테스트는 임시 dataDir 와 가짜 fetchTitle · opener 를 넣는다.
 export function buildApp({
@@ -17,6 +19,7 @@ export function buildApp({
   fetchTitle = fetchLinkTitle,
   opener = defaultOpener,
   maxFileBytes = DEFAULT_MAX_FILE_BYTES,
+  maxFiles = DEFAULT_MAX_FILES,
   port = DEFAULT_PORT,
 } = {}) {
   if (!dataDir) throw new Error('buildApp: dataDir is required');
@@ -27,9 +30,17 @@ export function buildApp({
   const app = Fastify({ logger: false });
   const db = openDb(dataDir);
 
+  // 받다가 끊긴 임시 파일과 주인 없는 사본을 치운다. 청소가 실패해도 서버는 뜬다.
+  try {
+    const hasStar = db.prepare('SELECT 1 FROM stars WHERE id = ?');
+    sweepVault(dataDir, (id) => hasStar.get(id) !== undefined);
+  } catch (err) {
+    console.error('sweep failed', err);
+  }
+
   app.decorate('db', db);
   app.decorate('dataDir', dataDir);
-  app.decorate('config', { fetchTitle, opener, maxFileBytes, port });
+  app.decorate('config', { fetchTitle, opener, maxFileBytes, maxFiles, port });
   app.addHook('onClose', async () => {
     db.close();
   });

@@ -3,12 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import sharp from 'sharp';
-import { afterEach, beforeEach, expect, test } from 'vitest';
-import { parseFileName } from '../files.js';
-import { defaultOpener, openerCommand } from '../opener.js';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { buildApp } from '../app.js';
+import { isImageUpload, parseFileName, parseRange } from '../files.js';
+import { defaultOpener, openerCommand, windowsOpenCommand, windowsRevealCommand } from '../opener.js';
 import { createPlanet } from '../planets.js';
 import { insertStar } from '../stars.js';
-import { isExecutableExt, makeThumb, removeFiles, resolveVault, saveUpload } from '../vault.js';
+import { isExecutableExt, isOpenableExt, makeThumb, removeFiles, resolveVault, saveUpload, sweepVault } from '../vault.js';
 import { cleanup, makeApp } from './helpers.js';
 
 const HOST = { host: '127.0.0.1:4747' };
@@ -38,6 +39,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await app.close();
   cleanup(dataDir);
   for (const other of extra.splice(0)) {
@@ -507,6 +509,7 @@ test('vault copy deleted from disk → file/open/reveal 404 file_missing', async
 });
 
 test('a stored vault_path that points outside the vault is never served, opened or deleted', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => {}); // 실패 기록은 화면에 남기지 않는다
   const outside = path.join(dataDir, 'secret.txt');
   fs.writeFileSync(outside, 'secret');
   const star = insertStar(app.db, {
@@ -644,6 +647,7 @@ test('opener defaults to defaultOpener, which exposes open and reveal', async ()
 });
 
 test('opener failure → 500 open_failed, server keeps working', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => {}); // 실패 기록은 화면에 남기지 않는다
   const failing = await makeApp({
     opener: {
       open: () => { throw new Error('boom'); },
@@ -677,7 +681,11 @@ test('parseFileName keeps only the last path segment and a safe extension', () =
 test('openerCommand never goes through a shell and keeps odd paths as one argument', () => {
   const env = { SystemRoot: 'C:\\Windows' };
   const odd = 'C:\\Users\\전 현우\\a&b %PATH% ^x\\vault\\id.pdf';
-  expect(openerCommand('open', odd, 'win32', env)).toEqual({ cmd: 'C:\\Windows\\explorer.exe', args: [odd], options: {} });
+  expect(openerCommand('open', odd, 'win32', env)).toEqual({
+    cmd: 'C:\\Windows\\explorer.exe',
+    args: [`"${odd}"`],
+    options: { windowsVerbatimArguments: true },
+  });
   expect(openerCommand('reveal', odd, 'win32', env)).toEqual({
     cmd: 'C:\\Windows\\explorer.exe',
     args: [`/select,"${odd}"`],
@@ -691,4 +699,418 @@ test('openerCommand never goes through a shell and keeps odd paths as one argume
   for (const bad of ['', null, undefined, 'a\u0000b']) {
     expect(() => openerCommand('open', bad, 'win32', env), String(bad)).toThrow();
   }
+});
+
+// ---- 열기 허용 목록 ----
+
+test('open uses an allowlist: only known document/media/archive types open, the rest are revealed', async () => {
+  const table = [
+    ['A.PDF', 'open'], ['사진.png', 'open'], ['notes.md', 'open'], ['보고서.hwp', 'open'], ['clip.MKV', 'open'],
+    ['pack.zip', 'open'], ['archive.tar.gz', 'open'], ['sheet.xlsx', 'open'],
+    ['a.pdf.exe', 'reveal'], ['README', 'reveal'], ['macro.docm', 'reveal'], ['site.url', 'reveal'],
+    ['page.html', 'reveal'], ['pic.svg', 'reveal'], ['x.htm', 'reveal'], ['data.xml', 'reveal'], ['s.lnk', 'reveal'],
+    ['disk.iso', 'reveal'], ['run.py', 'reveal'], ['run.ps1', 'reveal'], ['book.xlsm', 'reveal'], ['이름.한글', 'reveal'],
+    ['help.chm', 'reveal'], ['unknown.xyz', 'reveal'],
+  ];
+  const { created } = await uploadOk(table.map(([name], i) => file(name, `content ${i}`)));
+  expect(created).toHaveLength(table.length);
+  for (const [i, [name, expected]] of table.entries()) {
+    const res = await call('POST', `/api/stars/${created[i].id}/open`);
+    expect(res.statusCode, name).toBe(200);
+    expect(res.json(), name).toEqual({ action: expected === 'open' ? 'opened' : 'revealed' });
+    expect(opened.at(-1)[0], name).toBe(expected);
+    expect(opened.at(-1)[1], name).toBe(path.join(dataDir, dbRow(created[i].id).vault_path));
+  }
+  expect(opened).toHaveLength(table.length);
+});
+
+test('isOpenableExt lists exactly the allowed extensions, any case', () => {
+  const allowed = [
+    'png jpg jpeg gif webp bmp tif tiff heic avif ico',
+    'pdf txt md csv log json rtf doc docx xls xlsx ppt pptx hwp hwpx odt ods odp epub',
+    'mp3 wav m4a flac ogg aac mp4 mov mkv webm avi m4v',
+    'zip 7z rar tar gz',
+  ].join(' ').split(' ');
+  for (const ext of allowed) {
+    expect(isOpenableExt(ext), ext).toBe(true);
+    expect(isOpenableExt(ext.toUpperCase()), ext).toBe(true);
+  }
+  const denied = 'svg html htm xml url lnk scf chm docm xlsm pptm iso img js py ps1 exe bat cmd msi jar sh vbs hta reg'.split(' ');
+  for (const ext of [...denied, '', 'pdf ', '.pdf', 'constructor', 'toString', undefined, null, 5]) {
+    expect(isOpenableExt(ext), String(ext)).toBe(false);
+  }
+});
+
+// ---- 올리기 상한 · 부분 성공 ----
+
+test('file-count limit → 200 with what was saved and a too_many entry', async () => {
+  const small = await makeApp({ maxFiles: 3, opener: fakeOpener([]) });
+  extra.push(small);
+  const p = createPlanet(small.app.db, { name: 'p' });
+  const res = await upload(
+    [file('1.txt', 'one'), file('2.txt', 'two'), file('3.txt', 'three'), file('4.txt', 'four'), file('5.txt', 'five')],
+    { planet_id: p.id, target: small.app },
+  );
+  expect(res.statusCode, res.body).toBe(200);
+  const { created, skipped } = res.json();
+  expect(created.map((s) => s.file_name)).toEqual(['1.txt', '2.txt', '3.txt']);
+  expect(skipped).toEqual([{ file_name: null, reason: 'too_many' }]);
+  expect(starCount(small.app)).toBe(3);
+  expect(vaultFiles(small.dataDir)).toEqual(created.map((s) => `${s.id}.txt`).sort());
+
+  // 꼭 상한만큼이면 걸리지 않는다.
+  const exact = await upload([file('6.txt', 'six'), file('7.txt', 'seven'), file('8.txt', 'eight')], { planet_id: p.id, target: small.app });
+  expect(exact.json().skipped).toEqual([]);
+  expect(exact.json().created).toHaveLength(3);
+});
+
+test('default file-count limit is 500', async () => {
+  expect(app.config.maxFiles).toBe(500);
+});
+
+// 이름이 boom 으로 시작하는 파일은 DB 에 넣을 때 실패하게 한다.
+function failInsertsNamedBoom(target = app) {
+  target.db.exec(`CREATE TRIGGER boom BEFORE INSERT ON stars WHEN NEW.file_name LIKE 'boom%'
+    BEGIN SELECT RAISE(ABORT, 'boom'); END;`);
+}
+
+test('unexpected error after some files were saved → 200, failed file listed, later files still saved', async () => {
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+  failInsertsNamedBoom();
+  const res = await upload([file('a.txt', 'aaa'), file('boom.txt', 'bbb'), file('c.txt', 'ccc')]);
+  expect(res.statusCode, res.body).toBe(200);
+  const { created, skipped } = res.json();
+  expect(created.map((s) => s.file_name)).toEqual(['a.txt', 'c.txt']);
+  expect(skipped).toEqual([{ file_name: 'boom.txt', reason: 'failed' }]);
+  expect(starCount()).toBe(2);
+  // 실패한 파일의 사본은 남지 않는다.
+  expect(vaultFiles()).toEqual(created.map((s) => `${s.id}.txt`).sort());
+  expect(errors).toHaveBeenCalled();
+  expect(String(errors.mock.calls[0][0])).toContain('boom.txt');
+});
+
+test('unexpected error with nothing saved → 500 server_error, nothing left in the vault', async () => {
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+  failInsertsNamedBoom();
+  const res = await upload([file('boom.txt', 'bbb'), file('boom2.png', await png(), 'image/png')]);
+  expect(res.statusCode).toBe(500);
+  expect(res.json()).toEqual({ error: 'server_error' });
+  expect(starCount()).toBe(0);
+  expect(vaultFiles()).toEqual([]);
+  expect(thumbFiles()).toEqual([]);
+  expect(errors).toHaveBeenCalled();
+  // 서버는 계속 돈다.
+  expect((await uploadOk([file('ok.txt', 'ok')])).created).toHaveLength(1);
+});
+
+test('memo over 20000 characters or truncated → 400 invalid_memo before any file is written', async () => {
+  const ok = await uploadOk([file('ok.txt', 'ok')], { memo: '가'.repeat(20000) });
+  expect(ok.created[0].memo).toBe('가'.repeat(20000));
+
+  for (const memo of ['가'.repeat(20001), 'x'.repeat(1024 * 1024 + 10)]) {
+    const res = await upload([file('a.txt', 'aaa'), file('b.txt', 'bbb')], { memo });
+    expect(res.statusCode, String(memo.length)).toBe(400);
+    expect(res.json()).toEqual({ error: 'invalid_memo' });
+  }
+  expect(starCount()).toBe(1);
+  expect(vaultFiles()).toHaveLength(1);
+});
+
+test('titles are trimmed and cut to 200 characters; truncated titles field → 400 invalid_titles', async () => {
+  const { created } = await uploadOk(
+    [file('a.txt', '1'), file('b.txt', '2'), file('c.txt', '3')],
+    { titles: [`  ${'별'.repeat(250)}  `, '   ', `${'x'.repeat(199)} 뒤`] },
+  );
+  expect(created[0].title).toBe('별'.repeat(200));
+  expect(created[1].title).toBe('b');
+  expect(created[2].title).toBe('x'.repeat(199)); // 자른 뒤 끝에 남은 공백도 뗀다
+
+  const huge = JSON.stringify(['y'.repeat(1024 * 1024 + 10)]);
+  const res = await upload([file('d.txt', '4')], { titles: huge });
+  expect(res.statusCode).toBe(400);
+  expect(res.json()).toEqual({ error: 'invalid_titles' });
+  expect(starCount()).toBe(3);
+  expect(vaultFiles()).toHaveLength(3);
+});
+
+// ---- Range ----
+
+function getRange(id, range) {
+  return app.inject({ method: 'GET', url: `/api/stars/${id}/file`, headers: { ...HOST, range } });
+}
+
+test('GET file supports a single byte range', async () => {
+  const { created } = await uploadOk([file('clip.mp4', '0123456789', 'video/mp4')]);
+  const { id } = created[0];
+
+  const full = await call('GET', `/api/stars/${id}/file`);
+  expect(full.statusCode).toBe(200);
+  expect(full.headers['accept-ranges']).toBe('bytes');
+  expect(full.headers['content-range']).toBeUndefined();
+
+  const cases = [
+    ['bytes=2-5', '2345', 'bytes 2-5/10'],
+    ['bytes=0-0', '0', 'bytes 0-0/10'],
+    ['bytes=7-', '789', 'bytes 7-9/10'],
+    ['bytes=-3', '789', 'bytes 7-9/10'],
+    ['bytes=-100', '0123456789', 'bytes 0-9/10'],
+    ['bytes=5-999', '56789', 'bytes 5-9/10'],
+    ['bytes=0-', '0123456789', 'bytes 0-9/10'],
+  ];
+  for (const [range, body, contentRange] of cases) {
+    const res = await getRange(id, range);
+    expect(res.statusCode, range).toBe(206);
+    expect(res.body, range).toBe(body);
+    expect(res.headers['content-range'], range).toBe(contentRange);
+    expect(res.headers['content-length'], range).toBe(String(body.length));
+    expect(res.headers['accept-ranges']).toBe('bytes');
+    expect(res.headers['content-type']).toBe('video/mp4');
+  }
+});
+
+test('GET file: unsatisfiable range → 416 with Content-Range: bytes */size', async () => {
+  const { created } = await uploadOk([file('clip.mp4', '0123456789', 'video/mp4'), file('empty.mp4', '', 'video/mp4')]);
+  for (const range of ['bytes=10-', 'bytes=10-20', 'bytes=999-', 'bytes=-0']) {
+    const res = await getRange(created[0].id, range);
+    expect(res.statusCode, range).toBe(416);
+    expect(res.headers['content-range'], range).toBe('bytes */10');
+    expect(res.json()).toEqual({ error: 'range_not_satisfiable' });
+  }
+  const empty = await getRange(created[1].id, 'bytes=0-');
+  expect(empty.statusCode).toBe(416);
+  expect(empty.headers['content-range']).toBe('bytes */0');
+});
+
+test('GET file: multi-range or malformed Range is ignored → 200 full body', async () => {
+  const { created } = await uploadOk([file('clip.mp4', '0123456789', 'video/mp4')]);
+  for (const range of ['bytes=0-1,3-4', 'bytes=5-2', 'bytes=-', 'bytes=abc', 'items=0-3', 'bytes=1-2-3', '', 'bytes=99999999999999999999-']) {
+    const res = await getRange(created[0].id, range);
+    expect(res.statusCode, range).toBe(200);
+    expect(res.body, range).toBe('0123456789');
+    expect(res.headers['content-length'], range).toBe('10');
+    expect(res.headers['content-range'], range).toBeUndefined();
+  }
+});
+
+test('parseRange', () => {
+  expect(parseRange(undefined, 10)).toBeNull();
+  expect(parseRange('bytes=0-4', 10)).toEqual({ start: 0, end: 4 });
+  expect(parseRange(' bytes=4- ', 10)).toEqual({ start: 4, end: 9 });
+  expect(parseRange('bytes=-4', 10)).toEqual({ start: 6, end: 9 });
+  expect(parseRange('bytes=10-', 10)).toBe('unsatisfiable');
+  expect(parseRange('bytes=0-1, 2-3', 10)).toBeNull();
+});
+
+// ---- 시작할 때 청소 ----
+
+const UUID_A = '11111111-1111-4111-8111-111111111111';
+const UUID_B = '22222222-2222-4222-8222-222222222222';
+const UUID_C = '33333333-3333-4333-8333-333333333333';
+
+function put(sub, name, { ageMs = 0 } = {}) {
+  const abs = path.join(dataDir, sub, name);
+  fs.writeFileSync(abs, 'x');
+  const t = new Date(Date.now() - ageMs);
+  fs.utimesSync(abs, t, t);
+  return abs;
+}
+
+const HOURS = 60 * 60 * 1000;
+
+test('startup removes leftover vault/.tmp-* files', async () => {
+  await app.close();
+  put('vault', `.tmp-${UUID_A}`);
+  put('vault', '.tmp-old', { ageMs: 30 * HOURS });
+  put('vault', 'tmp-not-ours.txt', { ageMs: 30 * HOURS });
+  put('thumbs', '.tmp-in-thumbs', { ageMs: 30 * HOURS });
+  fs.mkdirSync(path.join(dataDir, 'vault', '.tmp-folder'));
+
+  app = buildApp({ dataDir, opener: fakeOpener(opened) });
+  await app.ready();
+  expect(vaultFiles()).toEqual(['.tmp-folder', 'tmp-not-ours.txt']);
+  expect(thumbFiles()).toEqual(['.tmp-in-thumbs']);
+});
+
+test('startup removes only old orphans that match the vault naming pattern', async () => {
+  const buf = await png();
+  const { created } = await uploadOk([file('keep.png', buf, 'image/png'), file('keep', 'no ext')]);
+  const [img, bare] = created;
+  await app.close();
+
+  // 별이 있는 파일은 오래됐어도 남는다.
+  const old = new Date(Date.now() - 48 * HOURS);
+  for (const rel of [`vault/${img.id}.png`, `thumbs/${img.id}.webp`, `vault/${bare.id}`]) {
+    fs.utimesSync(path.join(dataDir, rel), old, old);
+  }
+  const kept = [
+    put('vault', 'notes.txt', { ageMs: 48 * HOURS }), // 사용자가 넣어 둔 파일
+    put('vault', `${UUID_A}.pdf.bak`, { ageMs: 48 * HOURS }), // 모양이 다르다
+    put('vault', `x${UUID_A}.pdf`, { ageMs: 48 * HOURS }),
+    put('vault', `copy of ${UUID_A}.pdf`, { ageMs: 48 * HOURS }),
+    put('vault', `${UUID_B}.pdf`, { ageMs: 10 * 60 * 1000 }), // 주인이 없지만 1시간이 안 됐다
+    put('thumbs', `${UUID_B}.webp`),
+    put('thumbs', `${UUID_A}.png`, { ageMs: 48 * HOURS }), // thumbs 는 .webp 만
+    put('thumbs', 'notes.txt', { ageMs: 48 * HOURS }),
+  ];
+  fs.mkdirSync(path.join(dataDir, 'vault', UUID_C)); // 폴더는 건드리지 않는다
+  fs.utimesSync(path.join(dataDir, 'vault', UUID_C), old, old);
+  const gone = [
+    put('vault', `${UUID_A}.pdf`, { ageMs: 2 * HOURS }),
+    put('vault', UUID_B, { ageMs: 48 * HOURS }),
+    put('thumbs', `${UUID_A}.webp`, { ageMs: 2 * HOURS }),
+  ];
+
+  app = buildApp({ dataDir, opener: fakeOpener(opened) });
+  await app.ready();
+  for (const abs of kept) expect(fs.existsSync(abs), abs).toBe(true);
+  for (const abs of gone) expect(fs.existsSync(abs), abs).toBe(false);
+  expect(fs.existsSync(path.join(dataDir, 'vault', UUID_C))).toBe(true);
+  for (const rel of [`vault/${img.id}.png`, `thumbs/${img.id}.webp`, `vault/${bare.id}`]) {
+    expect(fs.existsSync(path.join(dataDir, rel)), rel).toBe(true);
+  }
+  expect((await call('GET', `/api/stars/${img.id}/file`)).statusCode).toBe(200);
+});
+
+test('sweepVault reports what it removed and survives a missing folder', () => {
+  put('vault', '.tmp-x');
+  put('vault', `${UUID_A}.txt`, { ageMs: 2 * HOURS });
+  put('vault', `${UUID_B}.txt`, { ageMs: 2 * HOURS });
+  expect(sweepVault(dataDir, (id) => id === UUID_B)).toEqual({ tmp: 1, orphans: 1 });
+  expect(vaultFiles()).toEqual([`${UUID_B}.txt`]);
+
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+  expect(sweepVault(path.join(dataDir, 'nope'), () => false)).toEqual({ tmp: 0, orphans: 0 });
+  expect(errors).toHaveBeenCalled();
+});
+
+// ---- 빈 파일 ----
+
+test('empty files are never duplicates: two empty files → two stars with no hash', async () => {
+  const { created, skipped } = await uploadOk([file('empty1.txt', ''), file('empty2.log', '')]);
+  expect(skipped).toEqual([]);
+  expect(created.map((s) => [s.file_name, s.file_size])).toEqual([['empty1.txt', 0], ['empty2.log', 0]]);
+  for (const star of created) expect(dbRow(star.id).file_hash).toBeNull();
+
+  const again = await uploadOk([file('empty3.txt', '')]);
+  expect(again.skipped).toEqual([]);
+  expect(again.created).toHaveLength(1);
+  expect(starCount()).toBe(3);
+  expect(vaultFiles()).toHaveLength(3);
+});
+
+// ---- Windows 열기 명령 ----
+
+test('windows open/reveal commands quote the path verbatim and reject double quotes', () => {
+  const env = { SystemRoot: 'D:\\WinDir' };
+  const paths = [
+    'C:\\data\\a,b.pdf',
+    'C:\\Users\\전 현우\\spaceLog\\vault\\id.pdf',
+    'C:\\a&b\\100%done (final)\\%PATH%\\^x,y.png',
+    'C:\\한글,쉼표\\파일 (1).hwp',
+  ];
+  for (const p of paths) {
+    expect(windowsOpenCommand(p, env)).toEqual({
+      cmd: 'D:\\WinDir\\explorer.exe',
+      args: [`"${p}"`],
+      options: { windowsVerbatimArguments: true },
+    });
+    expect(windowsRevealCommand(p, env)).toEqual({
+      cmd: 'D:\\WinDir\\explorer.exe',
+      args: [`/select,"${p}"`],
+      options: { windowsVerbatimArguments: true },
+    });
+    expect(openerCommand('open', p, 'win32', env)).toEqual(windowsOpenCommand(p, env));
+    expect(openerCommand('reveal', p, 'win32', env)).toEqual(windowsRevealCommand(p, env));
+  }
+  expect(windowsOpenCommand('C:\\a.pdf', {}).cmd).toBe('C:\\Windows\\explorer.exe');
+  for (const bad of ['C:\\a" /root,"C:\\b', '"', '', null, undefined, 'a\u0000b']) {
+    expect(() => windowsOpenCommand(bad, env), String(bad)).toThrow();
+    expect(() => windowsRevealCommand(bad, env), String(bad)).toThrow();
+    expect(() => openerCommand('open', bad, 'win32', env), String(bad)).toThrow();
+  }
+});
+
+// ---- 내보내기 정책 · 이름 ----
+
+test('GET file sends a Content-Security-Policy: locked down for attachments and text, media-only for viewable types', async () => {
+  const { created } = await uploadOk([
+    file('page.html', '<script>alert(1)</script>', 'text/html'),
+    file('pic.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>', 'image/svg+xml'),
+    file('note.txt', '메모', 'text/plain'),
+    file('data.json', '{}', 'application/json'),
+    file('bin', 'raw'),
+    file('a.pdf', '%PDF-1.4', 'application/pdf'),
+    file('a.png', await png(), 'image/png'),
+    file('a.mp3', 'ID3', 'audio/mpeg'),
+    file('a.mp4', 'ftyp', 'video/mp4'),
+  ]);
+  const csp = async (i, range) => (await (range ? getRange(created[i].id, range) : call('GET', `/api/stars/${created[i].id}/file`)))
+    .headers['content-security-policy'];
+  for (const i of [0, 1, 2, 3, 4]) {
+    expect(await csp(i), created[i].file_name).toBe("sandbox; default-src 'none'");
+  }
+  for (const i of [5, 6, 7, 8]) {
+    const value = await csp(i);
+    expect(value, created[i].file_name).toMatch(/^default-src 'none';/);
+    expect(value).not.toMatch(/sandbox/);
+    expect(value).not.toMatch(/script-src|unsafe-eval|\*|https?:/);
+  }
+  expect(await csp(8, 'bytes=0-1')).toMatch(/^default-src 'none';/);
+  expect(await csp(0, 'bytes=0-1')).toBe("sandbox; default-src 'none'");
+});
+
+test('parseFileName strips bidi controls and C1 control characters', () => {
+  // U+202E 로 뒤집어 "exe.pdf" 가 "fdp.exe" 처럼 보이게 하는 이름
+  expect(parseFileName('invoice\u202Efdp.exe')).toEqual({ fileName: 'invoicefdp.exe', ext: 'exe', stem: 'invoicefdp' });
+  const all = '\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069\u200E\u200F\u0080\u0085\u009F';
+  expect(parseFileName(`a${all}b.t${all}xt`)).toEqual({ fileName: 'ab.txt', ext: 'txt', stem: 'ab' });
+  expect(parseFileName(all)).toEqual({ fileName: 'untitled', ext: '', stem: 'untitled' });
+  // 보이는 글자는 그대로
+  expect(parseFileName('한글 ü é.pdf').fileName).toBe('한글 ü é.pdf');
+});
+
+test('image star only when both the MIME type and the extension say raster image', async () => {
+  const buf = await png();
+  const { created } = await uploadOk([
+    file('h.html', buf, 'image/png'),
+    file('pic.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>', 'image/svg+xml'),
+    file('noext', Buffer.concat([buf, Buffer.from('1')]), 'image/png'),
+    file('photo.png', Buffer.concat([buf, Buffer.from('2')]), 'application/octet-stream'),
+    file('real.PNG', Buffer.concat([buf, Buffer.from('3')]), 'IMAGE/PNG'),
+  ]);
+  expect(created.map((s) => [s.file_name, s.type, s.has_thumb])).toEqual([
+    ['h.html', 'file', false],
+    ['pic.svg', 'file', false],
+    ['noext', 'file', false],
+    ['photo.png', 'file', false],
+    ['real.PNG', 'image', true],
+  ]);
+  expect(thumbFiles()).toEqual([`${created[4].id}.webp`]);
+
+  for (const ext of 'png jpg jpeg gif webp bmp avif tif tiff heic'.split(' ')) {
+    expect(isImageUpload('image/whatever', ext), ext).toBe(true);
+    expect(isImageUpload('application/octet-stream', ext), ext).toBe(false);
+  }
+  for (const ext of ['svg', 'ico', 'html', '', undefined]) expect(isImageUpload('image/png', ext), String(ext)).toBe(false);
+});
+
+// ---- 정리 실패 기록 ----
+
+test('a failing vault cleanup is logged with the star id and the delete still succeeds', async () => {
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const other = createPlanet(app.db, { name: '지울 행성' });
+  const one = (await uploadOk([file('a.txt', 'aaa')])).created[0];
+  const two = (await uploadOk([file('b.txt', 'bbb'), file('c.txt', 'ccc')], { planet_id: other.id })).created;
+  app.removeStarFiles = async () => { throw new Error('disk says no'); };
+
+  expect((await call('DELETE', `/api/stars/${one.id}`)).statusCode).toBe(204);
+  expect(dbRow(one.id)).toBeUndefined();
+  expect(errors).toHaveBeenCalledTimes(1);
+  expect(String(errors.mock.calls[0][0])).toContain(one.id);
+  expect(errors.mock.calls[0][1]).toBeInstanceOf(Error);
+
+  expect((await call('DELETE', `/api/planets/${other.id}?stars=delete`)).statusCode).toBe(204);
+  expect(errors).toHaveBeenCalledTimes(3);
+  const logged = errors.mock.calls.slice(1).map((c) => String(c[0])).join('\n');
+  for (const star of two) expect(logged).toContain(star.id);
 });

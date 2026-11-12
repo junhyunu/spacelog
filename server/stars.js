@@ -240,7 +240,8 @@ export function registerStars(app) {
     try {
       await app.removeStarFiles(row);
     } catch (err) {
-      app.log.error(err);
+      // logger: false 라 app.log 는 아무것도 남기지 않는다.
+      console.error(`removeStarFiles failed for star ${row.id}`, err);
     }
     return reply.code(204).send();
   });
