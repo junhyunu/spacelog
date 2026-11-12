@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<title>spaceLog · 3D 확인용(개발 전용)</title>
+<link rel="icon" href="data:,">
+</head>
+<body>
+<!--
+  개발 전용 확인 화면. index.html에서 연결하지 않고, 빌드(dist)에도 들어가지 않는다.
+  `npm run dev` 뒤 http://localhost:5173/dev-universe.html 로 연다.
+  가짜 행성 12개 · 별 40여 개를 그린다. API는 부르지 않는다.
+-->
+
+<div id="stage"></div>
+
+<div id="help" class="card big">
+  <b class="ht">개발 전용 · 3D 확인 화면</b>
+  <div class="keys"><span><kbd>WASD</kbd>비행</span><span><kbd>Space</kbd><kbd>Shift</kbd>상승·하강</span><span><kbd>드래그</kbd>시점</span><span><kbd>E</kbd>착륙</span></div>
+</div>
+
+<div id="brand" class="card">
+  <h1>space<span>Log</span></h1>
+  <div class="stats">개발 전용 · 가짜 데이터</div>
+  <div class="brow" id="devButtons"></div>
+</div>
+
+<button type="button" id="near" class="btn" hidden></button>
+
+<div id="toast" class="card" role="status" aria-live="polite" hidden></div>
+
+<script type="module" src="/src/three/dev.js"></script>
+</body>
+</html>
