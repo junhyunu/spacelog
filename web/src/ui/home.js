@@ -53,7 +53,7 @@ function paint({ summary, planets, recent, redis, now }) {
     redisEl.hidden = true;
     redisEl.textContent = '';
   } else {
-    const text = redis.type === 'text' ? redis.body : redis.memo;
+    const text = redis.body || redis.memo; // 본문이 있으면 본문, 없으면 메모
     redisEl.hidden = false;
     redisEl.innerHTML =
       `<div class="eyebrow">${num(daysAgo(redis.created_at, now))}일 전 오늘의 별</div>` +
@@ -90,7 +90,10 @@ function paint({ summary, planets, recent, redis, now }) {
     st.innerHTML =
       '<span class="eyebrow">빈 우주</span><h3>아직 별이 없어요</h3>' +
       '<p>파일을 끌어다 놓거나 기록하기를 눌러 첫 별을 띄워 보세요.</p>' +
-      `<div class="hrow"><button type="button" class="btn" data-act="log">${ico('plus')} 기록하기</button>${NEW_PLANET_BTN}</div>`;
+      // 두 버튼은 같은 크기. 주된 행동(기록하기)을 오른쪽 끝에 둔다
+      '<div class="hrow eq">' +
+      `<button type="button" class="btn ghost" id="hNewPlanet" data-act="newPlanet">${ico('plus', 16)} 새 행성</button>` +
+      `<button type="button" class="btn" data-act="log">${ico('plus', 16)} 기록하기</button></div>`;
     st.hidden = false;
   } else {
     st.hidden = true;

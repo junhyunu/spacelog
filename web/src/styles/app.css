@@ -40,6 +40,8 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 .rec{display:flex;gap:10px;align-items:center;text-align:left;font:600 14px var(--f-body);color:var(--ink);background:var(--white);border:2.5px solid var(--ink);border-radius:12px;padding:8px 10px;cursor:pointer}
 .rec .d{margin-left:auto;font:500 11.5px var(--f-mono);color:var(--mute);flex:none;font-variant-numeric:tabular-nums}
 .rec .t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rec .clip{flex:none;display:inline-flex;align-items:center;gap:2px;font:600 11.5px var(--f-mono);color:var(--mute);font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .rec.new{animation:flash 1.2s}
 @keyframes flash{0%,40%{background:var(--pink);color:var(--white)}}
 .detail{background:var(--panel-2);border:2.5px dashed var(--ink);border-radius:12px;padding:12px;font-size:14px;line-height:1.6}
@@ -93,6 +95,9 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 #hRedis h3{-webkit-line-clamp:2;line-clamp:2}
 #hRedis p{-webkit-line-clamp:3;line-clamp:3;white-space:pre-line}
 .hrow{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap}
+/* 빈 우주 카드의 두 버튼: 같은 높이 · 같은 너비 · 같은 글자 크기. 기록하기(주된 행동)가 오른쪽 */
+#hState .hrow.eq{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:min(100%,320px);margin-inline:auto}
+#hState .hrow.eq .btn{align-self:stretch;justify-content:center;min-width:0;min-height:46px;padding:8px 14px;font-size:15px;gap:6px}
 /* 카드가 3개보다 적을 때(재발견 없음 · 별 없는 행성만 있음) */
 @media (min-width:761px){
   .home-grid[data-n="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -263,6 +268,20 @@ body:has(#left:not([hidden])) #toast{top:calc(var(--tr-bottom,64px) + 12px)}
 }
 @media (min-width:1100px){
   body:has(#left:not([hidden])):has(#panel:not([hidden])) #toast{--tr:calc(var(--edge) + 380px + 12px)}
+}
+/* 1100px 아래에서 행성 패널이 열려 있으면: 위쪽은 패널이 차지하므로 패널 왼쪽 빈 자리의 아래(기록하기 줄 높이)에 뜬다.
+   왼쪽 패널(펼침)이 있어도 그 오른쪽에 들어갈 너비면 그 사이 가운데에 */
+@media (min-width:761px) and (max-width:1099.98px){
+  body:has(#left:not([hidden])):has(#panel:not([hidden])) #toast{--tl:var(--edge);--tr:calc(var(--edge) + 380px + 12px);top:auto;bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+}
+@media (min-width:1000px) and (max-width:1099.98px){
+  body:has(#side:not([hidden])):has(#panel:not([hidden])) #toast{--tl:calc(var(--edge) + 280px + 12px)}
+}
+/* 좁은 화면에서 왼쪽 서랍이 펼쳐져 있으면: 토스트는 화면 아래에 뜨고, 서랍은 그 위에서 끝난다(서로 덮지 않는다).
+   --toast-h는 toast.js가 넣는다 */
+@media (max-width:760px){
+  body:has(#left.drawer) #toast{top:auto;left:var(--edge);right:var(--edge);transform:none;margin-inline:auto;max-width:calc(100vw - 2 * var(--edge));bottom:calc(12px + env(safe-area-inset-bottom,0px))}
+  body:has(#left.drawer):has(#toast:not([hidden])) #left.drawer #side{bottom:calc(var(--toast-h,64px) + 24px + env(safe-area-inset-bottom,0px));border-bottom:var(--line) solid var(--ink);border-radius:0 var(--r-card) var(--r-card) 0}
 }
 /* 행성 패널이 열려 있으면 말풍선은 숨긴다(어느 너비에서나 패널과 겹친다). visibility라 ✕도 Tab으로 닿지 않는다 */
 body:has(#panel:not([hidden])) #wHint{visibility:hidden}
