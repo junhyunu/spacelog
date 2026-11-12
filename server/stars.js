@@ -214,7 +214,7 @@ export function registerStars(app) {
       params.limit = Number(limit);
     }
     const where = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
-    return starsToJson(db, db.prepare(`SELECT * FROM stars ${where} ORDER BY created_at DESC, id DESC ${tail}`).all(params));
+    return starsToJson(db, db.prepare(`SELECT * FROM stars ${where} ORDER BY created_at DESC, rowid DESC ${tail}`).all(params));
   });
 
   app.get('/api/stars/:id', async (req, reply) => {
