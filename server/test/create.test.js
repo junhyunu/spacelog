@@ -1,6 +1,7 @@
 // POST /api/stars — 글 + 첨부 파일 + 링크 → 별 하나 (spec 6-9)
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import sharp from 'sharp';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -47,8 +48,8 @@ const png = (color = '#ff0000', size = 1) =>
   sharp({ create: { width: size, height: size, channels: 3, background: color } }).png().toBuffer();
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
-// 글 필드를 먼저, 파일을 뒤에 보낸다.
-function send(fields, files = [], { target = app, end = true } = {}) {
+// 글 필드를 먼저, 파일을 뒤에 둔 multipart 조각들.
+function partsOf(fields, files) {
   const parts = [];
   const all = { planet_id: planet.id, ...fields };
   for (const [k, v] of Object.entries(all)) {
@@ -56,8 +57,40 @@ function send(fields, files = [], { target = app, end = true } = {}) {
     parts.push(['field', k, k === 'links' && typeof v !== 'string' ? JSON.stringify(v) : v]);
   }
   parts.push(...files);
-  const { payload, contentType } = multipartBody(parts, { end });
+  return parts;
+}
+
+function send(fields, files = [], { target = app, end = true } = {}) {
+  const { payload, contentType } = multipartBody(partsOf(fields, files), { end });
   return target.inject({ method: 'POST', url: '/api/stars', headers: { ...HOST, 'content-type': contentType }, payload });
+}
+
+// 실제 소켓(임시 포트)으로 보내되 본문을 끝내지 않는다(inject 는 본문을 다 모은 뒤에야 넘긴다).
+// 서버가 남은 본문을 기다리지 않고 바로 답해야 응답이 온다. → { statusCode, body }
+async function sendUnfinished(fields, files = []) {
+  if (!app.server.listening) await app.listen({ port: 0, host: '127.0.0.1' });
+  const { port } = app.server.address();
+  const { payload, contentType } = multipartBody(partsOf(fields, files), { end: false });
+  return new Promise((resolve, reject) => {
+    const req = http.request({
+      host: '127.0.0.1', port, method: 'POST', path: '/api/stars', agent: false,
+      headers: { ...HOST, 'content-type': contentType },
+    }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        clearTimeout(timer);
+        req.destroy();
+        resolve({ statusCode: res.statusCode, body: JSON.parse(Buffer.concat(chunks).toString('utf8')) });
+      });
+    });
+    const timer = setTimeout(() => {
+      req.destroy();
+      reject(new Error('no response while the body was still open: the server waited for the rest'));
+    }, 3000);
+    req.on('error', () => {});
+    req.write(payload); // req.end() 는 부르지 않는다.
+  });
 }
 
 async function sendOk(fields, files, opts) {
@@ -243,6 +276,37 @@ test('more than 50 attachments (files + links) → 400 too_many_attachments, not
   expect(vaultFiles()).toHaveLength(40);
 });
 
+test('the attachment that goes over 50 stops the upload at once: 400 too_many_attachments without reading the rest', async () => {
+  const cases = [
+    [{ body: '본문' }, Array.from({ length: 51 }, (_, i) => file(`f${i}.txt`, `c${i}`))],
+    [{ links: Array.from({ length: 45 }, (_, i) => `https://example.com/${i}`) }, Array.from({ length: 6 }, (_, i) => file(`g${i}.txt`, `d${i}`))],
+  ];
+  for (const [fields, files] of cases) {
+    // 51번째 첨부 뒤에도 본문이 끝나지 않는다. 서버는 기다리지 않고 답한다.
+    const res = await sendUnfinished(fields, files);
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: 'too_many_attachments' });
+    expect(count('stars')).toBe(0);
+    expect(count('attachments')).toBe(0);
+    expect(vaultFiles()).toEqual([]);
+    expect(thumbFiles()).toEqual([]);
+  }
+});
+
+test('duplicate links in one request (after trimming) are kept once, first one first', async () => {
+  const links = ['https://example.com/a', ' https://example.com/a ', 'https://example.com/b', 'https://example.com/a'];
+  const json = await postJson({ planet_id: planet.id, links });
+  expect(json.statusCode, json.body).toBe(201);
+  expect(json.json().star.attachments.map((a) => [a.position, a.url])).toEqual([[0, 'https://example.com/a'], [1, 'https://example.com/b']]);
+  const multi = await sendOk({ links }, [file('a.txt', 'a')]);
+  expect(multi.star.attachments.map((a) => a.file_name ?? a.url)).toEqual(['a.txt', 'https://example.com/a', 'https://example.com/b']);
+  expect(fetched).toEqual(['https://example.com/a', 'https://example.com/b', 'https://example.com/a', 'https://example.com/b']);
+  // 같은 주소 51개는 첨부 하나다.
+  const same = await postJson({ planet_id: planet.id, links: Array(51).fill('https://example.com/same') });
+  expect(same.statusCode, same.body).toBe(201);
+  expect(same.json().star.attachment_count).toBe(1);
+});
+
 test('a file already in another star is skipped as duplicate and the star still saves', async () => {
   const first = await sendOk({}, [file('a.txt', 'same bytes')]);
   const before = vaultFiles();
@@ -334,6 +398,29 @@ test('has_thumb / thumb_attachment_id point at the first image attachment that h
   expect(star.thumb_attachment_id).toBe(star.attachments[2].id);
 });
 
+test('link first, image second → type link, but the thumbnail is the image attachment', async () => {
+  // 만들기 경로는 파일을 링크보다 앞에 두므로 DB 에 직접 넣는다.
+  const imageId = crypto.randomUUID();
+  await sharp(await png('#123456', 8)).webp().toFile(path.join(dataDir, 'thumbs', `${imageId}.webp`));
+  const made = insertStar(app.db, {
+    title: '링크 먼저', planet_id: planet.id,
+    attachments: [
+      { kind: 'link', url: 'https://example.com', link_title: '예시' },
+      { id: imageId, kind: 'image', file_name: 'p.png', file_ext: 'PNG', file_size: 1, vault_path: `vault/${imageId}.png`, thumb_path: `thumbs/${imageId}.webp` },
+    ],
+  });
+  const star = (await call('GET', `/api/stars/${made.id}`)).json();
+  expect(star.type).toBe('link');
+  expect(star.attachments.map((a) => [a.kind, a.position, a.has_thumb])).toEqual([['link', 0, false], ['image', 1, true]]);
+  expect(star.has_thumb).toBe(true);
+  expect(star.thumb_attachment_id).toBe(imageId);
+  expect((await call('GET', '/api/stars')).json()[0].thumb_attachment_id).toBe(imageId);
+  const thumb = await call('GET', `/api/attachments/${star.thumb_attachment_id}/thumb`);
+  expect(thumb.statusCode).toBe(200);
+  expect(thumb.headers['content-type']).toBe('image/webp');
+  expect((await sharp(thumb.rawPayload).metadata()).format).toBe('webp');
+});
+
 test('field checks: unknown planet, bad title/body/memo → 400 and nothing written', async () => {
   for (const planet_id of ['nope', '']) {
     const res = await send({ planet_id, body: '본문' }, [file('a.txt', 'a')]);
@@ -355,6 +442,27 @@ test('field checks: unknown planet, bad title/body/memo → 400 and nothing writ
   }
   const longMemo = await send({ body: '본문', memo: '가'.repeat(20001) }, [file('a.txt', 'a')]);
   expect(longMemo.json()).toEqual({ error: 'invalid_memo' });
+  expect(fetched).toEqual([]);
+  expect(count('stars')).toBe(0);
+  expect(vaultFiles()).toEqual([]);
+});
+
+test('a bad text field fails fast: answered before any file part is read, no file or temp file written', async () => {
+  const writes = vi.spyOn(fs, 'createWriteStream');
+  const cases = [
+    [{ planet_id: 'nope', body: '본문' }, 'unknown_planet'],
+    [{ body: '본문', links: 'not json' }, 'invalid_links'],
+    [{ body: '본문', links: ['ftp://example.com'] }, 'invalid_url'],
+    [{ body: 'a'.repeat(1024 * 1024 + 1) }, 'invalid_body'],
+    [{ body: '본문', memo: '가'.repeat(20001) }, 'invalid_memo'],
+    [{ links: Array.from({ length: 51 }, (_, i) => `https://example.com/${i}`) }, 'too_many_attachments'],
+  ];
+  for (const [fields, code] of cases) {
+    const res = await sendUnfinished(fields, [file('a.txt', 'a'), file('b.png', 'not read', 'image/png')]);
+    expect(res.statusCode, code).toBe(400);
+    expect(res.body).toEqual({ error: code });
+  }
+  expect(writes).not.toHaveBeenCalled();
   expect(fetched).toEqual([]);
   expect(count('stars')).toBe(0);
   expect(vaultFiles()).toEqual([]);

@@ -1,6 +1,10 @@
 import crypto from 'node:crypto';
 
 const TITLE_FROM_BODY_MAX = 40;
+const TITLE_MAX = 200;
+
+// 앞뒤 공백을 떼고 200자(코드 포인트)로 자른다(자른 뒤 끝에 남은 공백도 뗀다). 만들기 · 고치기 공통.
+export const cutTitle = (s) => [...s.trim()].slice(0, TITLE_MAX).join('').trim();
 
 /** 메모 글자 수(코드 포인트) 한도. 파일 올리기(files.js) · 화면(detailLogic.js)의 한도와 같다. */
 export const MEMO_MAX = 20000;
@@ -169,13 +173,14 @@ export function isHttpUrl(url) {
   }
 }
 
-// 수정 요청에서 있는 것만 검사한다. 빈 제목은 받지 않는다(400 invalid_title). 본문 · 첨부는 고치지 않는다.
+// 수정 요청에서 있는 것만 검사한다. 빈 제목은 받지 않는다(400 invalid_title), 긴 제목은 만들 때처럼 200자로 자른다.
+// 본문 · 첨부는 고치지 않는다.
 function parsePatch(db, body) {
   const src = body && typeof body === 'object' ? body : {};
   const out = {};
   if (src.title !== undefined) {
     if (typeof src.title !== 'string' || src.title.trim() === '') throw new ApiError(400, 'invalid_title');
-    out.title = src.title.trim();
+    out.title = cutTitle(src.title);
   }
   if (src.memo !== undefined) out.memo = checkMemo(src.memo);
   if (src.planet_id !== undefined) {

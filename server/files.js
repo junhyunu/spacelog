@@ -1,15 +1,17 @@
 import crypto from 'node:crypto';
 import multipart from '@fastify/multipart';
-import { ApiError, checkMemo, firstLine, insertStar, isHttpUrl, planetExists } from './stars.js';
+import { ApiError, checkMemo, cutTitle, firstLine, insertStar, isHttpUrl, planetExists } from './stars.js';
 import { makeThumb, removeFiles, saveUpload } from './vault.js';
 
 export { parseRange } from './attachments.js';
 
 const FILE_NAME_MAX = 200;
 const FALLBACK_NAME = 'untitled';
-const TITLE_MAX = 200;
 /** 본문 상한(UTF-8 바이트). multipart 글 필드 하나의 상한도 이것이다. */
 export const BODY_MAX_BYTES = 1024 * 1024;
+// JSON 만들기 요청의 본문 상한. 본문 한도를 조금 넘는 글이 413 이 아니라 라우트의 검사(400 invalid_body)를 받도록
+// 본문 한도보다 넉넉히 잡는다. 이보다 큰 JSON 은 읽기 전에 413 too_large.
+const JSON_BODY_LIMIT = Math.floor(BODY_MAX_BYTES * 1.5);
 /** 별 하나의 첨부(파일 + 링크) 상한. */
 export const MAX_ATTACHMENTS = 50;
 
@@ -53,9 +55,6 @@ export function parseFileName(raw) {
   return { fileName: name, ext, stem };
 }
 
-// 앞뒤 공백을 떼고 200자로 자른다(자른 뒤 끝에 남은 공백도 뗀다).
-const cutTitle = (s) => [...s.trim()].slice(0, TITLE_MAX).join('').trim();
-
 // 별 만들기의 글 필드를 검사해 정리한다(JSON · multipart 공통). 벗어나면 ApiError(400).
 // src = { planet_id, title?, body?, memo?, links?: string[] }
 function parseStarFields(db, src) {
@@ -73,7 +72,8 @@ function parseStarFields(db, src) {
   if (src.memo !== undefined && src.memo !== null) out.memo = checkMemo(src.memo);
   if (src.links !== undefined && src.links !== null) {
     if (!Array.isArray(src.links) || src.links.some((u) => typeof u !== 'string')) throw new ApiError(400, 'invalid_links');
-    out.links = src.links.map((u) => u.trim());
+    // 같은 주소(앞뒤 공백을 뗀 뒤 똑같은 것)는 처음 것 하나만 남긴다(파일과 같다).
+    out.links = [...new Set(src.links.map((u) => u.trim()))];
     if (out.links.some((u) => !isHttpUrl(u))) throw new ApiError(400, 'invalid_url');
     if (out.links.length > MAX_ATTACHMENTS) throw new ApiError(400, 'too_many_attachments');
   }
@@ -219,7 +219,8 @@ export function registerFiles(app) {
   // JSON { planet_id, title?, body?, links?: string[], memo? } 또는
   // multipart(글 필드 planet_id · title · body · links(JSON 문자열 배열) · memo 를 먼저, 그다음 파일 조각 files 여러 개).
   // 첨부 순서: 파일(올린 순서) 다음 링크(준 순서). → 201 { star, skipped: [{ file_name, reason }] }
-  app.post('/api/stars', async (req, reply) => {
+  // bodyLimit 은 JSON 본문에만 걸린다(multipart 는 흘려 읽는다).
+  app.post('/api/stars', { bodyLimit: JSON_BODY_LIMIT }, async (req, reply) => {
     const files = []; // 디스크에 쓴 첨부. 별을 남기지 못하면 모두 지운다.
     let linkTitles = Promise.resolve([]);
     try {
@@ -240,6 +241,13 @@ export function registerFiles(app) {
           // 파일을 받는 동안 링크 제목을 함께 가져온다.
           linkTitles = Promise.all(fields.links.map(linkTitleFor));
         };
+        // 더 읽을 필요가 없다(글 필드가 틀렸거나 첨부가 너무 많다). 남은 본문은 읽어서 버리기만 한다:
+        // 조각 해석기를 떼어 내고 연결에서 오는 것을 흘려보내, 기다리지 않고 바로 답한다.
+        const stopReading = (part) => {
+          req.raw.unpipe();
+          part.file.resume();
+          req.raw.resume();
+        };
         try {
           for await (const part of req.parts()) {
             if (part.type !== 'file') {
@@ -250,23 +258,27 @@ export function registerFiles(app) {
               }
               continue;
             }
-            if (!error && !fields && part.fieldname === 'files') {
+            // 첫 파일 조각이 오면 글 필드는 다 왔다. 파일을 읽기 전에 검사한다.
+            if (!fields) {
               try {
                 check();
               } catch (err) {
                 if (!(err instanceof ApiError)) throw err;
                 error = err;
+                stopReading(part);
+                break;
               }
             }
-            if (error || part.fieldname !== 'files') {
+            if (part.fieldname !== 'files') {
               part.file.resume();
               continue;
             }
             fileCount += 1;
             if (fields.links.length + fileCount > MAX_ATTACHMENTS) {
+              // 이미 쓴 파일은 아래 catch 에서 지운다.
               error = new ApiError(400, 'too_many_attachments');
-              part.file.resume();
-              continue;
+              stopReading(part);
+              break;
             }
             const res = await storePart(part, crypto.randomUUID(), (hash) => seen.has(hash) || hashExists(hash));
             if (res.attachment) {

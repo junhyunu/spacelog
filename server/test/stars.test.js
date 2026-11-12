@@ -339,6 +339,16 @@ test('patch title updates title and search_text; blank or non-string title → 4
   expect(dbRow(star.id).title).toBe('새 제목');
   expect(dbRow(star.id).memo).toBe('');
 
+  // 만들 때와 같은 규칙: 앞뒤 공백을 떼고 200자(코드 포인트)로 자른다.
+  const long = await call('PATCH', `/api/stars/${star.id}`, { title: `  ${'별'.repeat(250)}  ` });
+  expect(long.statusCode).toBe(200);
+  expect(long.json().title).toBe('별'.repeat(200));
+  const emoji = await call('PATCH', `/api/stars/${star.id}`, { title: '😀'.repeat(201) });
+  expect(emoji.json().title).toBe('😀'.repeat(200));
+  expect(dbRow(star.id).title).toBe('😀'.repeat(200));
+  expect(dbRow(star.id).search_text).toBe(`${'😀'.repeat(200)}\n본문`);
+  await call('PATCH', `/api/stars/${star.id}`, { title: '새 제목' });
+
   // 바꿀 것이 없으면 그대로 돌려준다. 다른 필드는 바뀌지 않는다.
   const noop = await call('PATCH', `/api/stars/${star.id}`, { body: '몰래 바꾸기', type: 'link', id: 'x', created_at: 'y' });
   expect(noop.statusCode).toBe(200);
@@ -508,9 +518,17 @@ test('a star literally named "rediscovery" or "summary" does not shadow those ro
 // --- 검토에서 나온 경우들 ---
 test('oversized, malformed and repeated inputs get { error: code }', async () => {
   const headers = { host: '127.0.0.1:4747', 'content-type': 'application/json' };
-  const big = await app.inject({ method: 'POST', url: '/api/stars', headers, payload: JSON.stringify({ body: 'a'.repeat(1100000) }) });
+  // 본문 한도(1MB)를 조금 넘는 JSON 은 라우트까지 와서 400 invalid_body 를 받는다.
+  for (const body of ['a'.repeat(1100000), '가'.repeat(400000)]) {
+    const over = await app.inject({ method: 'POST', url: '/api/stars', headers, payload: JSON.stringify({ planet_id: planet.id, body }) });
+    expect(over.statusCode).toBe(400);
+    expect(over.json()).toEqual({ error: 'invalid_body' });
+  }
+  // 그보다 훨씬 큰 JSON 은 읽기 전에 413 too_large.
+  const big = await app.inject({ method: 'POST', url: '/api/stars', headers, payload: JSON.stringify({ body: 'a'.repeat(1600000) }) });
   expect(big.statusCode).toBe(413);
   expect(big.json()).toEqual({ error: 'too_large' });
+  expect((await call('GET', '/api/stars')).json()).toEqual([]);
   const bad = await app.inject({ method: 'POST', url: '/api/stars', headers, payload: '{not json' });
   expect(bad.statusCode).toBe(400);
   expect(bad.json()).toEqual({ error: 'invalid_json' });
