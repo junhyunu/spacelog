@@ -50,9 +50,16 @@ const planetOf = (id = planetId) => store.state.planets.find((p) => same(p.id, i
 function thumb(star) {
   const kind = thumbKind(star);
   if (kind === 'thumb') {
-    return `<span class="th" aria-hidden="true"><img src="${esc(api.thumbUrl(star.id))}" alt="" loading="lazy" decoding="async" data-fallback="image"></span>`;
+    return `<span class="th" aria-hidden="true"><img src="${esc(api.attachmentThumbUrl(star.thumb_attachment_id))}" alt="" loading="lazy" decoding="async" data-fallback="image"></span>`;
   }
   return `<span class="th" aria-hidden="true">${ico(kind, 17)}</span>`;
+}
+
+// 첨부가 2개 이상이면 제목 옆에 작은 클립과 개수(스펙 6-9)
+function clip(star) {
+  const n = Number(star.attachment_count) || 0;
+  if (n < 2) return '';
+  return `<span class="clip" title="첨부 ${num(n)}개"><span class="sr">, 첨부 ${num(n)}개</span>${ico('paperclip', 13)}<span aria-hidden="true">${num(n)}</span></span>`;
 }
 
 function listHtml(planet, stars) {
@@ -64,7 +71,7 @@ function listHtml(planet, stars) {
       const fresh = (flashing.get(String(s.id)) ?? 0) > now;
       return (
         `<button type="button" class="rec${fresh ? ' new' : ''}" data-id="${esc(s.id)}" data-focus="star:${esc(s.id)}">` +
-        `${thumb(s)}<span class="t">${esc(s.title || '제목 없음')}</span><span class="d">${esc(shortDate(s.created_at))}</span></button>`
+        `${thumb(s)}<span class="t">${esc(s.title || '제목 없음')}</span>${clip(s)}<span class="d">${esc(shortDate(s.created_at))}</span></button>`
       );
     })
     .join('');

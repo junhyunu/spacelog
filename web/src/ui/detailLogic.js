@@ -22,22 +22,39 @@ export function kindLabel(type) {
   return Object.hasOwn(KINDS, type) ? KINDS[type] : '미확인';
 }
 
+/** 정보 칸의 종류: 담긴 것을 "글 · 이미지 2개 · 링크 1개"처럼. 아무것도 없으면 kindLabel(type). */
+export function contentLabel(star) {
+  const g = groupAttachments(star);
+  const parts = [];
+  if (typeof star?.body === 'string' && star.body.trim() !== '') parts.push('글');
+  if (g.images.length) parts.push(`이미지 ${g.images.length.toLocaleString('ko-KR')}개`);
+  if (g.files.length) parts.push(`파일 ${g.files.length.toLocaleString('ko-KR')}개`);
+  if (g.links.length) parts.push(`링크 ${g.links.length.toLocaleString('ko-KR')}개`);
+  return parts.length ? parts.join(' · ') : kindLabel(star?.type);
+}
+
 /**
- * 파일 미리보기의 "PDF · 1.2MB".
+ * 첨부 파일 줄의 "PDF · 1.2MB".
  * @returns {{ ext: string, size: string, text: string, unknown: boolean }} unknown이면 크기를 회색으로 쓴다
  */
-export function fileMeta(star) {
-  const ext = typeof star?.file_ext === 'string' && star.file_ext.trim() !== '' ? star.file_ext.trim() : '파일';
-  const n = star?.file_size;
+export function fileMeta(att) {
+  const ext = typeof att?.file_ext === 'string' && att.file_ext.trim() !== '' ? att.file_ext.trim() : '파일';
+  const n = att?.file_size;
   const unknown = typeof n !== 'number' || !Number.isFinite(n) || n < 0;
   const size = fileSize(unknown ? null : n);
   return { ext, size, text: `${ext} · ${size}`, unknown };
 }
 
-/** 미리보기 모양: 'image' | 'file' | 'link' | 'text'. 모르는 종류는 글로 본다. */
-export function previewKind(star) {
-  const type = star?.type;
-  return type === 'image' || type === 'file' || type === 'link' ? type : 'text';
+const BY_POSITION = (a, b) => (Number(a?.position) || 0) - (Number(b?.position) || 0);
+
+/** 별의 첨부를 보이는 묶음으로 가른다(각각 position 순). 받은 배열은 바꾸지 않는다. */
+export function groupAttachments(star) {
+  const list = Array.isArray(star?.attachments) ? [...star.attachments].filter(Boolean).sort(BY_POSITION) : [];
+  return {
+    images: list.filter((a) => a.kind === 'image'),
+    files: list.filter((a) => a.kind === 'file'),
+    links: list.filter((a) => a.kind === 'link'),
+  };
 }
 
 /** http · https 주소면 정리한 주소를, 아니면 null. href · window.open에 넣기 전에 거친다. */
@@ -55,22 +72,24 @@ export function safeHttpUrl(url) {
 }
 
 /**
- * 행동 버튼(스펙 5장 "사본이 없는 별").
+ * 첨부 하나의 행동 버튼(스펙 5장 · 6-9). 첨부 단위로 한다.
  * open: 'server'(보관함 사본을 서버가 연다) | 'tab'(새 탭) | null(버튼 없음), reveal: 폴더에서 보기 버튼
  */
-export function actionsFor(star) {
-  const type = star?.type;
-  if (type === 'image' || type === 'file') return { open: 'server', reveal: true };
-  if (type === 'link' && safeHttpUrl(star.url)) return { open: 'tab', reveal: false };
+export function actionsFor(att) {
+  const kind = att?.kind;
+  if (kind === 'image' || kind === 'file') return { open: 'server', reveal: true };
+  if (kind === 'link' && safeHttpUrl(att.url)) return { open: 'tab', reveal: false };
   return { open: null, reveal: false };
 }
 
-/** "이 별 지우기" 확인 창의 글. ask()에 그대로 넘긴다. */
+/** "이 별 지우기" 확인 창의 글(스펙 6-9). 보관함 사본이 있는 첨부(파일 · 이미지) 수를 센다. ask()에 그대로 넘긴다. */
 export function deleteCopy(star) {
-  const hasCopy = star?.type === 'file' || star?.type === 'image';
+  const copies = Array.isArray(star?.attachments) ? star.attachments.filter((a) => a?.kind === 'file' || a?.kind === 'image').length : 0;
   return {
     title: `별 '${star?.title || '제목 없음'}'을(를) 지울까요?`,
-    desc: hasCopy ? '기록과 보관함 복사본이 함께 지워져요. 되돌릴 수 없어요.' : '기록이 지워져요. 되돌릴 수 없어요.',
+    desc: copies
+      ? `기록과 첨부 파일 ${copies.toLocaleString('ko-KR')}개의 보관함 복사본이 함께 지워져요. 되돌릴 수 없어요.`
+      : '기록이 지워져요. 되돌릴 수 없어요.',
     confirmLabel: '지우기',
     confirmKind: 'pink',
   };

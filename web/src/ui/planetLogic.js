@@ -152,12 +152,13 @@ export function detailKey(star, planets) {
 }
 
 /**
- * 목록 썸네일의 종류. 'thumb'이면 실제 이미지 축소본(api.thumbUrl), 그 밖에는 아이콘 이름.
- * 이미지인데 축소본이 없으면 'image' 아이콘.
+ * 목록 썸네일의 종류(스펙 6-9). 'thumb'이면 첫 이미지 첨부의 축소본(api.attachmentThumbUrl(star.thumb_attachment_id)),
+ * 그 밖에는 type 아이콘 이름. 이미지인데 축소본이 없으면 'image' 아이콘.
  */
 export function thumbKind(star) {
+  if (star?.thumb_attachment_id !== null && star?.thumb_attachment_id !== undefined && star.thumb_attachment_id !== '') return 'thumb';
   const type = star?.type;
-  if (type === 'image') return star.has_thumb ? 'thumb' : 'image';
+  if (type === 'image') return 'image';
   if (type === 'link') return 'link';
   if (type === 'file') return 'file-text';
   return 'type';

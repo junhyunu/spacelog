@@ -221,14 +221,16 @@ describe('moveIndex (roving focus)', () => {
 
 describe('thumbKind', () => {
   test('image with a thumbnail → thumb', () => {
-    expect(thumbKind({ type: 'image', has_thumb: true })).toBe('thumb');
+    expect(thumbKind({ type: 'image', thumb_attachment_id: 'a1' })).toBe('thumb');
+    // 글 · 파일이 먼저여도 이미지 첨부의 축소본이 있으면 그것을 쓴다
+    expect(thumbKind({ type: 'file', thumb_attachment_id: 'a2' })).toBe('thumb');
   });
   test('image without a thumbnail → image icon', () => {
-    expect(thumbKind({ type: 'image', has_thumb: false })).toBe('image');
+    expect(thumbKind({ type: 'image', thumb_attachment_id: null })).toBe('image');
   });
   test('other types → their icon', () => {
     expect(thumbKind({ type: 'link' })).toBe('link');
-    expect(thumbKind({ type: 'file', has_thumb: true })).toBe('file-text');
+    expect(thumbKind({ type: 'file', thumb_attachment_id: null })).toBe('file-text');
     expect(thumbKind({ type: 'text' })).toBe('type');
     expect(thumbKind({})).toBe('type');
     expect(thumbKind(null)).toBe('type');

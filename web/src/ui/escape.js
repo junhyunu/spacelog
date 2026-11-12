@@ -3,9 +3,10 @@
 // 최종 순서(DESIGN.md 9-4 + 스펙):
 //   확인 창            confirm.js가 document 캡처 단계에서 직접 받고 전파를 끊는다 → 여기까지 오지 않는다
 //   행성 꾸미기 창 70  planetForm.js · planetDelete.js(행성 삭제 창도 같은 자리)
-//   저장 창        60  saveModal.js(Task 11)
+//   기록하기 창    60  saveModal.js
 //   전환 건너뛰기      transition.js가 window에서 직접 받는다. 전환 중에는 50 아래 처리를 부르지 않는다
 //   왼쪽 서랍 닫기 35  hud.js(760px 이하에서 펼친 왼쪽 패널만. 아래 시트 위에 덮이는 맨 위 층이라 상세보다 먼저)
+//   이미지 크게 보기 닫기 32  detail.js(상세에서 크게 보던 이미지를 닫는다)
 //   상세에서 목록  30  panel.js
 //   패널 닫기      20  panel.js(메뉴가 열려 있으면 메뉴부터 접는다)
 //

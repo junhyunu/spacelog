@@ -4,6 +4,7 @@ import {
   MEMO_MAX,
   MEMO_STATUS,
   actionsFor,
+  contentLabel,
   createMemoLedger,
   createMemoSaver,
   deleteCopy,
@@ -13,7 +14,7 @@ import {
   focusKeyOf,
   kindLabel,
   openFailToast,
-  previewKind,
+  groupAttachments,
   safeHttpUrl,
 } from '../ui/detailLogic.js';
 
@@ -28,6 +29,17 @@ describe('kindLabel', () => {
     expect(kindLabel('zzz')).toBe('미확인');
     expect(kindLabel(undefined)).toBe('미확인');
     expect(kindLabel('constructor')).toBe('미확인');
+  });
+});
+
+describe('contentLabel', () => {
+  test('body and attachment counts', () => {
+    expect(
+      contentLabel({ type: 'image', body: '글', attachments: [{ kind: 'image' }, { kind: 'image' }, { kind: 'file' }, { kind: 'link' }] }),
+    ).toBe('글 · 이미지 2개 · 파일 1개 · 링크 1개');
+    expect(contentLabel({ type: 'link', body: null, attachments: [{ kind: 'link' }] })).toBe('링크 1개');
+    expect(contentLabel({ type: 'text', body: '  ' })).toBe('텍스트');
+    expect(contentLabel({ type: 'zzz' })).toBe('미확인');
   });
 });
 
@@ -48,16 +60,26 @@ describe('fileMeta', () => {
   });
 });
 
-describe('previewKind', () => {
-  test('by type', () => {
-    expect(previewKind({ type: 'image' })).toBe('image');
-    expect(previewKind({ type: 'file' })).toBe('file');
-    expect(previewKind({ type: 'link' })).toBe('link');
-    expect(previewKind({ type: 'text' })).toBe('text');
+describe('groupAttachments', () => {
+  test('images · files · links in position order', () => {
+    const star = {
+      attachments: [
+        { id: 'l', kind: 'link', position: 3 },
+        { id: 'f', kind: 'file', position: 1 },
+        { id: 'i2', kind: 'image', position: 2 },
+        { id: 'i1', kind: 'image', position: 0 },
+      ],
+    };
+    const g = groupAttachments(star);
+    expect(g.images.map((a) => a.id)).toEqual(['i1', 'i2']);
+    expect(g.files.map((a) => a.id)).toEqual(['f']);
+    expect(g.links.map((a) => a.id)).toEqual(['l']);
+    expect(star.attachments[0].id).toBe('l'); // 받은 배열은 그대로
   });
-  test('unknown type falls back to text', () => {
-    expect(previewKind({ type: 'x' })).toBe('text');
-    expect(previewKind(null)).toBe('text');
+  test('missing or unknown kinds', () => {
+    expect(groupAttachments({})).toEqual({ images: [], files: [], links: [] });
+    expect(groupAttachments(null)).toEqual({ images: [], files: [], links: [] });
+    expect(groupAttachments({ attachments: [{ kind: 'zzz' }, null] })).toEqual({ images: [], files: [], links: [] });
   });
 });
 
@@ -83,39 +105,42 @@ describe('safeHttpUrl', () => {
   });
 });
 
-describe('actionsFor', () => {
-  test('text: none', () => {
-    expect(actionsFor({ type: 'text' })).toEqual({ open: null, reveal: false });
-  });
+describe('actionsFor (attachment)', () => {
   test('link: new tab only, and only for http(s)', () => {
-    expect(actionsFor({ type: 'link', url: 'https://a.com' })).toEqual({ open: 'tab', reveal: false });
-    expect(actionsFor({ type: 'link', url: 'javascript:alert(1)' })).toEqual({ open: null, reveal: false });
-    expect(actionsFor({ type: 'link', url: null })).toEqual({ open: null, reveal: false });
+    expect(actionsFor({ kind: 'link', url: 'https://a.com' })).toEqual({ open: 'tab', reveal: false });
+    expect(actionsFor({ kind: 'link', url: 'javascript:alert(1)' })).toEqual({ open: null, reveal: false });
+    expect(actionsFor({ kind: 'link', url: null })).toEqual({ open: null, reveal: false });
   });
   test('image and file: server open + reveal', () => {
-    expect(actionsFor({ type: 'image' })).toEqual({ open: 'server', reveal: true });
-    expect(actionsFor({ type: 'file' })).toEqual({ open: 'server', reveal: true });
+    expect(actionsFor({ kind: 'image' })).toEqual({ open: 'server', reveal: true });
+    expect(actionsFor({ kind: 'file' })).toEqual({ open: 'server', reveal: true });
+  });
+  test('unknown: none', () => {
+    expect(actionsFor({ kind: 'text' })).toEqual({ open: null, reveal: false });
+    expect(actionsFor(null)).toEqual({ open: null, reveal: false });
   });
 });
 
 describe('deleteCopy', () => {
-  test('file and image mention the vault copy', () => {
-    for (const type of ['file', 'image']) {
-      expect(deleteCopy({ type, title: '과제' })).toEqual({
-        title: "별 '과제'을(를) 지울까요?",
-        desc: '기록과 보관함 복사본이 함께 지워져요. 되돌릴 수 없어요.',
-        confirmLabel: '지우기',
-        confirmKind: 'pink',
-      });
-    }
+  test('file and image attachments are counted', () => {
+    const star = {
+      title: '과제',
+      attachments: [{ kind: 'file' }, { kind: 'image' }, { kind: 'link' }],
+    };
+    expect(deleteCopy(star)).toEqual({
+      title: "별 '과제'을(를) 지울까요?",
+      desc: '기록과 첨부 파일 2개의 보관함 복사본이 함께 지워져요. 되돌릴 수 없어요.',
+      confirmLabel: '지우기',
+      confirmKind: 'pink',
+    });
   });
-  test('text and link have no copy to mention', () => {
-    for (const type of ['text', 'link']) {
-      expect(deleteCopy({ type, title: '메모' }).desc).toBe('기록이 지워져요. 되돌릴 수 없어요.');
-    }
+  test('no file attachments → only the record', () => {
+    expect(deleteCopy({ title: '메모', attachments: [] }).desc).toBe('기록이 지워져요. 되돌릴 수 없어요.');
+    expect(deleteCopy({ title: '링크', attachments: [{ kind: 'link' }] }).desc).toBe('기록이 지워져요. 되돌릴 수 없어요.');
+    expect(deleteCopy({ title: '옛 별' }).desc).toBe('기록이 지워져요. 되돌릴 수 없어요.');
   });
   test('empty title', () => {
-    expect(deleteCopy({ type: 'text', title: '' }).title).toBe("별 '제목 없음'을(를) 지울까요?");
+    expect(deleteCopy({ title: '' }).title).toBe("별 '제목 없음'을(를) 지울까요?");
   });
 });
 

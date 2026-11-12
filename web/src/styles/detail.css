@@ -26,3 +26,22 @@
 #panel .mv select:disabled{background:var(--panel-2);color:var(--mute);cursor:progress}
 
 #panel .linkdel{flex:none;min-height:44px;color:var(--danger-text)}
+
+/* 첨부 목록(스펙 6-9): 이미지 축소본 격자 · 파일 줄 · 링크 줄 · 크게 보기 */
+#panel .atts{display:flex;flex-direction:column;gap:var(--gap-2);flex:none;min-width:0}
+#panel .igrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:var(--gap-2)}
+#panel .ith{aspect-ratio:1;min-height:44px;padding:0;border:var(--line-thin) solid var(--ink);border-radius:var(--r-thumb);background:var(--panel-2);color:var(--ink);display:grid;place-items:center;overflow:hidden;cursor:zoom-in}
+#panel .ith img{width:100%;height:100%;object-fit:cover;display:block}
+#panel .ith.on{outline:3px solid var(--accent);outline-offset:2px;cursor:zoom-out}
+#panel .viewer{display:flex;flex-direction:column;gap:var(--gap-2)}
+#panel .viewer .vbar{display:flex;align-items:center;justify-content:space-between;gap:var(--gap-2);flex-wrap:wrap}
+#panel .viewer [data-d="unview"]{display:inline-flex;align-items:center;gap:4px;margin-left:auto}
+#panel .arows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+#panel .arow{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:6px 10px;background:var(--white);border:var(--line-thin) solid var(--ink);border-radius:var(--r-item);padding:8px 10px}
+#panel .arow .fi{width:34px;height:40px;border:var(--line-thin) solid var(--ink);border-radius:6px 12px 6px 6px;background:var(--yellow);display:grid;place-items:center;font:700 10.5px var(--f-mono);color:var(--ink);box-sizing:border-box}
+#panel .arow .fi.lk{border-radius:var(--r-thumb);background:var(--panel-2)}
+#panel .arow .am{min-width:0;display:flex;flex-direction:column;gap:2px}
+#panel .arow b{font-size:14px;line-height:1.35;overflow-wrap:anywhere}
+#panel .arow small{font:500 11.5px var(--f-mono);color:var(--mute);overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+#panel .arow .acts{grid-column:1 / -1}
+#panel .arow .acts:empty{display:none}

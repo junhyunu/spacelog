@@ -1,4 +1,5 @@
-// W-03 별 상세: 미리보기 · 정보 · 원본 열기 / 폴더에서 보기 · 메모 자동 저장 · 행성 옮기기 · 지우기.
+// W-03 별 상세(스펙 6-9): 본문 · 첨부 목록(이미지 격자 · 파일 줄 · 링크 줄, 첨부마다 원본 열기 / 폴더에서 보기) ·
+// 정보 · 메모 자동 저장 · 행성 옮기기 · 지우기. 이미지를 누르면 패널 안에서 크게 본다(Esc · ✕로 닫는다).
 // 시안 715~759행(renderDetail · 메모 · moveRec · removeRec)을 옮겼다. 발(싣기 버튼)은 없다(탐사선 제외).
 // panel.js가 부르는 모양:
 //   renderDetail(container, star, planet, { onBack, onClose })  container(#panel)의 내용을 통째로 그린다
@@ -17,6 +18,7 @@ import { ask } from './confirm.js';
 import {
   MEMO_STATUS,
   actionsFor,
+  contentLabel,
   createMemoLedger,
   createMemoSaver,
   deleteCopy,
@@ -24,11 +26,11 @@ import {
   fitsKeepalive,
   flushDirty,
   focusKeyOf,
-  kindLabel,
+  groupAttachments,
   openFailToast,
-  previewKind,
   safeHttpUrl,
 } from './detailLogic.js';
+import { registerEscape } from './escape.js';
 import { clearGuestStar } from './hud.js';
 import { toast } from './toast.js';
 
@@ -178,58 +180,89 @@ function headHtml(star, planet) {
 }
 
 // 확장자 아이콘. 확장자가 없거나 길면 종류 아이콘을 쓴다
-function extIcon(star, fallbackIcon) {
-  const ext = typeof star.file_ext === 'string' ? star.file_ext.trim() : '';
-  const inner = ext && [...ext].length <= 4 ? esc(ext) : ico(fallbackIcon, 22);
+function extIcon(att, fallbackIcon) {
+  const ext = typeof att?.file_ext === 'string' ? att.file_ext.trim() : '';
+  const inner = ext && [...ext].length <= 4 ? esc(ext) : ico(fallbackIcon, 20);
   return `<span class="fi" aria-hidden="true">${inner}</span>`;
 }
 
-function previewHtml(ctx, star) {
-  const kind = previewKind(star);
-  const fileName = star.file_name || star.title || '이름 없는 파일';
-  if (kind === 'image' && !ctx.imgNote) {
-    return (
-      `<div class="pv img"><img src="${esc(api.fileUrl(star.id))}" alt="${esc(star.title || fileName)}" decoding="async">` +
-      `<span>${esc(fileName)}</span></div>`
-    );
-  }
-  if (kind === 'image') {
-    // 이미지를 못 받았다: 파일 모양으로 바꿔 보인다
-    return (
-      `<div class="pv file">${extIcon({ file_ext: '' }, 'image')}<div><b>${esc(fileName)}</b>` +
-      `<small><span class="na">${esc(ctx.imgNote)}</span></small></div></div>`
-    );
-  }
-  if (kind === 'file') {
-    const meta = fileMeta(star);
-    return (
-      `<div class="pv file">${extIcon(star, 'file-text')}<div><b>${esc(fileName)}</b>` +
-      `<small>${esc(meta.ext)} · ${meta.unknown ? `<span class="na">${esc(meta.size)}</span>` : esc(meta.size)}</small></div></div>`
-    );
-  }
-  if (kind === 'link') {
-    const url = star.url || '';
-    return `<div class="pv link"><b>${esc(star.link_title || url || '주소 미확인')}</b><small>${esc(url)}</small></div>`;
-  }
-  // 글: 본문 그대로. 길면 상자 안에서 스크롤한다(키보드로도 내릴 수 있게 tabindex)
-  return `<div class="detail" tabindex="0" role="group" aria-label="본문">${esc(star.body ?? '')}</div>`;
+const attName = (att) => att?.file_name || '이름 없는 파일';
+const findAtt = (ctx, attId) => (ctx.star.attachments ?? []).find((a) => same(a.id, attId)) ?? null;
+
+function actButtons(att) {
+  const acts = actionsFor(att);
+  const id = esc(att.id);
+  return (
+    (acts.open ? `<button type="button" class="btn ghost sm" data-a="open:${id}">원본 열기</button>` : '') +
+    (acts.reveal ? `<button type="button" class="btn ghost sm" data-a="reveal:${id}">폴더에서 보기</button>` : '')
+  );
+}
+
+// 크게 보기: 패널 안에서 이미지 원본을 4:3 상자에. 못 받으면 파일 모양으로 바꿔 알린다
+function viewerHtml(ctx, att) {
+  const name = attName(att);
+  const box = ctx.viewNote
+    ? `<div class="pv file">${extIcon({ file_ext: '' }, 'image')}<div><b>${esc(name)}</b><small><span class="na">${esc(ctx.viewNote)}</span></small></div></div>`
+    : `<div class="pv img"><img src="${esc(api.attachmentFileUrl(att.id))}" alt="${esc(name)}" decoding="async"><span>${esc(name)}</span></div>`;
+  return (
+    `<div class="viewer" role="group" aria-label="${esc(`${name} 크게 보기`)}">${box}` +
+    `<div class="vbar"><div class="acts">${actButtons(att)}</div>` +
+    `<button type="button" class="btn ghost sm" data-d="unview" aria-label="크게 보기 닫기">${ico('x', 14)} 닫기</button></div></div>`
+  );
+}
+
+function imageTile(ctx, att) {
+  const name = attName(att);
+  const inner = att.has_thumb
+    ? `<img src="${esc(api.attachmentThumbUrl(att.id))}" alt="" loading="lazy" decoding="async">`
+    : ico('image', 20);
+  const on = same(ctx.view, att.id);
+  return (
+    `<button type="button" class="ith${on ? ' on' : ''}" data-a="view:${esc(att.id)}" aria-pressed="${on}" ` +
+    `aria-label="${esc(`${name} 크게 보기`)}" title="${esc(name)}">${inner}</button>`
+  );
+}
+
+function fileRow(att) {
+  const meta = fileMeta(att);
+  return (
+    `<li class="arow">${extIcon(att, 'file-text')}<div class="am"><b>${esc(attName(att))}</b>` +
+    `<small>${esc(meta.ext)} · ${meta.unknown ? `<span class="na">${esc(meta.size)}</span>` : esc(meta.size)}</small></div>` +
+    `<div class="acts">${actButtons(att)}</div></li>`
+  );
+}
+
+function linkRow(att) {
+  const url = att.url || '';
+  return (
+    `<li class="arow link"><span class="fi lk" aria-hidden="true">${ico('link', 18)}</span>` +
+    `<div class="am"><b>${esc(att.link_title || url || '주소 미확인')}</b><small class="mono">${esc(url)}</small></div>` +
+    `<div class="acts">${actButtons(att)}</div></li>`
+  );
 }
 
 function topHtml(ctx, star) {
-  const kind = kindLabel(star.type);
   const date = fullDate(star.created_at);
+  const kind = contentLabel(star);
   const na = (text, unknown) => (unknown ? `<span class="na">${esc(text)}</span>` : esc(text));
-  const acts = actionsFor(star);
+  const { images, files, links } = groupAttachments(star);
+  const viewing = images.find((a) => same(a.id, ctx.view)) ?? null;
+  const hasBody = typeof star.body === 'string' && star.body.trim() !== '';
+  // 본문: 그대로, 점선 상자. 길면 상자 안에서 스크롤한다(키보드로도 내릴 수 있게 tabindex)
+  const body = hasBody ? `<div class="detail" tabindex="0" role="group" aria-label="본문">${esc(star.body)}</div>` : '';
+  const count = images.length + files.length + links.length;
+  const atts = count
+    ? `<div class="atts"><div class="lbl">첨부 ${count.toLocaleString('ko-KR')}개</div>` +
+      (viewing ? viewerHtml(ctx, viewing) : '') +
+      (images.length ? `<div class="igrid">${images.map((a) => imageTile(ctx, a)).join('')}</div>` : '') +
+      (files.length || links.length ? `<ul class="arows">${files.map(fileRow).join('')}${links.map(linkRow).join('')}</ul>` : '') +
+      '</div>'
+    : '';
   return (
-    previewHtml(ctx, star) +
+    body +
+    atts +
     `<dl class="meta"><dt>종류</dt><dd>${na(kind, kind === '미확인')}</dd>` +
-    `<dt>넣은 날짜</dt><dd class="mono">${na(date, date.includes('미확인'))}</dd></dl>` +
-    (acts.open || acts.reveal
-      ? '<div class="acts">' +
-        (acts.open ? '<button type="button" class="btn ghost sm" data-a="open">원본 열기</button>' : '') +
-        (acts.reveal ? '<button type="button" class="btn ghost sm" data-a="reveal">폴더에서 보기</button>' : '') +
-        '</div>'
-      : '')
+    `<dt>넣은 날짜</dt><dd class="mono">${na(date, date.includes('미확인'))}</dd></dl>`
   );
 }
 
@@ -248,21 +281,26 @@ function bottomHtml(star) {
 
 /* ---------- 행동 ---------- */
 
+const ACT_SELECTOR = '[data-a^="open:"], [data-a^="reveal:"]';
+
 function setBusy(ctx) {
-  for (const b of ctx.container.querySelectorAll('.acts [data-a]')) b.disabled = ctx.busy;
+  for (const b of ctx.container.querySelectorAll(ACT_SELECTOR)) b.disabled = ctx.busy;
 }
 
-async function openOrReveal(ctx, kind, button) {
+async function openOrReveal(ctx, kind, attId, button) {
   if (ctx.busy) return;
-  if (kind === 'open' && actionsFor(ctx.star).open === 'tab') {
-    const url = safeHttpUrl(ctx.star.url);
+  const att = findAtt(ctx, attId);
+  if (!att) return;
+  if (kind === 'open' && actionsFor(att).open === 'tab') {
+    // 링크는 브라우저가 새 탭으로 연다(http · https만)
+    const url = safeHttpUrl(att.url);
     if (url) window.open(url, '_blank', 'noopener,noreferrer');
     return;
   }
   ctx.busy = true;
   setBusy(ctx);
   try {
-    const res = kind === 'open' ? await api.open(ctx.id) : await api.reveal(ctx.id);
+    const res = kind === 'open' ? await api.openAttachment(att.id) : await api.revealAttachment(att.id);
     if (kind === 'open' && res?.action === 'revealed') toast('이 종류는 바로 열지 않고 폴더에서 보여드렸어요');
   } catch (err) {
     toast(openFailToast(err, kind));
@@ -276,6 +314,17 @@ async function openOrReveal(ctx, kind, button) {
       }
     }
   }
+}
+
+// 이미지 크게 보기를 열거나(attId) 닫는다(null). 닫으면 초점은 그 이미지 칸으로 돌아간다
+function setView(ctx, attId) {
+  const prev = ctx.view;
+  ctx.view = attId === null || attId === undefined ? null : String(attId);
+  ctx.viewNote = '';
+  renderPart(ctx, 'top');
+  const el = ctx.container.querySelector('[data-part="top"]');
+  if (ctx.view) el?.querySelector('[data-d="unview"]')?.focus({ preventScroll: true });
+  else if (prev) el?.querySelector(`[data-a="view:${CSS.escape(prev)}"]`)?.focus({ preventScroll: true });
 }
 
 async function move(ctx, select) {
@@ -362,18 +411,25 @@ async function remove(ctx) {
   toast('지웠어요');
 }
 
-// 이미지를 못 받았을 때: 사본이 없는지(404), 브라우저가 못 그리는 형식인지 알아본다
-async function onImageError(ctx) {
-  if (ctx.imgNote) return;
-  ctx.imgNote = '파일을 찾지 못했어요';
+// 크게 보기의 이미지를 못 받았을 때: 사본이 없는지(404), 브라우저가 못 그리는 형식인지 알아본다
+async function onViewError(ctx) {
+  if (ctx.viewNote || !ctx.view) return;
+  const id = ctx.view;
+  ctx.viewNote = '파일을 찾지 못했어요';
   renderPart(ctx, 'top');
   try {
-    const res = await fetch(api.fileUrl(ctx.id), { headers: { Range: 'bytes=0-0' } });
-    if (res.ok) ctx.imgNote = '이 이미지는 미리 볼 수 없어요';
+    const res = await fetch(api.attachmentFileUrl(id), { headers: { Range: 'bytes=0-0' } });
+    if (res.ok) ctx.viewNote = '이 이미지는 미리 볼 수 없어요';
   } catch {
     return;
   }
-  if (live(ctx)) renderPart(ctx, 'top');
+  if (live(ctx) && ctx.view === id) renderPart(ctx, 'top');
+}
+
+// 축소본을 못 받으면(보관함에서 사라짐 등) 이미지 아이콘으로 바꾼다
+function onThumbError(img) {
+  const box = img.closest('.ith');
+  if (box) box.innerHTML = ico('image', 20);
 }
 
 /* ---------- 그리기 ---------- */
@@ -389,10 +445,19 @@ function bindPart(ctx, part, el) {
     el.querySelector('[data-d="back"]').addEventListener('click', () => ctx.handlers.onBack?.());
     el.querySelector('[data-d="close"]').addEventListener('click', () => ctx.handlers.onClose?.());
   } else if (part === 'top') {
-    el.querySelector('.pv.img img')?.addEventListener('error', () => onImageError(ctx));
-    for (const b of el.querySelectorAll('.acts [data-a]')) {
-      b.disabled = ctx.busy;
-      b.addEventListener('click', () => openOrReveal(ctx, b.dataset.a, b));
+    el.querySelector('.viewer .pv.img img')?.addEventListener('error', () => onViewError(ctx));
+    for (const img of el.querySelectorAll('.ith img')) img.addEventListener('error', () => onThumbError(img), { once: true });
+    el.querySelector('[data-d="unview"]')?.addEventListener('click', () => setView(ctx, null));
+    for (const b of el.querySelectorAll('[data-a]')) {
+      const at = b.dataset.a.indexOf(':');
+      const kind = b.dataset.a.slice(0, at);
+      const attId = b.dataset.a.slice(at + 1);
+      if (kind === 'view') {
+        b.addEventListener('click', () => setView(ctx, same(ctx.view, attId) ? null : attId));
+      } else {
+        b.disabled = ctx.busy;
+        b.addEventListener('click', () => openOrReveal(ctx, kind, attId, b));
+      }
     }
   } else {
     const sel = el.querySelector('#aMove');
@@ -439,6 +504,7 @@ export function renderDetail(container, star, planet, { onBack, onClose } = {}) 
   if (current && current.id === id && current.container === container && current.memoEl.isConnected) {
     current.star = star;
     current.planet = planet;
+    if (current.view && !groupAttachments(star).images.some((a) => same(a.id, current.view))) current.view = null;
     current.handlers = { onBack, onClose };
     for (const part of ['head', 'top', 'bottom']) renderPart(current, part);
     return;
@@ -457,7 +523,8 @@ export function renderDetail(container, star, planet, { onBack, onClose } = {}) 
     busy: false,
     moving: false,
     deleting: false,
-    imgNote: '',
+    view: null, // 크게 보고 있는 이미지 첨부 id
+    viewNote: '',
     memoEl: null,
     statusEl: null,
   };
@@ -486,3 +553,11 @@ export function renderDetail(container, star, planet, { onBack, onClose } = {}) 
     if (saver.isDirty()) saver.flush();
   });
 }
+
+// Esc: 이미지 크게 보기를 먼저 닫는다(왼쪽 서랍 35 다음, 상세 → 목록 30 앞)
+registerEscape(32, () => {
+  const ctx = current;
+  if (!ctx || !ctx.view || !live(ctx)) return false;
+  setView(ctx, null);
+  return true;
+});
