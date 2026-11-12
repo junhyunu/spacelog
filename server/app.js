@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { openDb } from './db.js';
 import { registerGuard } from './guard.js';
+import { registerPlanets } from './planets.js';
 
 export const DEFAULT_PORT = 4747;
 export const DEFAULT_MAX_FILE_BYTES = 500 * 1024 * 1024;
@@ -30,6 +31,7 @@ export function buildApp({
   registerGuard(app, { port, allowedOrigins });
 
   app.get('/api/health', async () => ({ ok: true }));
+  registerPlanets(app);
 
   return app;
 }
