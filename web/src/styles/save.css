@@ -1,0 +1,68 @@
+/* W-05 저장 창 "별 띄우기"(#save) · 놓기 막(#dropveil). 값은 tokens.css의 토큰만 쓴다. */
+
+/* ---------- 놓기 막 (스펙 6-3) ---------- */
+#dropveil{position:fixed;inset:0;z-index:var(--z-drop);background:color-mix(in srgb,var(--ink) 72%,transparent);display:grid;place-items:center;padding:var(--gap-4);box-sizing:border-box;pointer-events:none}
+#dropveil .card{display:flex;flex-direction:column;align-items:center;gap:var(--gap-3);padding:36px 44px;border-style:dashed;text-align:center;max-width:100%;box-sizing:border-box}
+#dropveil b{font-family:var(--f-display);font-weight:400;font-size:22px;line-height:1.3}
+
+/* ---------- 저장 창 (스펙 6-4) ---------- */
+#save{position:fixed;inset:0;z-index:var(--z-save);background:rgba(10,6,30,.6);display:grid;place-items:center;padding:var(--gap-4);box-sizing:border-box}
+#save .card{width:min(520px,100%);max-height:min(80vh,100%);box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden}
+#save header{display:flex;align-items:center;gap:var(--gap-3);padding:14px 16px 12px;border-bottom:var(--line) solid var(--ink);flex:none}
+#save header h3{margin:0;flex:1;min-width:0;font-family:var(--f-display);font-weight:400;font-size:20px;line-height:1.2;white-space:nowrap}
+#save header .x{width:34px;height:34px;padding:0;flex:none}
+#save .tabs{margin-left:0;flex:none}
+#save .tabs button{position:relative;min-width:44px}
+#save .tabs button::after{content:"";position:absolute;inset:-8px -3px}
+#save .body{flex:1;min-height:0;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:var(--gap-3)}
+#save .pane{display:flex;flex-direction:column;gap:var(--gap-2);min-width:0}
+#save .fld{display:flex;flex-direction:column;gap:var(--gap-1);min-width:0}
+#save footer{flex:none;padding:12px 16px 16px;border-top:var(--line) solid var(--ink);background:var(--panel-2);display:flex;flex-direction:column;gap:var(--gap-2)}
+#save .row{display:flex;gap:var(--gap-2);justify-content:flex-end}
+#save .row .btn{min-height:44px}
+#save #svYes{min-width:132px;font-variant-numeric:tabular-nums}
+#save .err{margin:0;font-size:13px;font-weight:700;line-height:1.5;color:var(--danger-text)}
+
+#save input[type="text"],#save textarea,#save select{font:600 14px var(--f-body);border:var(--line-thin) solid var(--ink);border-radius:10px;padding:8px 10px;background:var(--white);color:var(--ink);width:100%;min-height:44px;box-sizing:border-box}
+#save textarea{font-weight:500;line-height:1.55;resize:vertical;display:block}
+#save input.mono{font:500 14px var(--f-mono)}
+#save :is(input,textarea)::placeholder{color:var(--mute);opacity:.75}
+#save :is(input,textarea)[readonly],#save select:disabled{background:var(--panel-2);color:var(--mute)}
+#save :focus-visible{outline:var(--line) solid var(--sky);outline-offset:2px}
+
+/* 행성 선택: 색 점 + 선택 상자, 바로 아래 새 행성 이름 칸 */
+#save .psel{display:flex;align-items:center;gap:var(--gap-2);min-width:0}
+#save .psel .dot{width:22px;height:22px;border-radius:50%;border:var(--line) solid var(--ink);flex:none;box-sizing:border-box;background:var(--panel-2)}
+#save .psel .dot.new{border-style:dashed}
+#save .psel select{flex:1;min-width:0}
+
+/* 파일 탭: 점선 상자와 담긴 파일 목록 */
+#save .drop{border:var(--line-thin) dashed var(--ink);border-radius:var(--r-item);background:var(--panel-2);padding:14px;display:flex;align-items:center;justify-content:center;gap:var(--gap-3);flex-wrap:wrap;font-size:14px;font-weight:600;text-align:center}
+#save .drop .btn{min-height:44px;background:var(--white)}
+#save .drop .btn:disabled{background:var(--panel-2)}
+body.dragging-files #save .drop{background:var(--yellow)}
+#save .files{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+#save .frow{display:flex;align-items:center;gap:10px;background:var(--white);border:var(--line-thin) solid var(--ink);border-radius:var(--r-item);padding:6px 8px 6px 10px;min-height:44px;box-sizing:border-box}
+#save .frow .th{color:var(--ink)}
+#save .frow .th img{width:100%;height:100%;object-fit:cover;display:block}
+#save .frow .fm{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+#save .frow .fn{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#save .frow small{font:500 11.5px var(--f-mono);color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+#save .frow input[type="text"]{padding:6px 8px}
+#save .frow .x{width:34px;height:34px;padding:0;flex:none;box-shadow:none}
+
+@media (max-width:760px){
+  #save{padding:10px}
+  #save .card{max-height:100%}
+}
+@media (max-width:460px){
+  /* 좁으면 종류 탭이 둘째 줄로 내려간다 */
+  #save header{flex-wrap:wrap}
+  #save .tabs{order:3;width:100%}
+  #save .tabs button{flex:1}
+  #save .body{padding:12px}
+  #save footer{padding:10px 12px 12px}
+  #save .row .btn{flex:1}
+  #dropveil .card{padding:26px 22px}
+  #dropveil b{font-size:19px}
+}

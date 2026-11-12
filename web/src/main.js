@@ -7,16 +7,19 @@ import './styles/tokens.css';
 import './styles/app.css';
 import './styles/planet.css';
 import './styles/detail.css';
+import './styles/save.css';
 
 import { api } from './api.js';
 import { store } from './store.js';
 import { isAskOpen } from './ui/confirm.js';
+import { initDropzone } from './ui/dropzone.js';
 import { setEscapeGuards } from './ui/escape.js';
 import { initHome } from './ui/home.js';
 import { initHud } from './ui/hud.js';
 import { initPanel } from './ui/panel.js';
 import { closePlanetDelete } from './ui/planetDelete.js';
 import { closePlanetForm, openPlanetForm } from './ui/planetForm.js';
+import { openSave } from './ui/saveModal.js';
 import { toast } from './ui/toast.js';
 import { enterWorld, isTransitioning, leaveWorld } from './ui/transition.js';
 
@@ -117,6 +120,10 @@ initPanel();
 // "+ 새 행성"(#hNewPlanet · #wNewPlanet · 빈 우주 카드): 행성 꾸미기 창을 만들기로 연다.
 // 저장하면 store.reload() → 'data' → 우주 안이면 3D · 목록, 밖이면 홈의 행성 목록이 다시 그려진다.
 store.on('newPlanet', () => openPlanetForm({}));
+// "기록하기"(#hLog · #wLog · 빈 우주 카드): 저장 창(W-05)을 연다. 버튼은 home.js · hud.js가 듣고 'openSave'로 알린다.
+store.on('openSave', (o) => openSave(o ?? { tab: 'text' }));
+// 끌어다 놓기 · 붙여넣기(W-00 · W-01 어디서나)
+initDropzone();
 // 우주에서 나갈 때는 열려 있는 창을 모두 닫는다(패널은 panel.js가 닫는다)
 store.on('leavingWorld', () => {
   closePlanetForm();
