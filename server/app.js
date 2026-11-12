@@ -47,7 +47,7 @@ export function buildApp({
       console.error(err);
       return reply.code(status).send({ error: 'server_error' });
     }
-    const code = status === 413 ? 'too_large' : /JSON|EMPTY_JSON/i.test(err.code ?? '') ? 'invalid_json' : 'bad_request';
+    const code = status === 413 ? 'too_large' : err instanceof SyntaxError || /JSON/i.test(err.code ?? '') ? 'invalid_json' : 'bad_request';
     return reply.code(status).send({ error: code });
   });
 
