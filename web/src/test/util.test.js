@@ -20,6 +20,7 @@ const localIso = (y, m, d, hh = 0, mm = 0) => new Date(y, m - 1, d, hh, mm).toIS
 
 describe('esc', () => {
   test('esc escapes & < > "', () => expect(esc('<b a="1">&')).toBe('&lt;b a=&quot;1&quot;&gt;&amp;'));
+  test('esc escapes single quotes', () => expect(esc("a'b")).toBe('a&#39;b'));
   test('esc turns null and numbers into text', () => {
     expect(esc(null)).toBe('');
     expect(esc(undefined)).toBe('');
@@ -64,7 +65,6 @@ describe('periodRange', () => {
     const { from, to } = periodRange('custom', { from: '2026-11-01', to: '2026-11-03' }, NOW);
     expect(from).toBe(localIso(2026, 11, 1));
     expect(to).toBe(localIso(2026, 11, 4));
-    expect(Date.parse(to) - Date.parse(from)).toBe(3 * DAY);
   });
   test('periodRange custom with reversed dates is put in order', () => {
     const r = periodRange('custom', { from: '2026-11-03', to: '2026-11-01' }, NOW);

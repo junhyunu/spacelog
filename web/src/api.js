@@ -67,6 +67,7 @@ async function request(method, path, body) {
     throw offline();
   }
   if (!res.ok) throw errorFrom(res.status, text);
+  if (store.state.offline && path !== '/health') store.emit('reachable');
   return parseOk(res.status, text);
 }
 
@@ -123,7 +124,10 @@ export const api = {
           reject(err);
         }
       };
-      xhr.onerror = () => reject(offline());
+      // 읽을 수 없는 파일(폴더 등)도 여기로 온다. 서버가 살아 있으면 연결 끊김이 아니다.
+      xhr.onerror = () => {
+        request('GET', '/health').then(() => reject(new ApiError(0, 'upload_failed')), reject);
+      };
       xhr.ontimeout = () => reject(offline());
       xhr.onabort = () => reject(new ApiError(0, 'aborted'));
       xhr.send(form);

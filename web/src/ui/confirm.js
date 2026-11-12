@@ -44,8 +44,13 @@ function wire() {
   if (wired) return;
   wired = true;
   document.addEventListener('keydown', onKeydown, true);
+  let downOnBackdrop = false;
+  $('confirm').addEventListener('mousedown', (e) => {
+    downOnBackdrop = e.target === e.currentTarget;
+  });
   $('confirm').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget && current) current.finish(null);
+    if (e.target === e.currentTarget && downOnBackdrop && current) current.finish(null);
+    downOnBackdrop = false;
   });
   $('cExtra').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.isComposing) {

@@ -1,11 +1,11 @@
 // 화면 공통 도우미. 불러올 때 DOM을 건드리지 않는다(테스트는 node 환경).
 
-const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
+const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
 /** 사용자 입력을 HTML에 넣기 전에 반드시 거친다. */
 export function esc(s) {
   if (s === null || s === undefined) return '';
-  return String(s).replace(/[&<>"]/g, (c) => ESC_MAP[c]);
+  return String(s).replace(/[&<>"']/g, (c) => ESC_MAP[c]);
 }
 
 /* ---------- 아이콘 (Lucide, 인라인 SVG) ---------- */

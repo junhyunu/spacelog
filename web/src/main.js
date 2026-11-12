@@ -64,8 +64,10 @@ export async function checkConnection() {
     await store.reload(); // 끝나면 'data'
     if (wasOffline) store.emit('online');
     return true;
-  } catch {
-    showOffline();
+  } catch (err) {
+    // 서버가 오류로 답한 것(4xx · 5xx)은 연결 끊김이 아니다.
+    if (err?.code === 'offline') showOffline();
+    else toast('데이터를 불러오지 못했어요. 새로고침해 주세요');
     return false;
   }
 }
@@ -84,5 +86,9 @@ async function retry(e) {
 
 // 어떤 요청이든 네트워크에서 실패하면 api.js가 'offline'을 알린다
 store.on('offline', showOffline);
+// 잠깐 끊겼다가 다음 요청이 성공하면(개발 중 서버 재시작 등) 카드를 걷고 다시 받는다.
+store.on('reachable', () => {
+  if (store.state.offline) checkConnection();
+});
 
 checkConnection();
