@@ -29,6 +29,8 @@ export function buildApp({
   rag = null,
   // 색인 맞추기 옵션(테스트가 가짜 시계 · 타이머를 넣는다). server/rag/sync.js 의 createSync 참고.
   ragSync: ragSyncOptions = {},
+  // 답 작업 옵션(테스트가 시계 · 저장 간격 · 하트비트 간격을 넣는다). server/rag/chat.js 의 registerChat 참고.
+  chat: chatOptions = {},
 } = {}) {
   if (!dataDir) throw new Error('buildApp: dataDir is required');
 
@@ -110,7 +112,7 @@ export function buildApp({
   registerFiles(app);
   registerAttachments(app);
   registerCharacter(app);
-  registerChat(app);
+  registerChat(app, chatOptions);
 
   return app;
 }
