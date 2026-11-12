@@ -664,6 +664,17 @@ function wire() {
   store.on('data', () => {
     if (!S || S.busy) return;
     S.extra = S.extra.filter((p) => !store.state.planets.some((q) => String(q.id) === String(p.id)));
+    const chosen = S.planet !== '' && S.planet !== 'new' ? String(S.planet) : null;
+    const gone =
+      chosen !== null &&
+      !store.state.planets.some((p) => String(p.id) === chosen) &&
+      !S.extra.some((p) => String(p.id) === chosen);
+    if (gone) {
+      // 조용히 다른 행성으로 바꾸지 않는다. 다시 고르게 한다.
+      S.pick = true;
+      S.planet = '';
+      toast('고른 행성이 사라졌어요. 다시 골라 주세요');
+    }
     rebuildPlanets(S.planet);
     paintSubmit();
   });

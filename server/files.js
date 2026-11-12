@@ -78,7 +78,7 @@ function encodeRfc5987(value) {
 export function parseFileName(raw) {
   // 제어 문자(C0 · DEL · C1)와 글자 방향을 뒤집는 문자(이름 끝을 다른 확장자처럼 보이게 한다)를 뺀다.
   const cleaned = String(raw ?? '').normalize('NFC')
-    .replace(/[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g, '');
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '');
   let name = cleaned.split(/[\\/]/).map((s) => s.trim()).filter((s) => s !== '').pop() ?? '';
   if (name === '') name = FALLBACK_NAME;
 

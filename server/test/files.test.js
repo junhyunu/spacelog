@@ -927,6 +927,7 @@ test('startup removes leftover vault/.tmp-* files', async () => {
 
   app = buildApp({ dataDir, opener: fakeOpener(opened) });
   await app.ready();
+  app.sweep();
   expect(vaultFiles()).toEqual(['.tmp-folder', 'tmp-not-ours.txt']);
   expect(thumbFiles()).toEqual(['.tmp-in-thumbs']);
 });
@@ -962,6 +963,7 @@ test('startup removes only old orphans that match the vault naming pattern', asy
 
   app = buildApp({ dataDir, opener: fakeOpener(opened) });
   await app.ready();
+  app.sweep();
   for (const abs of kept) expect(fs.existsSync(abs), abs).toBe(true);
   for (const abs of gone) expect(fs.existsSync(abs), abs).toBe(false);
   expect(fs.existsSync(path.join(dataDir, 'vault', UUID_C))).toBe(true);
@@ -1113,4 +1115,18 @@ test('a failing vault cleanup is logged with the star id and the delete still su
   expect(errors).toHaveBeenCalledTimes(3);
   const logged = errors.mock.calls.slice(1).map((c) => String(c[0])).join('\n');
   for (const star of two) expect(logged).toContain(star.id);
+});
+
+test('sweep never deletes orphans: they are moved to orphans/ (DB lost or restored from an older backup)', async () => {
+  await app.close();
+  const a = put('vault', `${UUID_A}.pdf`, { ageMs: 48 * HOURS });
+  const t = put('thumbs', `${UUID_A}.webp`, { ageMs: 48 * HOURS });
+  app = buildApp({ dataDir, opener: fakeOpener(opened) });
+  await app.ready();
+  expect(fs.existsSync(a)).toBe(true); // 서버를 만들기만 해서는 건드리지 않는다
+  expect(app.sweep()).toEqual({ tmp: 0, orphans: 2 });
+  expect(fs.existsSync(a)).toBe(false);
+  expect(fs.existsSync(t)).toBe(false);
+  expect(fs.readFileSync(path.join(dataDir, 'orphans', 'vault', `${UUID_A}.pdf`), 'utf8')).toBe('x');
+  expect(fs.existsSync(path.join(dataDir, 'orphans', 'thumbs', `${UUID_A}.webp`))).toBe(true);
 });

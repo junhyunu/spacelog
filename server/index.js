@@ -24,6 +24,7 @@ if (fs.existsSync(dist)) {
 
 try {
   await app.listen({ host: HOST, port });
+  app.sweep();
   console.log(`spaceLog  http://${HOST}:${port}  (data: ${dataDir})`);
 } catch (err) {
   console.error(err);

@@ -30,16 +30,20 @@ export function buildApp({
   const app = Fastify({ logger: false });
   const db = openDb(dataDir);
 
-  // 받다가 끊긴 임시 파일과 주인 없는 사본을 치운다. 청소가 실패해도 서버는 뜬다.
-  try {
-    const hasStar = db.prepare('SELECT 1 FROM stars WHERE id = ?');
-    sweepVault(dataDir, (id) => hasStar.get(id) !== undefined);
-  } catch (err) {
-    console.error('sweep failed', err);
-  }
-
   app.decorate('db', db);
   app.decorate('dataDir', dataDir);
+  // 받다가 끊긴 임시 파일을 지우고 주인 없는 사본을 orphans/ 로 옮긴다. 실패해도 서버는 계속 돈다.
+  // 포트를 잡는 데 성공한 뒤에 부른다(index.js). 같은 폴더로 서버를 한 번 더 띄웠을 때
+  // 먼저 돌던 서버가 받고 있는 임시 파일을 지우지 않기 위해서다.
+  app.decorate('sweep', () => {
+    try {
+      const hasStar = db.prepare('SELECT 1 FROM stars WHERE id = ?');
+      return sweepVault(dataDir, (id) => hasStar.get(id) !== undefined);
+    } catch (err) {
+      console.error('sweep failed', err);
+      return { tmp: 0, orphans: 0 };
+    }
+  });
   app.decorate('config', { fetchTitle, opener, maxFileBytes, maxFiles, port });
   app.addHook('onClose', async () => {
     db.close();

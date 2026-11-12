@@ -148,7 +148,7 @@ const ORPHAN_MIN_AGE_MS = 60 * 60 * 1000;
 // 시작할 때 한 번 부르는 보관함 청소. 지운 개수를 돌려준다.
 // - vault/.tmp-* : 받다가 끊긴 임시 파일. 모두 지운다.
 // - 주인 없는 사본 · 축소본: 이름이 정확히 <uuid>[.ext] (vault) / <uuid>.webp (thumbs) 이고,
-//   그 uuid 의 별이 없고(hasStar), 만든 지 1시간이 넘은 것만 지운다.
+//   그 uuid 의 별이 없고(hasStar), 만든 지 1시간이 넘은 것만 orphans/vault · orphans/thumbs 로 옮긴다(지우지 않는다).
 // 그 밖의 이름(사용자가 넣어 둔 파일 등)과 폴더는 건드리지 않는다. 하나가 실패해도 나머지는 계속한다.
 export function sweepVault(dataDir, hasStar, { now = Date.now(), minAgeMs = ORPHAN_MIN_AGE_MS } = {}) {
   const removed = { tmp: 0, orphans: 0 };
@@ -170,7 +170,14 @@ export function sweepVault(dataDir, hasStar, { now = Date.now(), minAgeMs = ORPH
         const stat = fs.lstatSync(abs);
         if (!stat.isFile()) continue;
         if (!isTmp && (now - stat.mtimeMs <= minAgeMs || hasStar(match[1]))) continue;
-        fs.unlinkSync(abs);
+        if (isTmp) {
+          fs.unlinkSync(abs);
+        } else {
+          // 지우지 않는다. DB 만 옛 백업으로 되돌린 경우 등에는 이 파일들이 유일한 사본일 수 있다.
+          const keep = path.resolve(dataDir, 'orphans', sub);
+          fs.mkdirSync(keep, { recursive: true });
+          fs.renameSync(abs, path.join(keep, name));
+        }
         removed[isTmp ? 'tmp' : 'orphans'] += 1;
       } catch (err) {
         console.error(`sweep: cannot remove ${sub}/${name}`, err);

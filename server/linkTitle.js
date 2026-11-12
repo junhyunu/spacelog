@@ -101,7 +101,7 @@ export async function fetchLinkTitle(url, { timeoutMs = 3000, maxBytes = 262144 
     if (raw === null) return null;
     const title = decodeEntities(raw)
       // 제어 문자와 글 방향을 뒤집는 문자는 공백으로 바꾼다.
-      .replace(/[\u0000-\u001f\u007f‎‏‪-‮⁦-⁩]/g, ' ')
+      .replace(/[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
     return title ? [...title].slice(0, TITLE_MAX).join('') : null;

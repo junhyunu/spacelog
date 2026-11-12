@@ -138,7 +138,14 @@ function saveAllDirty() {
 if (typeof window !== 'undefined') {
   // 새로고침 · 창 닫기: 미뤄 둔 메모를 놓치지 않는다
   window.addEventListener('pagehide', flushAllNow);
-  window.addEventListener('beforeunload', flushAllNow);
+  window.addEventListener('beforeunload', (e) => {
+    flushAllNow();
+    // 서버와 끊긴 동안에는 위의 저장도 닿지 않는다. 저장 못 한 메모가 있으면 떠나기 전에 묻는다.
+    if (store.state.offline && [...savers.values()].some((s) => s.isDirty())) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
   // 탭이 가려질 때 미리 저장한다. keepalive로 못 보내는 큰 메모도 대개 창이 닫히기 전에 저장된다
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') saveAllDirty();
