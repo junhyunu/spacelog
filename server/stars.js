@@ -2,6 +2,9 @@ import crypto from 'node:crypto';
 
 const TITLE_FROM_BODY_MAX = 40;
 
+/** 메모 글자 수(코드 포인트) 한도. 파일 올리기(files.js) · 화면(detailLogic.js)의 한도와 같다. */
+export const MEMO_MAX = 20000;
+
 class ApiError extends Error {
   constructor(status, code) {
     super(code);
@@ -87,6 +90,13 @@ function periodCond(query, cond, params) {
   }
 }
 
+// 문자열이 아니거나 한도를 넘는 메모는 받지 않는다. 글자 수는 올리기 라우트처럼 코드 포인트로 센다.
+function checkMemo(memo) {
+  if (typeof memo !== 'string') throw new ApiError(400, 'invalid_memo');
+  if (memo.length > MEMO_MAX && [...memo].length > MEMO_MAX) throw new ApiError(400, 'invalid_memo');
+  return memo;
+}
+
 function firstLine(body) {
   const line = body.split(/\r?\n/).map((l) => l.trim()).find((l) => l !== '') ?? '';
   return [...line].slice(0, TITLE_FROM_BODY_MAX).join('');
@@ -111,10 +121,7 @@ function parseCreate(db, body) {
     if (typeof src.title !== 'string') throw new ApiError(400, 'invalid_title');
     out.title = src.title.trim();
   }
-  if (src.memo !== undefined && src.memo !== null) {
-    if (typeof src.memo !== 'string') throw new ApiError(400, 'invalid_memo');
-    out.memo = src.memo;
-  }
+  if (src.memo !== undefined && src.memo !== null) out.memo = checkMemo(src.memo);
 
   if (src.type === 'text') {
     if (typeof src.body !== 'string' || src.body.trim() === '') throw new ApiError(400, 'empty_body');
@@ -138,10 +145,7 @@ function parsePatch(db, body) {
     if (typeof src.title !== 'string' || src.title.trim() === '') throw new ApiError(400, 'invalid_title');
     out.title = src.title.trim();
   }
-  if (src.memo !== undefined) {
-    if (typeof src.memo !== 'string') throw new ApiError(400, 'invalid_memo');
-    out.memo = src.memo;
-  }
+  if (src.memo !== undefined) out.memo = checkMemo(src.memo);
   if (src.planet_id !== undefined) {
     if (!planetExists(db, src.planet_id)) throw new ApiError(400, 'unknown_planet');
     out.planet_id = src.planet_id;

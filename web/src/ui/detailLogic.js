@@ -96,21 +96,105 @@ function longerThan(text, max) {
   return false;
 }
 
+/** keepalive 요청 본문의 한도(바이트). 브라우저는 64KiB(65,536)를 넘으면 거절한다. 조금 남겨 둔다. */
+export const KEEPALIVE_BYTES = 64000;
+
+/** 본문이 keepalive로 보낼 수 있는 크기인지. 한글 20,000자 메모({"memo":"…"})는 60,011바이트다. */
+export function fitsKeepalive(bytes) {
+  return bytes <= KEEPALIVE_BYTES;
+}
+
+/**
+ * 조각을 다시 그린 뒤 초점을 돌려줄 선택자. data-d · data-a · id · tabindex 순으로 찾는다.
+ * 아무것도 없으면 null(초점을 돌려주지 않는다).
+ */
+export function focusKeyOf(el) {
+  if (!el) return null;
+  if (el.dataset?.d) return `[data-d="${el.dataset.d}"]`;
+  if (el.dataset?.a) return `[data-a="${el.dataset.a}"]`;
+  if (el.id) return `#${el.id}`;
+  const tab = el.getAttribute?.('tabindex');
+  return tab === null || tab === undefined ? null : `[tabindex="${tab}"]`;
+}
+
+/**
+ * 별마다 "마지막으로 저장한 메모"를 적어 두는 장부.
+ * 저장보다 먼저 떠난 다시 받기가 저장 뒤에 도착하면 옛 메모를 들고 온다. 그때 이쪽 것을 쓴다.
+ * 겹친 다시 받기는 마지막 것만 반영되므로(store.reload), 저장 뒤 첫 번째 동기화만 옛것일 수 있다.
+ * 두 번째부터는 저장 뒤에 떠난 것이라 서버 값을 믿는다.
+ */
+export function createMemoLedger() {
+  const saved = new Map(); // 별 id → { memo, at: 저장할 때까지 온 동기화 수 }
+  let syncs = 0;
+  return {
+    /** 저장이 확인됐을 때 */
+    record(id, memo) {
+      saved.set(String(id), { memo, at: syncs });
+    },
+    /** 다시 받기가 반영될 때마다('data') */
+    synced() {
+      syncs += 1;
+      for (const [id, entry] of saved) if (syncs - entry.at >= 2) saved.delete(id);
+    },
+    /** 서버가 준 메모와 견주어 보여 줄 메모 */
+    resolve(id, serverMemo) {
+      const entry = saved.get(String(id));
+      return entry ? entry.memo : serverMemo;
+    },
+    /** 별들의 memo를 그 자리에서 고친다. 고친 것이 있으면 true */
+    apply(stars) {
+      let changed = false;
+      if (saved.size === 0) return changed;
+      for (const star of stars ?? []) {
+        const entry = saved.get(String(star?.id));
+        if (entry && star.memo !== entry.memo) {
+          star.memo = entry.memo;
+          changed = true;
+        }
+      }
+      return changed;
+    },
+    has: (id) => saved.has(String(id)),
+    forget(id) {
+      saved.delete(String(id));
+    },
+  };
+}
+
+/**
+ * 저장하지 못한 저장기를 모두 다시 보낸다(연결이 돌아왔을 때 · 탭이 가려질 때).
+ * 열려 있지 않은 별의 것도 보낸다. → Promise<[id, 저장됐는지][]>. 던지지 않는다.
+ * @param {Map<string, ReturnType<typeof createMemoSaver>>} savers
+ */
+export function flushDirty(savers) {
+  const jobs = [];
+  for (const [id, saver] of [...savers]) {
+    if (saver.isDirty()) jobs.push(saver.flush().then((ok) => [id, ok]));
+  }
+  return Promise.all(jobs);
+}
+
 /**
  * 메모 자동 저장기. 별 하나에 하나씩 만든다(save가 그 별의 id를 쥐고 있어 다른 별에 쓰이지 않는다).
- * 요청은 한 번에 하나만 보낸다: 저장 중에 더 쓴 글은 앞의 저장이 끝난 뒤 이어서 보낸다.
+ * 보통 저장은 한 번에 하나만 보낸다: 저장 중에 더 쓴 글은 앞의 저장이 끝난 뒤 이어서 보낸다.
+ * 급한 저장(flushUrgent)은 그와 겹칠 수 있어서, 요청마다 번호를 매기고 더 새 요청의 결과만 "저장됨"으로 삼는다.
+ * save가 status 404로 실패하면(지워진 별) 저장기를 끝낸다: 오류 문구도, 다시 보내기도 없다.
  *
  * @param {object} o
  * @param {(value: string, opts: { keepalive?: boolean }) => Promise<unknown>} o.save
  * @param {number} [o.delay=600]      입력을 멈추고 저장하기까지(ms)
  * @param {(state: 'idle'|'typing'|'saving'|'saved'|'error'|'toolong') => void} [o.onState]
+ * @param {() => void} [o.onGone]     별이 지워져 저장기가 끝났을 때
  * @param {string} [o.initial='']     이미 저장되어 있는 글
  * @param {number} [o.maxLength=20000]
  */
-export function createMemoSaver({ save, delay = MEMO_DELAY, onState, initial = '', maxLength = MEMO_MAX } = {}) {
+export function createMemoSaver({ save, delay = MEMO_DELAY, onState, onGone, initial = '', maxLength = MEMO_MAX } = {}) {
   let value = String(initial ?? '');
   let saved = value; // 서버에 저장된 것이 확인된 글
-  let sent = value; // 마지막으로 보낸 글(끝났든 아니든)
+  let seq = 0; // 보낸 요청에 매기는 번호(늘기만 한다)
+  let savedSeq = 0; // saved를 확인해 준 요청의 번호
+  let doubt = 0; // 0이 아니면: 옛 요청이 더 새 요청보다 늦게 끝났다. 이 번호보다 뒤의 요청이 성공해야 풀린다
+  let urgentSent = null; // 가고 있는 급한 저장의 글
   let timer = null;
   let inflight = null;
   let urgent = 0; // 끝나지 않은 flushUrgent 요청 수
@@ -127,23 +211,51 @@ export function createMemoSaver({ save, delay = MEMO_DELAY, onState, initial = '
     timer = null;
   };
   const tooLong = () => longerThan(value, maxLength);
+  const clean = () => value === saved && doubt === 0;
+  const isGone = (err) => err?.status === 404;
+  const failState = (err) => (err?.code === 'invalid_memo' ? 'toolong' : 'error');
+
+  // n번 요청이 성공했다
+  function landed(n, sending) {
+    if (n > savedSeq) {
+      saved = sending;
+      savedSeq = n;
+      if (n > doubt) doubt = 0;
+    } else if (sending !== saved) {
+      doubt = seq; // 더 새 저장이 먼저 끝났다: 서버에는 이 옛 글이 남았을 수 있으니 지금 글을 다시 보낸다
+    }
+  }
+
+  // 지워진 별: 조용히 끝낸다
+  function drop() {
+    stopTimer();
+    set('idle');
+    disposed = true;
+    onGone?.();
+  }
 
   function start() {
     if (inflight) return inflight;
     const sending = value;
-    sent = sending;
+    const n = ++seq;
     set('saving');
     inflight = (async () => {
       let ok = true;
+      let failure = null;
       try {
         await save(sending, {});
-        saved = sending;
-      } catch {
+        landed(n, sending);
+      } catch (err) {
         ok = false;
+        failure = err;
       }
       inflight = null;
       if (disposed) return ok;
-      if (value === saved) {
+      if (!ok && isGone(failure)) {
+        drop();
+        return true;
+      }
+      if (clean()) {
         if (timer === null) set('saved');
         return true;
       }
@@ -154,12 +266,32 @@ export function createMemoSaver({ save, delay = MEMO_DELAY, onState, initial = '
         return false;
       }
       if (!ok && value === sending) {
-        set('error'); // 같은 글을 혼자 되풀이해 보내지 않는다. 다시 입력하거나 flush()하면 보낸다
+        set(failState(failure)); // 같은 글을 혼자 되풀이해 보내지 않는다. 다시 입력하거나 flush()하면 보낸다
         return false;
       }
       return start();
     })();
     return inflight;
+  }
+
+  // 급한 저장이 끝난 뒤: 남은 글이 있으면 보통 저장으로 잇는다
+  function afterUrgent(ok, failure) {
+    if (disposed) return;
+    if (!ok && isGone(failure)) {
+      drop();
+      return;
+    }
+    if (inflight || timer !== null) return; // 그쪽이 끝나면서 알아서 잇는다
+    if (clean()) {
+      set('saved');
+      return;
+    }
+    if (tooLong()) {
+      set('toolong');
+      return;
+    }
+    if (ok) start();
+    else set(failState(failure));
   }
 
   return {
@@ -172,7 +304,7 @@ export function createMemoSaver({ save, delay = MEMO_DELAY, onState, initial = '
         set('toolong');
         return;
       }
-      if (value === saved && !inflight) {
+      if (clean() && !inflight) {
         set('idle');
         return;
       }
@@ -191,17 +323,21 @@ export function createMemoSaver({ save, delay = MEMO_DELAY, onState, initial = '
         set('toolong');
         return (inflight ?? Promise.resolve()).then(() => false);
       }
-      if (!inflight && value === saved) return Promise.resolve(true);
+      if (!inflight && clean()) return Promise.resolve(true);
       return start();
     },
 
-    /** 화면이 사라지는 순간(pagehide)에 쓴다: 기다리지 않고 지금 글을 keepalive로 보낸다. */
+    /**
+     * 화면이 사라지는 순간(pagehide)에 쓴다: 기다리지 않고 지금 글을 keepalive로 보낸다.
+     * 같은 글의 보통 저장이 가고 있어도 보낸다(그 요청은 화면이 사라지면 끊길 수 있다).
+     */
     flushUrgent() {
       if (disposed) return;
       stopTimer();
-      if (tooLong() || value === saved || ((inflight || urgent > 0) && value === sent)) return;
+      if (tooLong() || (clean() && !inflight) || (urgent > 0 && value === urgentSent)) return;
       const sending = value;
-      sent = sending;
+      const n = ++seq;
+      urgentSent = sending;
       let request;
       urgent += 1;
       try {
@@ -213,11 +349,12 @@ export function createMemoSaver({ save, delay = MEMO_DELAY, onState, initial = '
       Promise.resolve(request).then(
         () => {
           urgent -= 1;
-          saved = sending;
-          if (!disposed && !inflight && timer === null && value === saved) set('saved');
+          landed(n, sending);
+          afterUrgent(true, null);
         },
-        () => {
+        (err) => {
           urgent -= 1;
+          afterUrgent(false, err);
         },
       );
     },
@@ -234,6 +371,6 @@ export function createMemoSaver({ save, delay = MEMO_DELAY, onState, initial = '
     value: () => value,
     state: () => state,
     /** 저장되지 않은 글이 있거나 저장 중이면 true. */
-    isDirty: () => !disposed && (inflight !== null || value !== saved),
+    isDirty: () => !disposed && (inflight !== null || !clean()),
   };
 }

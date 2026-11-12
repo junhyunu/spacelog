@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
+  KEEPALIVE_BYTES,
   MEMO_MAX,
   MEMO_STATUS,
   actionsFor,
+  createMemoLedger,
   createMemoSaver,
   deleteCopy,
   fileMeta,
+  fitsKeepalive,
+  flushDirty,
+  focusKeyOf,
   kindLabel,
   openFailToast,
   previewKind,
@@ -130,6 +135,96 @@ describe('openFailToast', () => {
   test('anything else (offline …)', () => {
     expect(openFailToast({ status: 0, code: 'offline' })).toBe('열지 못했어요. 다시 눌러 주세요');
     expect(openFailToast(undefined)).toBe('열지 못했어요. 다시 눌러 주세요');
+  });
+});
+
+describe('keepalive', () => {
+  const bytes = (memo) => new TextEncoder().encode(JSON.stringify({ memo })).length;
+  test('a full-length Korean memo still fits', () => {
+    const size = bytes('가'.repeat(MEMO_MAX));
+    expect(size).toBe(60011);
+    expect(fitsKeepalive(size)).toBe(true);
+  });
+  test('stays under the 64KiB browser cap', () => {
+    expect(KEEPALIVE_BYTES).toBe(64000);
+    expect(KEEPALIVE_BYTES).toBeLessThan(64 * 1024);
+    expect(fitsKeepalive(64000)).toBe(true);
+    expect(fitsKeepalive(64001)).toBe(false);
+    expect(fitsKeepalive(bytes('😀'.repeat(MEMO_MAX)))).toBe(false); // 80,011바이트
+  });
+});
+
+describe('createMemoLedger', () => {
+  test('no local save: the server memo is used', () => {
+    const ledger = createMemoLedger();
+    expect(ledger.resolve('s1', '서버')).toBe('서버');
+    expect(ledger.has('s1')).toBe(false);
+  });
+  test('a reload that was already on its way brings an older memo: the local one wins', () => {
+    const ledger = createMemoLedger();
+    ledger.record('s1', '새 메모');
+    expect(ledger.resolve('s1', '새 메모')).toBe('새 메모');
+    ledger.synced(); // 저장보다 먼저 떠난 다시 받기가 도착했다
+    expect(ledger.resolve('s1', '옛 메모')).toBe('새 메모');
+    expect(ledger.resolve(1, '옛 메모')).toBe('옛 메모'); // 다른 별
+  });
+  test('from the second sync after the save the server is trusted again', () => {
+    const ledger = createMemoLedger();
+    ledger.record('s1', '새 메모');
+    ledger.synced();
+    ledger.synced(); // 저장 뒤에 떠난 다시 받기
+    expect(ledger.has('s1')).toBe(false);
+    expect(ledger.resolve('s1', '다른 창에서 고친 메모')).toBe('다른 창에서 고친 메모');
+  });
+  test('a newer save replaces the older one and restarts the count', () => {
+    const ledger = createMemoLedger();
+    ledger.record('s1', 'a');
+    ledger.synced();
+    ledger.record('s1', 'ab');
+    ledger.synced();
+    expect(ledger.resolve('s1', 'a')).toBe('ab');
+    ledger.synced();
+    expect(ledger.resolve('s1', 'a')).toBe('a');
+  });
+  test('ids are compared as strings; forget drops one star', () => {
+    const ledger = createMemoLedger();
+    ledger.record(7, '메모');
+    ledger.synced();
+    expect(ledger.resolve('7', '')).toBe('메모');
+    ledger.forget('7');
+    expect(ledger.resolve(7, '')).toBe('');
+  });
+  test('apply patches the stars in place and reports whether anything changed', () => {
+    const ledger = createMemoLedger();
+    ledger.record('s1', '새 메모');
+    ledger.synced();
+    const stars = [
+      { id: 's1', memo: '옛 메모' },
+      { id: 's2', memo: '그대로' },
+    ];
+    expect(ledger.apply(stars)).toBe(true);
+    expect(stars).toEqual([
+      { id: 's1', memo: '새 메모' },
+      { id: 's2', memo: '그대로' },
+    ]);
+    expect(ledger.apply(stars)).toBe(false);
+  });
+});
+
+describe('focusKeyOf', () => {
+  const el = (dataset, extra = {}) => ({ dataset, id: '', ...extra });
+  test('data-d, data-a, then id', () => {
+    expect(focusKeyOf(el({ d: 'back' }))).toBe('[data-d="back"]');
+    expect(focusKeyOf(el({ a: 'open' }))).toBe('[data-a="open"]');
+    expect(focusKeyOf(el({ a: 'move' }, { id: 'aMove' }))).toBe('[data-a="move"]');
+    expect(focusKeyOf(el({}, { id: 'aMove' }))).toBe('#aMove');
+  });
+  test('an element with neither (the text preview) falls back to its tabindex, never to "undefined"', () => {
+    const key = focusKeyOf(el({}, { getAttribute: (n) => (n === 'tabindex' ? '0' : null) }));
+    expect(key).toBe('[tabindex="0"]');
+    expect(key).not.toContain('undefined');
+    expect(focusKeyOf(el({}, { getAttribute: () => null }))).toBeNull();
+    expect(focusKeyOf(null)).toBeNull();
   });
 });
 
@@ -408,6 +503,221 @@ describe('createMemoSaver', () => {
     const s = createMemoSaver({ save, initial: 'x' });
     s.flushUrgent();
     expect(save).not.toHaveBeenCalled();
+  });
+
+  test('flushUrgent still goes out when a normal save of the same text is in flight (it may be cancelled on unload)', async () => {
+    const { save, calls } = manual();
+    const s = createMemoSaver({ save });
+    s.input('x');
+    const done = s.flush(); // 탭이 가려질 때의 보통 저장
+    s.flushUrgent(); // 곧바로 pagehide
+    s.flushUrgent();
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(calls[1]).toMatchObject({ value: 'x', opts: { keepalive: true } });
+    calls[1].resolve();
+    await tick();
+    calls[0].resolve(); // 같은 글이라 늦게 끝나도 다시 보내지 않는다
+    await expect(done).resolves.toBe(true);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(s.state()).toBe('saved');
+    expect(s.isDirty()).toBe(false);
+  });
+
+  test('an urgent save resolving after a newer normal save does not regress; the newest text is sent again', async () => {
+    const { save, calls } = manual();
+    let server = '';
+    const land = async (i) => {
+      server = calls[i].value; // 서버는 끝난 순서대로 덮어쓴다고 본다
+      calls[i].resolve();
+      await tick();
+    };
+    const s = createMemoSaver({ save });
+    s.input('a');
+    s.flushUrgent(); // 'a' 급한 저장이 가는 중
+    s.input('ab'); // 더 쓴다
+    await vi.advanceTimersByTimeAsync(600);
+    expect(calls[1]).toMatchObject({ value: 'ab', opts: {} });
+    await land(1); // 보통 저장이 먼저 끝난다
+    expect(s.state()).toBe('saved');
+    await land(0); // 옛 글의 급한 저장이 뒤늦게 끝난다
+    expect(s.value()).toBe('ab');
+    expect(s.isDirty()).toBe(true); // 서버에 옛 글이 남았을 수 있다
+    expect(save).toHaveBeenCalledTimes(3);
+    expect(calls[2]).toMatchObject({ value: 'ab', opts: {} });
+    await land(2);
+    expect(server).toBe('ab');
+    expect(s.state()).toBe('saved');
+    expect(s.isDirty()).toBe(false);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(save).toHaveBeenCalledTimes(3);
+  });
+
+  test('typing more while an urgent save is in flight: the newer text is saved after it resolves', async () => {
+    const { save, calls } = manual();
+    const s = createMemoSaver({ save });
+    s.input('a');
+    s.flushUrgent();
+    s.input('ab');
+    calls[0].resolve();
+    await tick();
+    expect(s.isDirty()).toBe(true);
+    expect(s.state()).not.toBe('saved');
+    await vi.advanceTimersByTimeAsync(600);
+    expect(calls[1].value).toBe('ab');
+    calls[1].resolve();
+    await tick();
+    expect(s.state()).toBe('saved');
+  });
+
+  test('a failed urgent save leaves the text dirty and flush sends it again', async () => {
+    const { save, calls } = manual();
+    const s = createMemoSaver({ save });
+    s.input('x');
+    s.flushUrgent();
+    calls[0].reject(new Error('cancelled'));
+    await tick();
+    expect(s.state()).toBe('error');
+    expect(s.isDirty()).toBe(true);
+    const done = s.flush();
+    expect(calls[1].value).toBe('x');
+    calls[1].resolve();
+    await expect(done).resolves.toBe(true);
+  });
+
+  test('dispose while a save is in flight: nothing more is sent or reported', async () => {
+    const { save, calls } = manual();
+    const states = [];
+    const s = createMemoSaver({ save, onState: (st) => states.push(st) });
+    s.input('a');
+    const done = s.flush();
+    s.input('ab'); // 저장 중에 더 썼다
+    s.dispose();
+    calls[0].resolve();
+    await expect(done).resolves.toBe(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(states).toEqual(['typing', 'saving', 'saving']);
+    expect(s.isDirty()).toBe(false);
+    await expect(s.flush()).resolves.toBe(true);
+    s.flushUrgent();
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  test('error → type again → saved again', async () => {
+    const { save, calls } = manual();
+    const s = createMemoSaver({ save });
+    s.input('x');
+    await vi.advanceTimersByTimeAsync(600);
+    calls[0].reject(new Error('offline'));
+    await tick();
+    expect(s.state()).toBe('error');
+    s.input('xy');
+    expect(s.state()).toBe('typing');
+    await vi.advanceTimersByTimeAsync(600);
+    expect(calls[1].value).toBe('xy');
+    calls[1].resolve();
+    await tick();
+    expect(s.state()).toBe('saved');
+    expect(s.isDirty()).toBe(false);
+  });
+
+  test('flush when over the limit with a save in flight: waits, resolves false, sends nothing more', async () => {
+    const { save, calls } = manual();
+    const s = createMemoSaver({ save, maxLength: 3 });
+    s.input('abc');
+    await vi.advanceTimersByTimeAsync(600); // 'abc' 저장 중
+    s.input('abcd');
+    expect(s.state()).toBe('toolong');
+    let settled = false;
+    const done = s.flush().then((ok) => {
+      settled = true;
+      return ok;
+    });
+    await tick();
+    expect(settled).toBe(false); // 가고 있는 저장을 기다린다
+    calls[0].resolve();
+    await expect(done).resolves.toBe(false);
+    expect(s.state()).toBe('toolong');
+    expect(s.isDirty()).toBe(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  test('404 on save (the star is gone) is terminal: dropped, no error status, no retries', async () => {
+    const { save, calls } = manual();
+    const states = [];
+    const onGone = vi.fn();
+    const s = createMemoSaver({ save, onState: (st) => states.push(st), onGone });
+    s.input('지워진 별의 메모');
+    const done = s.flush();
+    calls[0].reject(Object.assign(new Error('404'), { status: 404, code: 'not_found' }));
+    await expect(done).resolves.toBe(true);
+    expect(onGone).toHaveBeenCalledTimes(1);
+    expect(states).not.toContain('error');
+    expect(s.state()).toBe('idle');
+    expect(s.isDirty()).toBe(false);
+    s.input('더 써도');
+    await vi.advanceTimersByTimeAsync(5000);
+    await s.flush();
+    s.flushUrgent();
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  test('404 on an urgent save is terminal too', async () => {
+    const { save, calls } = manual();
+    const onGone = vi.fn();
+    const s = createMemoSaver({ save, onGone });
+    s.input('x');
+    s.flushUrgent();
+    calls[0].reject({ status: 404 });
+    await tick();
+    expect(onGone).toHaveBeenCalledTimes(1);
+    expect(s.isDirty()).toBe(false);
+    expect(s.state()).toBe('idle');
+  });
+
+  test('server says invalid_memo → toolong status, not the generic error', async () => {
+    const { save, calls } = manual();
+    const s = createMemoSaver({ save });
+    s.input('x');
+    await vi.advanceTimersByTimeAsync(600);
+    calls[0].reject({ status: 400, code: 'invalid_memo' });
+    await tick();
+    expect(s.state()).toBe('toolong');
+    expect(MEMO_STATUS[s.state()]).toBe('메모가 너무 길어요');
+  });
+
+  test('flushDirty: after the connection returns every unsaved saver is sent again, open or not', async () => {
+    const a = manual();
+    const b = manual();
+    const c = manual();
+    const savers = new Map([
+      ['A', createMemoSaver({ save: a.save })], // 떠나온 별
+      ['B', createMemoSaver({ save: b.save })], // 열려 있는 별
+      ['C', createMemoSaver({ save: c.save, initial: '그대로' })], // 고친 것이 없는 별
+    ]);
+    savers.get('A').input('A 메모');
+    savers.get('B').input('B 메모');
+    await vi.advanceTimersByTimeAsync(600);
+    a.calls[0].reject({ status: 0, code: 'offline' });
+    b.calls[0].reject({ status: 0, code: 'offline' });
+    await tick();
+    expect(savers.get('A').state()).toBe('error');
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(a.save).toHaveBeenCalledTimes(1); // 혼자서는 다시 보내지 않는다
+
+    const done = flushDirty(savers); // 'online' · 'reachable'
+    expect(a.calls[1].value).toBe('A 메모');
+    expect(b.calls[1].value).toBe('B 메모');
+    expect(c.save).not.toHaveBeenCalled();
+    a.calls[1].resolve();
+    b.calls[1].reject({ status: 0, code: 'offline' });
+    await expect(done).resolves.toEqual([
+      ['A', true],
+      ['B', false],
+    ]);
+    expect(savers.get('A').isDirty()).toBe(false);
+    expect(savers.get('B').isDirty()).toBe(true);
   });
 
   test('setListener moves state callbacks to a new place', async () => {

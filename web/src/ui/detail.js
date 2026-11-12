@@ -17,9 +17,13 @@ import { ask } from './confirm.js';
 import {
   MEMO_STATUS,
   actionsFor,
+  createMemoLedger,
   createMemoSaver,
   deleteCopy,
   fileMeta,
+  fitsKeepalive,
+  flushDirty,
+  focusKeyOf,
   kindLabel,
   openFailToast,
   previewKind,
@@ -29,10 +33,10 @@ import { clearGuestStar } from './hud.js';
 import { toast } from './toast.js';
 
 const same = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined && String(a) === String(b);
-const KEEPALIVE_BYTES = 60000; // keepalive 요청은 본문이 64KiB를 넘으면 브라우저가 거절한다
-
 let current = null; // 지금 그려진 상세
 const savers = new Map(); // 별 id → 메모 저장기(그려져 있거나, 아직 저장하지 못한 것)
+const ledger = createMemoLedger(); // 별 id → 마지막으로 저장한 메모(늦게 온 다시 받기의 옛 메모를 고친다)
+let syncs = 0; // 지금까지 온 'data' 수
 
 const live = (ctx) => current === ctx && ctx.memoEl.isConnected;
 
@@ -40,6 +44,7 @@ const live = (ctx) => current === ctx && ctx.memoEl.isConnected;
 
 // 저장된 메모를 화면이 쥔 별에도 적어 둔다(목록에 갔다가 다시 열어도 새 메모가 보이게)
 function remember(id, memo) {
+  ledger.record(id, memo);
   const inStore = store.state.stars.find((s) => same(s.id, id));
   if (inStore) inStore.memo = memo;
   if (current && current.id === id) current.star.memo = memo;
@@ -56,20 +61,31 @@ async function patchMemo(id, memo, keepalive) {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body,
-    keepalive: new Blob([body]).size <= KEEPALIVE_BYTES,
+    // 너무 큰 본문은 keepalive로 못 보낸다. 그런 메모는 탭이 가려질 때 미리 저장해 둔다(아래 visibilitychange)
+    keepalive: fitsKeepalive(new Blob([body]).size),
   });
-  if (!res.ok) throw new Error(`memo ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(`memo ${res.status}`), { status: res.status });
 }
 
 // 그 별의 저장기. id를 여기서 쥐므로 별을 빠르게 바꿔도 다른 별에 쓰이지 않는다
 function saverFor(id, memo) {
   let saver = savers.get(id);
   if (!saver) {
+    let sends = 0;
+    let landed = 0;
     saver = createMemoSaver({
       initial: memo,
       save: async (value, opts) => {
+        const n = ++sends;
         await patchMemo(id, value, Boolean(opts?.keepalive));
+        if (n < landed) return; // 더 새 저장이 먼저 끝났다: 옛 글을 적어 두지 않는다
+        landed = n;
         remember(id, value);
+      },
+      // 지워진 별(행성째 지운 경우 등): 저장기를 치운다
+      onGone: () => {
+        if (savers.get(id) === saver) savers.delete(id);
+        ledger.forget(id);
       },
     });
     savers.set(id, saver);
@@ -110,11 +126,36 @@ function flushAllNow() {
   for (const saver of savers.values()) saver.flushUrgent();
 }
 
+// 저장하지 못한 메모를 모두(열려 있지 않은 별의 것도) 보통 저장으로 보낸다
+function saveAllDirty() {
+  flushDirty(savers)
+    .then((done) => {
+      for (const [id] of done) tidy(id);
+    })
+    .catch(() => {});
+}
+
 if (typeof window !== 'undefined') {
   // 새로고침 · 창 닫기: 미뤄 둔 메모를 놓치지 않는다
   window.addEventListener('pagehide', flushAllNow);
   window.addEventListener('beforeunload', flushAllNow);
+  // 탭이 가려질 때 미리 저장한다. keepalive로 못 보내는 큰 메모도 대개 창이 닫히기 전에 저장된다
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') saveAllDirty();
+  });
 }
+
+// 끊겼던 연결이 돌아오면 실패했던 저장을 다시 보낸다
+store.on('online', saveAllDirty);
+store.on('reachable', saveAllDirty);
+
+// 저장보다 먼저 떠난 다시 받기가 옛 메모를 들고 왔으면 저장한 메모로 고친다.
+// 이 모듈은 panel.js보다 먼저 듣기 시작하므로, 패널이 다시 그리기 전에 고쳐진다
+store.on('data', () => {
+  syncs += 1;
+  ledger.synced();
+  ledger.apply(store.state.stars);
+});
 
 /* ---------- 조각 HTML ---------- */
 
@@ -262,13 +303,29 @@ async function move(ctx, select) {
     clearGuestStar();
     ctx.handlers.onBack?.(); // 원래 행성의 목록으로
   }
+  // 3D가 별의 새 행성을 알게 된 뒤에(다시 받기가 반영된 뒤에) 날린다
+  const fly = () => {
+    const star = store.state.stars.find((s) => same(s.id, ctx.id));
+    if (!star || same(star.planet_id, target)) flyStarIn(ctx.id, from);
+  };
+  const seen = syncs;
+  let reloaded = true;
   try {
     await store.reload();
   } catch {
-    /* 연결 실패 카드는 api.js가 띄운다 */
+    reloaded = false; // 연결 실패 카드는 api.js가 띄운다
   }
-  flyStarIn(ctx.id, from);
-  toast(`'${name}'(으)로 옮겼어요`);
+  toast(`'${name}'(으)로 옮겼어요`); // 옮기기는 서버에서 이미 끝났다
+  if (!reloaded) return; // 다음 'data'가 별을 새 행성에 놓는다
+  if (syncs !== seen) {
+    fly();
+    return;
+  }
+  // 더 새 다시 받기에 밀려 아직 반영되지 않았다: 그것이 끝나면 날린다
+  const off = store.on('data', () => {
+    off();
+    fly();
+  });
 }
 
 async function remove(ctx) {
@@ -288,6 +345,7 @@ async function remove(ctx) {
   }
   ctx.saver.dispose(); // 지운 별에 메모를 쓰지 않는다
   savers.delete(ctx.id);
+  ledger.forget(ctx.id);
   store.state.stars = store.state.stars.filter((s) => !same(s.id, ctx.id));
   if (live(ctx)) {
     clearGuestStar();
@@ -346,8 +404,8 @@ function renderPart(ctx, part) {
   const html = partHtml(ctx, part);
   if (ctx.html[part] === html) return;
   ctx.html[part] = html;
-  const focused = el.contains(document.activeElement) ? document.activeElement : null;
-  const focusKey = focused ? (focused.dataset.d ? `[data-d="${focused.dataset.d}"]` : `[data-a="${focused.dataset.a}"]`) : null;
+  // data-a가 없는 것(글 미리보기 상자)도 초점을 돌려받는다
+  const focusKey = el.contains(document.activeElement) ? focusKeyOf(document.activeElement) : null;
   el.innerHTML = html;
   bindPart(ctx, part, el);
   if (focusKey) el.querySelector(focusKey)?.focus({ preventScroll: true });
@@ -367,6 +425,8 @@ function showStatus(ctx, state) {
  */
 export function renderDetail(container, star, planet, { onBack, onClose } = {}) {
   const id = String(star.id);
+  // 늦게 온 다시 받기가 옛 메모를 들고 왔으면 방금 저장한 메모를 쓴다(화면이 쥔 별도 그 자리에서 고친다)
+  if (ledger.apply([star])) ledger.apply(store.state.stars);
 
   // 같은 별이 그려져 있으면 바뀐 조각만 바꾼다
   if (current && current.id === id && current.container === container && current.memoEl.isConnected) {

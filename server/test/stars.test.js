@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { fetchLinkTitle } from '../linkTitle.js';
 import { createPlanet } from '../planets.js';
-import { buildSearchText, insertStar, toStarJson } from '../stars.js';
+import { MEMO_MAX, buildSearchText, insertStar, toStarJson } from '../stars.js';
 import { cleanup, makeApp } from './helpers.js';
 
 const HOST = { host: '127.0.0.1:4747' };
@@ -190,6 +190,38 @@ test('invalid type, title, memo → 400', async () => {
   const noBody = await call('POST', '/api/stars');
   expect(noBody.statusCode).toBe(400);
   expect(app.db.prepare('SELECT COUNT(*) AS c FROM stars').get().c).toBe(0);
+});
+
+test('memo over 20000 characters → 400 invalid_memo on create and patch (code points, like the upload route)', async () => {
+  expect(MEMO_MAX).toBe(20000);
+  // 이모지 20000자는 UTF-16으로 40000단위지만 한도 안이다.
+  const full = '😀'.repeat(MEMO_MAX);
+  const made = await post({ type: 'text', body: '본문', memo: full, planet_id: planet.id });
+  expect(made.memo).toBe(full);
+
+  for (const memo of ['가'.repeat(MEMO_MAX + 1), `${full}a`]) {
+    for (const body of [
+      { type: 'text', body: '본문', memo, planet_id: planet.id },
+      { type: 'link', url: 'https://example.com', memo, planet_id: planet.id },
+    ]) {
+      const res = await call('POST', '/api/stars', body);
+      expect(res.statusCode, body.type).toBe(400);
+      expect(res.json()).toEqual({ error: 'invalid_memo' });
+    }
+  }
+  expect(fetched).toEqual([]);
+  expect(app.db.prepare('SELECT COUNT(*) AS c FROM stars').get().c).toBe(1);
+
+  const star = await post({ type: 'text', body: '본문', memo: '처음 메모', planet_id: planet.id });
+  const ok = await call('PATCH', `/api/stars/${star.id}`, { memo: '가'.repeat(MEMO_MAX) });
+  expect(ok.statusCode).toBe(200);
+  for (const memo of ['가'.repeat(MEMO_MAX + 1), `${full}a`]) {
+    const res = await call('PATCH', `/api/stars/${star.id}`, { title: '같이 온 제목', memo });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: 'invalid_memo' });
+  }
+  expect(dbRow(star.id).memo).toBe('가'.repeat(MEMO_MAX));
+  expect(dbRow(star.id).title).toBe('본문');
 });
 
 test('list filters by period and planet, newest first, honours limit', async () => {
