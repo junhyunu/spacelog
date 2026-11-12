@@ -29,6 +29,7 @@ import { flyTo, setInputBlocked } from '../three/controls.js';
 import { STAR_CAP, setSelectedStar, syncUniverse } from '../three/planets.js';
 import { PLANET_COLORS, daysAgo, esc, periodRange } from '../util.js';
 import { registerEscape } from './escape.js';
+import { trapTab } from './planetForm.js';
 import {
   defaultCustom,
   emptyHint,
@@ -459,6 +460,10 @@ export function initHud() {
   // 목록 끝의 휠이 밖으로 번지지 않게 하는 것은 CSS(overscroll-behavior)
   // 좁은 화면의 서랍이 펼쳐져 있는 동안은 비행 키를 받지 않는다
   setInputBlocked(isDrawerOpen);
+  // 서랍 안에서 Tab이 처음 · 끝을 넘으면 서랍 안에서 돈다(페이지 밖으로도 나가지 않게)
+  $('side').addEventListener('keydown', (e) => {
+    if (isDrawerOpen()) trapTab($('side'), e);
+  });
   // Esc: 좁은 화면의 서랍은 아래 시트 위에 덮이는 맨 위 층이라 상세 → 목록(30)보다 먼저 닫는다(escape.js)
   registerEscape(35, () => {
     if (!store.state.inWorld || !narrowMq.matches || sideCollapsed) return false;
