@@ -190,7 +190,7 @@ def register_answer_routes(app):
                 print(f"rag /answer setup failed ({type(err).__name__})", file=sys.stderr, flush=True)
                 yield _ndjson({"type": "error", "code": "internal", "message": "답을 만들지 못했어요"})
                 return
-            for event in answer_events(req, chat=chat, index=index, k=cfg.search_k, min_score=cfg.min_score):
+            for event in answer_events(req, chat=chat, index=index, k=cfg.search_k, min_score=cfg.min_score, max_batches=cfg.sum_max_batches):
                 yield _ndjson(event)
 
         return Response(
