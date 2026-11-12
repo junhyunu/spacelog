@@ -89,7 +89,7 @@ export function createRagClient({ baseUrl, token, fetch = globalThis.fetch, time
 
   return {
     health: () => call('GET', '/health', undefined, { timeout: HEALTH_TIMEOUT_MS }),
-    indexStar: (payload) => call('POST', '/index', payload),
+    indexStar: (payload, opts) => call('POST', '/index', payload, opts), // opts.timeout: 큰 파일은 오래 걸린다(sync 가 120초를 준다)
     removeStars: (ids) => call('POST', '/remove', { star_ids: ids }),
     reset: () => call('POST', '/reset', {}),
     stats: () => call('GET', '/stats'),
