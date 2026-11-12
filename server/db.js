@@ -38,35 +38,69 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
 const LEGACY_COLUMNS = ['url', 'link_title', 'file_name', 'file_ext', 'file_size', 'file_hash', 'vault_path', 'thumb_path'];
 
-// 판 0 → 1. 파일 · 이미지 · 링크 별마다 첨부 1개(position 0)를 만든다. 첨부 id 는 별 id 와 같게 한다.
+// 옛 모양(별 행에 파일 · 링크 정보가 직접 든 것)으로 남은 별을 첨부 1개짜리 별로 바꾼다. 바꾼 별 id 를 돌려준다.
+// 판 0 → 1 옮기기에서 쓰고, 판 1 에서도 켤 때마다 한 번 돈다: 옮긴 뒤에도 옛 서버가 잠깐 더 돌며
+// 옛 모양으로 쓴 별이 있으면 여기서 주워 담는다. 첨부 id 는 별 id 와 같게 한다.
 // 그러면 보관함 파일 이름(vault/<별 id>.<ext>, thumbs/<별 id>.webp)이 "첨부 id" 규칙과 그대로 맞고 파일을 옮기지 않아도 된다.
+// 같은 해시의 첨부가 이미 있으면(옛 서버는 중복을 첨부 표에서 찾지 못한다) 해시만 비우고 파일은 그대로 둔다.
 // 호출하는 쪽이 트랜잭션으로 감싼다.
-function migrateTo1(db) {
-  db.exec(`
+function adoptLegacyStars(db) {
+  const ids = db
+    .prepare(
+      `SELECT s.id FROM stars s
+        WHERE s.type IN ('image', 'file', 'link')
+          AND (s.vault_path IS NOT NULL OR s.url IS NOT NULL)
+          AND NOT EXISTS (SELECT 1 FROM attachments a WHERE a.star_id = s.id)`,
+    )
+    .all()
+    .map((r) => r.id);
+  if (ids.length === 0) return [];
+  const insert = db.prepare(`
     INSERT INTO attachments (id, star_id, kind, position, file_name, file_ext, file_size, file_hash,
                              vault_path, thumb_path, url, link_title, created_at)
-    SELECT s.id, s.id, s.type, 0, s.file_name, s.file_ext, s.file_size, s.file_hash,
+    SELECT s.id, s.id, s.type, 0, s.file_name, s.file_ext, s.file_size,
+           CASE WHEN s.file_hash IS NOT NULL
+                 AND EXISTS (SELECT 1 FROM attachments x WHERE x.file_hash = s.file_hash) THEN NULL
+                ELSE s.file_hash END,
            s.vault_path, s.thumb_path, s.url, s.link_title, s.created_at
-      FROM stars s
-     WHERE s.type IN ('image', 'file', 'link')
-       AND NOT EXISTS (SELECT 1 FROM attachments a WHERE a.star_id = s.id);
-    UPDATE stars SET ${LEGACY_COLUMNS.map((c) => `${c} = NULL`).join(', ')}
-     WHERE type IN ('image', 'file', 'link');
+      FROM stars s WHERE s.id = ?`);
+  // 첨부가 실제로 생긴 별만 옛 칸을 비운다.
+  const clear = db.prepare(`UPDATE stars SET ${LEGACY_COLUMNS.map((c) => `${c} = NULL`).join(', ')}
+     WHERE id = ? AND EXISTS (SELECT 1 FROM attachments a WHERE a.star_id = stars.id)`);
+  for (const id of ids) {
+    insert.run(id);
+    clear.run(id);
+  }
+  return ids;
+}
+
+function rebuildSearchText(db, ids) {
+  const attsOf = db.prepare('SELECT * FROM attachments WHERE star_id = ? ORDER BY position');
+  const setText = db.prepare('UPDATE stars SET search_text = ? WHERE id = ?');
+  const starOf = db.prepare('SELECT id, title, body, memo FROM stars WHERE id = ?');
+  for (const id of ids) {
+    const star = starOf.get(id);
+    if (star) setText.run(buildSearchText(star, attsOf.all(id)), id);
+  }
+}
+
+// 판 0 → 1. 호출하는 쪽이 트랜잭션으로 감싼다.
+function migrateTo1(db) {
+  adoptLegacyStars(db);
+  db.exec(`
     UPDATE stars SET file_hash = NULL WHERE file_hash IS NOT NULL;
     DROP INDEX IF EXISTS stars_hash;
   `);
-  const attsOf = db.prepare('SELECT * FROM attachments WHERE star_id = ? ORDER BY position');
-  const setText = db.prepare('UPDATE stars SET search_text = ? WHERE id = ?');
-  for (const star of db.prepare('SELECT id, title, body, memo FROM stars').all()) {
-    setText.run(buildSearchText(star, attsOf.all(star.id)), star.id);
-  }
+  rebuildSearchText(db, db.prepare('SELECT id FROM stars').all().map((r) => r.id));
 }
 
 // 옮기기 전의 DB 를 spacelog.db.bak-1 로 남긴다. VACUUM INTO 는 WAL 에만 있는 쓰기까지 담은 한 파일을 만든다.
 // 임시 이름으로 만든 뒤 바꿔 달아, 복사가 중간에 끊겨도 반쪽짜리 백업이 남지 않게 한다.
 // 옮기기는 한 트랜잭션이라 실패하면 DB 가 그대로 남으므로, 다시 켤 때 백업을 새로 만들어도 같은 내용이다.
 function backup(db, dbPath, version) {
-  const bak = `${dbPath}.bak-${version}`;
+  // 이미 있는 백업은 덮어쓰지 않는다(사용자가 되돌려 둔 옛 DB 의 진짜 백업일 수 있다).
+  let bak = `${dbPath}.bak-${version}`;
+  if (fs.existsSync(bak)) bak = `${bak}-${new Date().toISOString().replace(/[:.]/g, '-')}`;
   const tmp = `${bak}.tmp`;
   fs.rmSync(tmp, { force: true });
   db.pragma('wal_checkpoint(TRUNCATE)');
@@ -96,6 +130,14 @@ export function openDb(dataDir) {
       }).immediate();
     }
     db.exec(SCHEMA);
+    // 옮긴 뒤에도 옛 서버가 옛 모양으로 쓴 별이 있으면 주워 담는다(없으면 아무 일도 없다).
+    db.transaction(() => {
+      const adopted = adoptLegacyStars(db);
+      if (adopted.length) {
+        db.exec('UPDATE stars SET file_hash = NULL WHERE file_hash IS NOT NULL');
+        rebuildSearchText(db, adopted);
+      }
+    }).immediate();
     return db;
   } catch (err) {
     db.close();

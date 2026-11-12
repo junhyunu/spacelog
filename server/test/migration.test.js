@@ -238,3 +238,39 @@ test('a migration that fails part-way leaves the old database untouched (one tra
   expect(app.db.pragma('user_version', { simple: true })).toBe(1);
   expect(app.db.prepare('SELECT COUNT(*) AS c FROM attachments').get().c).toBe(3);
 });
+
+// --- 검토에서 나온 경우들 ---
+test('a file star written in the old shape after migration (old server still running) is adopted on next start', async () => {
+  const dataDir = tempDir();
+  (await makeOldData(dataDir)).close();
+  openDb(dataDir).close(); // 옮긴다
+  // 옛 서버가 옛 모양으로 하나 더 쓴다
+  const late = '55555555-5555-4555-8555-555555555555';
+  fs.writeFileSync(path.join(dataDir, 'vault', `${late}.pdf`), '%PDF-1.4 late');
+  const raw = new Database(path.join(dataDir, 'spacelog.db'));
+  raw.prepare(`INSERT INTO stars (id, type, title, file_name, file_ext, file_size, file_hash, vault_path, memo, planet_id, created_at, search_text)
+    VALUES (?, 'file', '늦은 파일', '늦은.pdf', 'PDF', 13, 'latehash', ?, '', ?, '2026-11-12T00:00:00.000Z', '')`)
+    .run(late, `vault/${late}.pdf`, IDS.planet);
+  raw.close();
+
+  const db = openDb(dataDir);
+  const atts = db.prepare('SELECT * FROM attachments WHERE star_id = ?').all(late);
+  expect(atts).toHaveLength(1);
+  expect(atts[0]).toMatchObject({ id: late, kind: 'file', vault_path: `vault/${late}.pdf`, file_hash: 'latehash' });
+  const star = db.prepare('SELECT vault_path, file_hash, search_text FROM stars WHERE id = ?').get(late);
+  expect(star.vault_path).toBeNull();
+  expect(star.file_hash).toBeNull();
+  expect(star.search_text).toContain('늦은.pdf');
+  db.close();
+});
+
+test('an existing bak-1 is never overwritten', async () => {
+  const dataDir = tempDir();
+  (await makeOldData(dataDir)).close();
+  const bak = path.join(dataDir, 'spacelog.db.bak-1');
+  fs.writeFileSync(bak, 'older real backup');
+  openDb(dataDir).close();
+  expect(fs.readFileSync(bak, 'utf8')).toBe('older real backup');
+  const extra = fs.readdirSync(dataDir).filter((n) => n.startsWith('spacelog.db.bak-1-'));
+  expect(extra).toHaveLength(1);
+});
