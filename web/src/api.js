@@ -194,4 +194,83 @@ export const api = {
   revealAttachment: (attId) => request('POST', `/attachments/${id(attId)}/reveal`),
   attachmentFileUrl: (attId) => `/api/attachments/${id(attId)}/file`,
   attachmentThumbUrl: (attId) => `/api/attachments/${id(attId)}/thumb`,
+
+  /* ---------- 챗봇(2차 스펙 7장) ---------- */
+  /** → { rag: { state, reason }, key: true | false | null } */
+  chatStatus: () => request('GET', '/chat/status'),
+  /** → { enabled, consented, excluded_planets, key, rag, index, usage } */
+  chatSettings: () => request('GET', '/chat/settings'),
+  /** patch = { enabled?, consented?, excluded_planets? } → 바뀐 설정(chatSettings와 같은 모양) */
+  saveChatSettings: (patch) => request('PUT', '/chat/settings', patch),
+  /** scope: 'failed' | 'all' → { index } */
+  reindex: (scope) => request('POST', '/chat/reindex', { scope }),
+  /** → [{ id, title, created_at, updated_at, unread, running, last }] */
+  conversations: () => request('GET', '/chat/conversations'),
+  /** → { conversation, messages: [] } */
+  createConversation: () => request('POST', '/chat/conversations'),
+  /** → { conversation, messages } (읽지 않음을 지운다) */
+  conversation: (convId) => request('GET', `/chat/conversations/${id(convId)}`),
+  deleteConversation: (convId) => request('DELETE', `/chat/conversations/${id(convId)}`),
+  /** → 202 { user_message, assistant_message }. 오늘 날짜 · 시차는 브라우저의 현지 값 */
+  ask: (convId, { question, context, today, tz_offset_min } = {}) =>
+    request('POST', `/chat/conversations/${id(convId)}/messages`, { question, context: context ?? {}, today, tz_offset_min }),
+  /** → { message } | 409 not_running */
+  stopAnswer: (messageId) => request('POST', `/chat/messages/${id(messageId)}/stop`),
+  /** → { count } */
+  unread: () => request('GET', '/chat/unread'),
+
+  /**
+   * 답 메시지를 흘려 받는다(SSE). 끊기면 EventSource가 스스로 다시 붙고, 서버는 다시 snapshot부터 보낸다.
+   * done · error(서버가 보낸 것)를 받으면 닫는다. 다시 붙을 수 없게 끊기면(404 등) onError({ code: 'rag_unavailable' }).
+   * handlers: onSnapshot({ content, sources, status, error }), onToken(text), onReplace(text), onSources(sources),
+   *           onDone({ status, not_found }), onError({ status, code })
+   * @returns {() => void} close
+   */
+  streamAnswer(messageId, { onSnapshot, onToken, onReplace, onSources, onDone, onError } = {}) {
+    const es = new EventSource(`/api/chat/messages/${id(messageId)}/stream`);
+    let closed = false;
+    const close = () => {
+      closed = true;
+      es.close();
+    };
+    const data = (e) => {
+      try {
+        return JSON.parse(e.data);
+      } catch {
+        return null;
+      }
+    };
+    const call = (fn, v) => {
+      if (closed || typeof fn !== 'function') return;
+      try {
+        fn(v);
+      } catch (err) {
+        console.error('[chat] 흘려 받기 처리 중 오류', err);
+      }
+    };
+    es.addEventListener('snapshot', (e) => {
+      const d = data(e);
+      if (d) call(onSnapshot, d);
+    });
+    es.addEventListener('token', (e) => call(onToken, String(data(e)?.text ?? '')));
+    es.addEventListener('replace', (e) => call(onReplace, String(data(e)?.text ?? '')));
+    es.addEventListener('sources', (e) => call(onSources, Array.isArray(data(e)?.sources) ? data(e).sources : []));
+    es.addEventListener('done', (e) => {
+      const d = data(e) ?? { status: 'done' };
+      call(onDone, d);
+      close();
+    });
+    es.addEventListener('error', (e) => {
+      // 서버가 보낸 'error' 이벤트에는 data가 있다. 없으면 연결 오류(EventSource가 다시 붙는다)
+      if (typeof e.data === 'string') {
+        const d = data(e) ?? { status: 'failed', code: 'internal' };
+        call(onError, d);
+        close();
+      } else if (es.readyState === EventSource.CLOSED && !closed) {
+        call(onError, { status: 'failed', code: 'rag_unavailable', lost: true });
+        close();
+      }
+    });
+    return close;
+  },
 };
