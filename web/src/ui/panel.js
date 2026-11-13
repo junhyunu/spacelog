@@ -203,6 +203,7 @@ export function openPanel(id, starId) {
   const el = panelEl();
   el.hidden = false;
   $('near').hidden = true;
+  store.emit('panelOpened', planetId); // 챗봇 창이 자리를 나눌지 정한다(chatPanel.js)
 
   if (hasStar && !known) {
     api.star(starId).then(

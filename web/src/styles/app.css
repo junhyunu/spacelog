@@ -28,6 +28,14 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 
 /* panel: 기간 바 + 띠 배너 아래에서 시작한다(--tr-bottom은 hud.js가 넣는다). 아래 84px은 기록하기 자리 */
 #panel{position:fixed;top:calc(var(--tr-bottom,64px) + 12px);right:calc(14px + env(safe-area-inset-right,0px));bottom:calc(84px + env(safe-area-inset-bottom,0px));width:min(380px,calc(100vw - 28px));display:flex;flex-direction:column;overflow:hidden;animation:pop .22s cubic-bezier(.3,1.5,.6,1)}
+/* 챗봇 창과 자리 나누기(chatPanel.js): 1100px 이상은 챗봇 창 왼쪽으로 옮겨가 나란히, 그 아래는 챗봇 창이 열린 동안 숨는다 */
+@media (min-width:1100px){
+  #panel{transition:right .22s ease-out}
+  body:has(#chatPanel:not([hidden])) #panel{right:calc(var(--edge) + 380px + 12px + env(safe-area-inset-right,0px))}
+}
+@media (max-width:1099.98px){
+  body:has(#chatPanel:not([hidden])) #panel{visibility:hidden}
+}
 @keyframes pop{from{transform:scale(.92);opacity:0}to{transform:none;opacity:1}}
 #panel header{padding:16px 16px 12px;display:flex;gap:12px;align-items:center;border-bottom:3px solid var(--ink)}
 #panel .planet-ico{width:46px;height:46px;border-radius:50%;border:3px solid var(--ink);flex:none;box-shadow:inset -8px -8px 0 rgba(0,0,0,.18)}
@@ -322,4 +330,4 @@ body:has(#panel:not([hidden])) #wHint{visibility:hidden}
   body:has(#panel:not([hidden])) #near{visibility:hidden}
   #panel{top:auto;left:calc(10px + env(safe-area-inset-left,0px));right:calc(10px + env(safe-area-inset-right,0px));width:auto;height:62vh;bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:4}
 }
-@media (prefers-reduced-motion:reduce){#panel{animation:none}.rec.new{animation:none}#wLog.beckon::before{animation:none}#left.drawer #side{animation:none}#helpToggle .i{transition:none}}
+@media (prefers-reduced-motion:reduce){#panel{animation:none;transition:none}.rec.new{animation:none}#wLog.beckon::before{animation:none}#left.drawer #side{animation:none}#helpToggle .i{transition:none}}

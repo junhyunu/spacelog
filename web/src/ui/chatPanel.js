@@ -1,11 +1,11 @@
 // 챗봇 창(#chatPanel, 2차 스펙 7장): 버튼 위로 열리는 카드(380px, 최대 75vh), 760px 이하 전체 화면.
 // 탭 3개(홈 · 대화 · 설정), 처음 켜기 확인(행성 고르기), 쓸 수 없을 때 문구, 읽지 않음(빨간 점) 확인.
 //
-// 쌓임: 행성 패널(#panel)과 같은 층. 나중에 연 것이 위다 — 챗봇 창이 열린 뒤 행성 패널이 열리면 data-back을 붙여
-//   #panel 아래로 내린다(chat.css). 확인 · 저장 · 꾸미기 창보다는 늘 아래.
-// 좁은 화면(760px 이하, 전체 화면)에서는 행성 패널이 열리면 챗봇 창을 닫는다(뒤에 깔린 전체 화면이 남지 않게).
-// 창을 누르거나(pointerdown) 창 안으로 포커스가 오면(focusin) 다시 위로. 뒤에 있는 동안 버튼 이름은 "챗봇 앞으로 가져오기".
-// Esc 25: 창을 닫는다(escape.js 순서). 닫혀 있거나 행성 패널 뒤에 있으면 가져가지 않는다(보이는 행성 패널이 닫힌다). 비행 키는 창이 열려 있어도 막지 않는다. 입력칸의 글쓰기는 controls.js가
+// 행성 패널(#panel)과 자리 나누기: 둘은 겹치지 않는다.
+//   1100px 이상: 둘 다 열리면 행성 패널이 챗봇 창 왼쪽으로 옮겨가 나란히 보인다(app.css), 카메라는 남은 빈 곳 가운데를 본다(controls.js).
+//   1100px 미만: 하나만 보인다. 챗봇 창이 열려 있는 동안 행성 패널은 숨었다가(app.css) 챗봇을 닫으면 다시 보이고,
+//   행성 패널을 (다시) 열면 챗봇 창을 닫는다('panelOpened').
+// Esc 25: 창을 닫는다(escape.js 순서). 닫혀 있으면 가져가지 않는다. 비행 키는 창이 열려 있어도 막지 않는다. 입력칸의 글쓰기는 controls.js가
 //   원래 무시하고(typing), 창 안 버튼의 Space · 화살표는 여기서 전파를 끊어 버튼 누르기 · 탭 옮기기로 쓴다.
 //
 // 꺼짐(동의는 했지만 끔): 탭은 그대로. 대화는 읽기만(입력칸 막힘 + 설정 열기 버튼), 설정 탭에서 다시 켠다.
@@ -39,6 +39,8 @@ import { enterWorld } from './transition.js';
 
 const $ = (id) => document.getElementById(id);
 const narrowMq = typeof matchMedia === 'function' ? matchMedia('(max-width: 760px)') : { matches: false };
+// 행성 패널과 챗봇 창이 나란히 들어가는 폭(app.css의 같은 값)
+const sideBySideMq = typeof matchMedia === 'function' ? matchMedia('(min-width: 1100px)') : { matches: false };
 const POLL_MS = 30_000;
 const INDEX_POLL_MS = 2_000;
 const num = (v) => (Number(v) || 0).toLocaleString('ko-KR');
@@ -191,17 +193,6 @@ function panel() {
   return $('chatPanel');
 }
 
-function setBack(on) {
-  panel().toggleAttribute('data-back', on);
-  btn?.setBehind(on && open);
-}
-
-function bringFront() {
-  if (panel().hasAttribute('data-back')) setBack(false);
-}
-
-const isBack = () => panel().hasAttribute('data-back');
-
 export function isChatOpen() {
   return open;
 }
@@ -210,7 +201,6 @@ export async function openChat() {
   if (open) return;
   open = true;
   const el = panel();
-  bringFront();
   el.hidden = false;
   btn.setOpen(true);
   paintShell();
@@ -244,18 +234,11 @@ export function closeChat({ focus = true } = {}) {
   const had = el.contains(document.activeElement);
   el.hidden = true;
   btn.setOpen(false);
-  btn.setBehind(false);
   if (had && focus) btn.el.focus({ preventScroll: true });
   else if (had) document.activeElement.blur();
 }
 
 function toggle() {
-  // 행성 패널 아래로 내려가 있으면 닫지 않고 다시 위로
-  if (open && isBack()) {
-    bringFront();
-    panel().querySelector('.cp-body')?.focus?.({ preventScroll: true });
-    return;
-  }
   if (open) closeChat();
   else openChat();
 }
@@ -303,9 +286,6 @@ function build() {
     if (!(t instanceof Element) || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && t.type !== 'checkbox') return;
     if (e.code === 'Space' || e.key.startsWith('Arrow')) e.stopPropagation();
   });
-  // 행성 패널 아래로 내려가 있던 창을 누르거나 그 안으로 포커스가 오면(Tab 등) 다시 위로
-  el.addEventListener('pointerdown', bringFront);
-  el.addEventListener('focusin', bringFront);
 }
 
 function tabBtn(id, icon, label, dot = false) {
@@ -686,23 +666,13 @@ export function initChat() {
   btn = initChatButton({ onToggle: toggle });
   build();
 
-  // 행성 패널이 챗봇 창보다 나중에 열리면 그쪽이 위
-  const planetPanel = $('panel');
-  let panelWasHidden = planetPanel.hidden;
-  new MutationObserver(() => {
-    const hidden = planetPanel.hidden;
-    if (panelWasHidden && !hidden && open) {
-      // 좁은 화면의 챗봇은 전체 화면이라 뒤로 보내면 가려진 채 남는다: 닫는다
-      if (narrowMq.matches) closeChat({ focus: false });
-      else setBack(true);
-    }
-    if (hidden) bringFront(); // 겨룰 창이 없으면 늘 위(홈으로 나가도 #home 위에 남게)
-    panelWasHidden = hidden;
-  }).observe(planetPanel, { attributes: true, attributeFilter: ['hidden'] });
+  // 나란히 둘 자리가 없으면 행성 패널을 (다시) 열 때 챗봇 창을 닫는다(행성 패널이 보이게)
+  store.on('panelOpened', () => {
+    if (open && !sideBySideMq.matches) closeChat({ focus: false });
+  });
 
   registerEscape(25, () => {
-    // 닫혀 있거나 행성 패널 뒤에 있으면 보이는 행성 패널이 Esc를 받는다
-    if (!open || isBack()) return false;
+    if (!open) return false;
     closeChat();
     return true;
   });

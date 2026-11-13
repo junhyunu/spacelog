@@ -418,7 +418,34 @@ function step() {
     camTarget.z + Math.cos(camYaw) * cp * camDist,
   );
   camera.lookAt(camTarget);
+  updateViewShift(dt);
   renderer.render(scene, camera);
+}
+
+// 행성 패널과 챗봇 창이 오른쪽에 나란히 열려 있으면(1100px 이상, app.css) 화면 가운데가 가려진다.
+// 그동안은 그림을 옆으로 밀어, 카메라가 보는 곳(캐릭터 · 행성)이 왼쪽 패널과 행성 패널 사이 빈 곳 가운데에 오게 한다.
+let viewShift = 0;
+function viewShiftTarget() {
+  const panelEl = document.getElementById('panel');
+  const chatEl = document.getElementById('chatPanel');
+  if (!panelEl || panelEl.hidden || !chatEl || chatEl.hidden) return 0;
+  if (getComputedStyle(panelEl).visibility === 'hidden') return 0; // 좁은 창: 행성 패널이 숨어 있다
+  const side = document.getElementById('side');
+  const sideRect = side && !side.closest('[hidden]') && side.offsetParent !== null ? side.getBoundingClientRect() : null;
+  const leftEdge = sideRect && sideRect.width > 0 ? sideRect.right : 0;
+  const rightEdge = panelEl.getBoundingClientRect().left;
+  if (rightEdge <= leftEdge) return 0;
+  return innerWidth / 2 - (leftEdge + rightEdge) / 2; // 양수 = 그림을 왼쪽으로
+}
+function updateViewShift(dt) {
+  const target = viewShiftTarget();
+  viewShift += (target - viewShift) * (1 - Math.exp(-6 * dt));
+  if (Math.abs(target - viewShift) < 0.5) viewShift = target;
+  if (viewShift === 0) {
+    if (camera.view?.enabled) camera.clearViewOffset();
+    return;
+  }
+  camera.setViewOffset(innerWidth, innerHeight, viewShift, 0, innerWidth, innerHeight);
 }
 
 /** 프레임 루프를 켠다(한 번만). store.state.inWorld가 true인 동안만 움직이고 그린다. */
