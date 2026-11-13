@@ -225,14 +225,16 @@ body{word-break:keep-all}
 #side .sd-sum{flex:none;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--gap-2);padding:6px 16px 14px}
 #side .stats{font-size:12.5px;font-weight:700;line-height:1.8}
 #side .stats b{display:inline-block;margin:0 2px 0 4px;line-height:1.35;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px;font-family:var(--f-display);font-weight:400;font-size:12px;font-variant-numeric:tabular-nums}
-#goHome{font-size:13px;padding:6px 10px;display:flex;align-items:center;gap:4px}
+/* 요약 둘째 줄: 홈 · 캐릭터 꾸미기를 같은 폭으로 나란히 */
+#side .sd-acts{flex:1 0 100%;display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-2)}
+#goHome{font-size:13px;padding:6px 10px;display:flex;align-items:center;justify-content:center;gap:4px;min-width:0;min-height:44px;box-sizing:border-box;white-space:nowrap}
 #side .sd-planets{flex:0 1 auto;min-height:0;display:flex;flex-direction:column;gap:var(--gap-2);padding:12px 16px 0;border-top:var(--line) solid var(--ink)}
 #side .label{flex:none;font-family:var(--f-display);font-size:12px;color:var(--violet);letter-spacing:.06em}
 /* "+ 새 행성": 아래 목록 항목과 같은 폭 · 높이. 점선 테두리 · --panel-2 바탕, 색 원 자리에 plus 아이콘.
    목록에 스크롤 막대가 생기면 항목이 그만큼 좁아진다: hud.js가 --dock-sbw로 알려 준다 */
-#wNewPlanet{flex:none;display:flex;align-items:center;gap:10px;width:calc(100% - var(--dock-sbw,0px));min-width:0;min-height:44px;box-sizing:border-box;font:600 14px var(--f-body);color:var(--ink);background:var(--panel-2);border:var(--line-thin) dashed var(--ink);border-radius:14px;padding:7px 12px 7px 8px;cursor:pointer;text-align:left;white-space:nowrap}
+#wNewPlanet{flex:none;display:flex;align-items:center;gap:10px;width:calc(100% - var(--dock-sbw,0px));min-width:0;min-height:44px;box-sizing:border-box;font:600 14px var(--f-body);color:var(--ink);background:color-mix(in srgb,var(--panel-2) 60%,var(--white));border:var(--line-thin) dashed var(--ink);border-radius:14px;padding:7px 12px 7px 8px;cursor:pointer;text-align:left;white-space:nowrap}
 #wNewPlanet .dot{width:28px;height:28px;flex:none;display:grid;place-items:center}
-#wNewPlanet:hover{background:color-mix(in srgb,var(--panel-2) 60%,var(--white))}
+#wNewPlanet:hover,#wNewPlanet:focus-visible{background:var(--panel-2)}
 #wNewPlanet:active{transform:translateY(2px)}
 #wNewPlanet:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
 /* 행성 목록만 스크롤한다. 안쪽 여백은 그림자 · 포커스 링이 잘리지 않게 */
