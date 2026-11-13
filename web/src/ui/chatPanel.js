@@ -3,16 +3,33 @@
 //
 // 쌓임: 행성 패널(#panel)과 같은 층. 나중에 연 것이 위다 — 챗봇 창이 열린 뒤 행성 패널이 열리면 data-back을 붙여
 //   #panel 아래로 내린다(chat.css). 확인 · 저장 · 꾸미기 창보다는 늘 아래.
-// Esc 25: 창을 닫는다(escape.js 순서). 비행 키는 창이 열려 있어도 막지 않는다. 입력칸의 글쓰기는 controls.js가
+// 좁은 화면(760px 이하, 전체 화면)에서는 행성 패널이 열리면 챗봇 창을 닫는다(뒤에 깔린 전체 화면이 남지 않게).
+// 창을 누르거나(pointerdown) 창 안으로 포커스가 오면(focusin) 다시 위로. 뒤에 있는 동안 버튼 이름은 "챗봇 앞으로 가져오기".
+// Esc 25: 창을 닫는다(escape.js 순서). 닫혀 있거나 행성 패널 뒤에 있으면 가져가지 않는다(보이는 행성 패널이 닫힌다). 비행 키는 창이 열려 있어도 막지 않는다. 입력칸의 글쓰기는 controls.js가
 //   원래 무시하고(typing), 창 안 버튼의 Space · 화살표는 여기서 전파를 끊어 버튼 누르기 · 탭 옮기기로 쓴다.
 //
-// store에서 듣는 것: 'data'(행성 목록이 바뀌면 열린 탭을 다시 그린다), 'enterWorld' · 'leaveWorld'(홈 탭의 바로 묻기),
+// 꺼짐(동의는 했지만 끔): 탭은 그대로. 대화는 읽기만(입력칸 막힘 + 설정 열기 버튼), 설정 탭에서 다시 켠다.
+//   동의 화면은 동의 전에만.
+// 읽지 않음 확인(30초): 켜져 있고 쓸 수 있을 때만, 탭이 숨겨졌거나 연결이 끊기면 쉰다.
+//
+// store에서 듣는 것: 'data'(행성 목록이 바뀌면 열린 탭 · 설정의 행성 목록을 다시 그린다), 'enterWorld' · 'leaveWorld'(홈 탭의 바로 묻기),
 //   'reachable'(다시 연결되면 읽지 않음 확인). 알리는 것: 'openSave' { text }(chatThread.js), 'openStar'(hud.js의 flyToStar)
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { esc, ico, PLANET_COLORS } from '../util.js';
 import { initChatButton } from './chatButton.js';
-import { contextFor, errorMessage, failedLine, indexLine, quickQuestions, relativeTime, unavailableMessage } from './chatLogic.js';
+import {
+  contextFor,
+  errorMessage,
+  failedLine,
+  indexLine,
+  nextRetryDelay,
+  panelMode,
+  quickQuestions,
+  relativeTime,
+  shouldPollUnread,
+  unavailableMessage,
+} from './chatLogic.js';
 import { leaveThread, openThread, refreshThreadInput, threadConversationId, threadRunning } from './chatThread.js';
 import { ask } from './confirm.js';
 import { registerEscape } from './escape.js';
@@ -24,7 +41,6 @@ const $ = (id) => document.getElementById(id);
 const narrowMq = typeof matchMedia === 'function' ? matchMedia('(max-width: 760px)') : { matches: false };
 const POLL_MS = 30_000;
 const INDEX_POLL_MS = 2_000;
-const RUN_POLL_MS = 3_000; // 보던 답을 두고 닫았을 때: 끝나는 대로 빨간 점을 켜려고 짧게 확인한다
 const num = (v) => (Number(v) || 0).toLocaleString('ko-KR');
 const faceOf = (p) => PLANET_COLORS[p?.color_index]?.face ?? '#7a6cff';
 
@@ -46,6 +62,10 @@ let pollTimer = 0;
 let indexTimer = 0;
 let saving = false;
 let runTimer = 0;
+let runWanted = false; // 두고 닫은 답이 끝나기를 기다리는 중
+let runFailures = 0;
+const UNKNOWN_PLANET = '그사이 행성이 바뀌었어요. 다시 골라 주세요';
+const mode = () => (settings ? panelMode(settings) : 'unknown');
 
 /* ---------- 상태 ---------- */
 function blockReason() {
@@ -54,13 +74,14 @@ function blockReason() {
   return unavailableMessage({ rag: settings.rag, key: settings.key });
 }
 
-async function loadSettings() {
+async function loadSettings({ quiet = false } = {}) {
   try {
     settings = await api.chatSettings();
   } catch (err) {
-    if (err?.code !== 'offline') toast('챗봇 설정을 불러오지 못했어요. 다시 열어 주세요');
+    if (!quiet && err?.code !== 'offline') toast('챗봇 설정을 불러오지 못했어요. 다시 열어 주세요');
     return false;
   }
+  schedulePoll();
   return true;
 }
 
@@ -79,12 +100,15 @@ async function loadConvs() {
 function paintUnread() {
   const on = unreadCount > 0;
   btn?.setUnread(on);
-  const tabDot = $('chatPanel')?.querySelector('[data-tab="list"] .dot');
+  const listTab = $('chatPanel')?.querySelector('[data-tab="list"]');
+  const tabDot = listTab?.querySelector('.dot');
   if (tabDot) tabDot.hidden = !on;
+  const sr = listTab?.querySelector('.unread-sr');
+  if (sr) sr.textContent = on ? ', 읽지 않은 답 있음' : '';
 }
 
 async function refreshUnread() {
-  if (store.state.offline) return;
+  if (!shouldPollUnread({ settings, hidden: document.hidden, offline: store.state.offline })) return;
   try {
     const r = await api.unread();
     unreadCount = Number(r?.count) || 0;
@@ -95,35 +119,68 @@ async function refreshUnread() {
 }
 
 // 만들던 답을 두고 창을 닫으면 그 답이 끝날 때까지 3초마다 목록을 보고, 끝나면 읽지 않음을 다시 받는다.
-function watchRunning() {
+// 실패하면 3초 → 10초 → 30초로 늦춰 다시 보고, 탭이 숨겨졌거나 연결이 끊긴 동안은 쉰다(돌아오면 이어서).
+function watchRunning(delay = nextRetryDelay(runFailures)) {
   clearTimeout(runTimer);
+  runWanted = true;
   runTimer = setTimeout(async () => {
-    if (open && view === 'thread' && threadRunning()) return; // 다시 열어 그 답을 보고 있다(끝나면 그쪽이 다시 받는다)
+    runTimer = 0;
+    if (open && view === 'thread' && threadRunning()) {
+      runWanted = false; // 다시 열어 그 답을 보고 있다(끝나면 그쪽이 다시 받는다)
+      return;
+    }
+    if (document.hidden || store.state.offline) return; // runWanted는 그대로: resumeRunning()이 잇는다
     let list;
     try {
       list = await api.conversations();
     } catch {
+      runFailures += 1;
+      if (!store.state.offline) watchRunning();
       return;
     }
+    runFailures = 0;
     if (list.some((c) => c.running)) {
       watchRunning();
       return;
     }
+    runWanted = false;
     convs = list;
     unreadCount = list.filter((c) => c.unread).length;
     paintUnread();
     if (!open || panel().contains(document.activeElement)) return; // 누르던 자리를 지키려고 목록은 다음에 그린다
     if (view === 'list') renderList(panel().querySelector('.cp-body'));
     else if (view === 'home') renderHome(panel().querySelector('.cp-body'));
-  }, RUN_POLL_MS);
+  }, delay);
 }
 
-// 창이 닫혀 있거나 대화 화면이 아닐 때만 30초마다. 탭이 숨겨져 있으면 멈춘다.
+// 숨김 · 연결 끊김에서 돌아왔을 때 기다리던 답 확인을 잇는다
+function resumeRunning() {
+  if (runWanted && !runTimer) watchRunning(0);
+}
+
+// 창이 닫혀 있거나 대화 화면이 아닐 때만 30초마다. 동의 전 · 꺼짐 · 탭 숨김이면 돌리지 않는다.
+// 켜져 있지만 쓸 수 없으면(준비 중 등) 읽지 않음 대신 상태만 본다: 쓸 수 있게 되면 그때부터 묻는다.
+// 여러 번 불러도 된다: 이미 돌고 있으면 간격을 새로 시작하지 않는다(설정을 2초마다 받는 동안에도 30초를 지킨다).
 function schedulePoll() {
-  clearInterval(pollTimer);
-  pollTimer = 0;
-  if (document.hidden) return;
-  pollTimer = setInterval(() => {
+  const m = mode();
+  if (document.hidden || (m !== 'ready' && m !== 'unavailable')) {
+    clearInterval(pollTimer);
+    pollTimer = 0;
+    return;
+  }
+  if (pollTimer) return;
+  pollTimer = setInterval(async () => {
+    if (store.state.offline) return;
+    if (mode() === 'unavailable') {
+      try {
+        const st = await api.chatStatus();
+        if (settings) Object.assign(settings, { rag: st.rag, key: st.key });
+      } catch {
+        return;
+      }
+      if (mode() === 'ready') refreshUnread();
+      return;
+    }
     if (open && view === 'thread') return;
     refreshUnread();
   }, POLL_MS);
@@ -134,9 +191,16 @@ function panel() {
   return $('chatPanel');
 }
 
-function bringFront() {
-  panel().removeAttribute('data-back');
+function setBack(on) {
+  panel().toggleAttribute('data-back', on);
+  btn?.setBehind(on && open);
 }
+
+function bringFront() {
+  if (panel().hasAttribute('data-back')) setBack(false);
+}
+
+const isBack = () => panel().hasAttribute('data-back');
 
 export function isChatOpen() {
   return open;
@@ -158,7 +222,7 @@ export async function openChat() {
     closeChat();
     return;
   }
-  if (!settings.consented || !settings.enabled) {
+  if (mode() === 'consent') {
     show('consent');
     return;
   }
@@ -180,13 +244,14 @@ export function closeChat({ focus = true } = {}) {
   const had = el.contains(document.activeElement);
   el.hidden = true;
   btn.setOpen(false);
+  btn.setBehind(false);
   if (had && focus) btn.el.focus({ preventScroll: true });
   else if (had) document.activeElement.blur();
 }
 
 function toggle() {
   // 행성 패널 아래로 내려가 있으면 닫지 않고 다시 위로
-  if (open && panel().hasAttribute('data-back')) {
+  if (open && isBack()) {
     bringFront();
     panel().querySelector('.cp-body')?.focus?.({ preventScroll: true });
     return;
@@ -200,7 +265,7 @@ function build() {
   const el = panel();
   el.innerHTML =
     '<header class="cp-head"></header>' +
-    '<div class="cp-body" id="chatBody" role="tabpanel"></div>' +
+    '<div class="cp-body" id="chatBody" role="tabpanel" tabindex="-1"></div>' +
     '<nav class="cp-tabs" role="tablist" aria-label="챗봇 메뉴">' +
     tabBtn('home', 'house', '홈') +
     tabBtn('list', 'messages-square', '대화', true) +
@@ -238,16 +303,18 @@ function build() {
     if (!(t instanceof Element) || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && t.type !== 'checkbox') return;
     if (e.code === 'Space' || e.key.startsWith('Arrow')) e.stopPropagation();
   });
-  el.addEventListener('pointerdown', () => {
-    // 행성 패널 아래로 내려가 있던 창을 누르면 다시 위로
-    if (el.hasAttribute('data-back')) bringFront();
-  });
+  // 행성 패널 아래로 내려가 있던 창을 누르거나 그 안으로 포커스가 오면(Tab 등) 다시 위로
+  el.addEventListener('pointerdown', bringFront);
+  el.addEventListener('focusin', bringFront);
 }
 
 function tabBtn(id, icon, label, dot = false) {
   return (
-    `<button type="button" role="tab" data-tab="${id}" aria-controls="chatBody" aria-selected="false" tabindex="-1">` +
-    `${ico(icon, 18)}<span>${label}</span>${dot ? '<span class="dot" aria-label="읽지 않은 답 있음" hidden></span>' : ''}</button>`
+    `<button type="button" role="tab" id="chatTab-${id}" data-tab="${id}" aria-controls="chatBody" aria-selected="false" tabindex="-1">` +
+    `${ico(icon, 18)}<span>${label}</span>` +
+    // 빨간 점은 그림일 뿐, 읽지 않음은 탭 이름에 붙는 숨은 글로 알린다
+    (dot ? '<span class="dot" aria-hidden="true" hidden></span><span class="sr unread-sr"></span>' : '') +
+    '</button>'
   );
 }
 
@@ -255,6 +322,14 @@ function paintShell() {
   const el = panel();
   const tabs = el.querySelector('.cp-tabs');
   tabs.hidden = view === 'consent';
+  const body = el.querySelector('.cp-body');
+  if (view === 'consent') {
+    body.removeAttribute('role');
+    body.removeAttribute('aria-labelledby');
+  } else {
+    body.setAttribute('role', 'tabpanel');
+    body.setAttribute('aria-labelledby', `chatTab-${tab}`);
+  }
   for (const b of tabs.querySelectorAll('[data-tab]')) {
     const on = b.dataset.tab === tab;
     b.setAttribute('aria-selected', String(on));
@@ -303,10 +378,17 @@ function threadHooks() {
     onSource: goToSource,
     getContext: () => contextFor(store.state),
     getBlock: blockReason,
+    isOff: () => mode() === 'off',
+    onOpenSettings: goSettings,
     onChatOff: async () => {
       if (await loadSettings()) refreshThreadInput();
     },
   };
+}
+
+function goSettings() {
+  show('settings');
+  panel().querySelector('[data-tab="settings"]')?.focus({ preventScroll: true });
 }
 
 /* ---------- 처음 켜기 확인 ---------- */
@@ -347,6 +429,7 @@ function renderConsent(body) {
     on.disabled = true;
     try {
       settings = await api.saveChatSettings({ consented: true, enabled: true, excluded_planets: checkedIds(body) });
+      schedulePoll();
       toast('챗봇을 켰어요');
       await loadConvs();
       if (open) {
@@ -354,8 +437,10 @@ function renderConsent(body) {
         panel().querySelector('[data-tab="home"]')?.focus({ preventScroll: true });
       }
     } catch (err) {
-      if (err?.code === 'unknown_planet') toast('그사이 행성이 바뀌었어요. 다시 골라 주세요');
-      else if (err?.code !== 'offline') toast('챗봇을 켜지 못했어요. 다시 눌러 주세요');
+      if (err?.code === 'unknown_planet') {
+        toast(UNKNOWN_PLANET);
+        await store.reload().catch(() => {});
+      } else if (err?.code !== 'offline') toast('챗봇을 켜지 못했어요. 다시 눌러 주세요');
       if (open && view === 'consent') renderConsent(body);
     } finally {
       saving = false;
@@ -372,7 +457,7 @@ function convItem(c, { del = false } = {}) {
   return (
     `<li class="cv${c.unread ? ' unread' : ''}"><button type="button" class="cvb" data-open="${esc(c.id)}">` +
     `<span class="t">${esc(title)}</span>` +
-    (c.unread ? '<span class="dot" aria-label="읽지 않은 답 있음"></span>' : '') +
+    (c.unread ? '<span class="dot" aria-hidden="true"></span><span class="sr">, 읽지 않은 답 있음</span>' : '') +
     `<span class="d">${esc(note)}</span></button>` +
     (del ? `<button type="button" class="ic del" data-del="${esc(c.id)}" aria-label="${esc(`대화 '${title}' 지우기`)}">${ico('trash-2', 16)}</button>` : '') +
     '</li>'
@@ -381,7 +466,9 @@ function convItem(c, { del = false } = {}) {
 
 function blockBanner() {
   const why = blockReason();
-  return why ? `<p class="banner cp-banner" role="status"><span>${esc(why)}</span></p>` : '';
+  if (!why) return '';
+  const go = mode() === 'off' ? '<button type="button" class="btn ghost sm" data-act="settings">설정 열기</button>' : '';
+  return `<div class="banner cp-banner" role="status"><span>${esc(why)}</span>${go}</div>`;
 }
 
 function renderHome(body) {
@@ -411,6 +498,7 @@ function renderList(body) {
   setHead('대화');
   body.innerHTML =
     '<div class="cp-list">' +
+    (mode() === 'off' ? blockBanner() : '') +
     (convs.length ? `<ul class="cp-convs">${convs.map((c) => convItem(c, { del: true })).join('')}</ul>` : '<p class="empty">아직 대화가 없어요. 홈에서 바로 물어보세요</p>') +
     `<button type="button" class="btn violet cp-new" data-act="new">${ico('message-square-plus', 18)} 새 대화</button>` +
     '</div>';
@@ -422,6 +510,10 @@ async function onConvClick(e) {
   const openB = t.closest('[data-open]');
   if (openB) {
     show('thread', { id: openB.dataset.open });
+    return;
+  }
+  if (t.closest('[data-act="settings"]')) {
+    goSettings();
     return;
   }
   if (t.closest('[data-act="new"]')) {
@@ -470,7 +562,7 @@ function renderSettings(body) {
     '<label class="cp-sw"><span class="t">챗봇 켜기</span><input type="checkbox" role="switch" data-act="switch"' +
     `${s.enabled ? ' checked' : ''}><span class="knob" aria-hidden="true"></span></label>` +
     '<section><div class="lbl" id="cpSetEx">챗봇이 읽지 않을 행성</div>' +
-    `<div role="group" aria-labelledby="cpSetEx">${planetChecks(s.excluded_planets)}</div></section>` +
+    `<div role="group" aria-labelledby="cpSetEx" data-planets>${planetChecks(s.excluded_planets)}</div></section>` +
     '<section><div class="lbl">상태</div>' +
     `<p class="cp-line">OpenAI 키: <b>${esc(keyLine())}</b></p>` +
     (why ? `<p class="cp-line warn">${esc(why)}</p>` : '') +
@@ -488,6 +580,7 @@ function renderSettings(body) {
     input.disabled = true;
     try {
       settings = await api.saveChatSettings({ enabled: want });
+      schedulePoll();
       toast(want ? '챗봇을 켰어요' : '챗봇을 껐어요');
     } catch (err) {
       input.checked = !want;
@@ -495,19 +588,29 @@ function renderSettings(body) {
     } finally {
       input.disabled = false;
     }
-    if (!open) return;
-    if (!settings.enabled || !settings.consented) show('consent');
-    else renderSettings(body);
+    if (!open || view !== 'settings') return;
+    if (mode() === 'consent') show('consent');
+    else {
+      renderSettings(body);
+      body.querySelector('[data-act="switch"]')?.focus({ preventScroll: true });
+    }
   });
-  body.querySelector('.cp-planets')?.addEventListener('change', async (e) => {
+  // 목록은 'data' · unknown_planet 때 안만 다시 그리므로 묶음에 한 번 단다
+  body.querySelector('[data-planets]').addEventListener('change', async (e) => {
     const input = e.target;
+    if (!(input instanceof HTMLInputElement)) return;
     const ids = checkedIds(body);
     try {
       settings = await api.saveChatSettings({ excluded_planets: ids });
       toast(input.checked ? '그 행성은 챗봇이 읽지 않아요' : '그 행성도 챗봇이 읽어요');
     } catch (err) {
       input.checked = !input.checked;
-      if (err?.code !== 'offline') toast('설정을 바꾸지 못했어요. 다시 눌러 주세요');
+      if (err?.code === 'unknown_planet') {
+        toast(UNKNOWN_PLANET);
+        // 지워진 행성이 섞였다: 행성 목록 · 설정을 다시 받고 목록을 새로 그린다
+        await Promise.all([store.reload().catch(() => {}), loadSettings({ quiet: true })]);
+        if (open && view === 'settings') paintPlanets(body, input.value);
+      } else if (err?.code !== 'offline') toast('설정을 바꾸지 못했어요. 다시 눌러 주세요');
     }
     if (open && view === 'settings') paintIndex(body);
   });
@@ -522,6 +625,19 @@ function renderSettings(body) {
     if (yes) reindex('all');
   });
   if (s.index?.indexing) indexTimer = setTimeout(pollIndex, INDEX_POLL_MS);
+}
+
+// 설정 탭의 행성 목록만 다시 그린다. 포커스가 목록에 있었으면(또는 focusId를 주면) 같은 행성, 없어졌으면 첫 칸으로
+function paintPlanets(body, focusId) {
+  const group = body.querySelector('[data-planets]');
+  if (!group) return;
+  const active = document.activeElement;
+  const had = group.contains(active);
+  const keep = focusId ?? (had && active instanceof HTMLInputElement ? active.value : null);
+  group.innerHTML = planetChecks(settings?.excluded_planets);
+  if (!had && focusId === undefined) return;
+  const inputs = [...group.querySelectorAll('input')];
+  (inputs.find((i) => i.value === keep) ?? inputs[0] ?? body.querySelector('[data-act="switch"]'))?.focus({ preventScroll: true });
 }
 
 // 읽는 중이면 2초마다 숫자만 다시 그린다(포커스가 그대로 있게)
@@ -575,13 +691,18 @@ export function initChat() {
   let panelWasHidden = planetPanel.hidden;
   new MutationObserver(() => {
     const hidden = planetPanel.hidden;
-    if (panelWasHidden && !hidden && open) panel().setAttribute('data-back', '');
+    if (panelWasHidden && !hidden && open) {
+      // 좁은 화면의 챗봇은 전체 화면이라 뒤로 보내면 가려진 채 남는다: 닫는다
+      if (narrowMq.matches) closeChat({ focus: false });
+      else setBack(true);
+    }
     if (hidden) bringFront(); // 겨룰 창이 없으면 늘 위(홈으로 나가도 #home 위에 남게)
     panelWasHidden = hidden;
   }).observe(planetPanel, { attributes: true, attributeFilter: ['hidden'] });
 
   registerEscape(25, () => {
-    if (!open) return false;
+    // 닫혀 있거나 행성 패널 뒤에 있으면 보이는 행성 패널이 Esc를 받는다
+    if (!open || isBack()) return false;
     closeChat();
     return true;
   });
@@ -590,6 +711,10 @@ export function initChat() {
   store.on('data', () => {
     if (!open || saving) return;
     const body = panel().querySelector('.cp-body');
+    if (view === 'settings') {
+      paintPlanets(body); // 지워진 행성이 남지 않게(고르던 중이면 같은 칸에 포커스를 돌려준다)
+      return;
+    }
     if (body.contains(document.activeElement)) return; // 쓰거나 고르는 중이면 건드리지 않는다
     if (view === 'home') renderHome(body);
     else if (view === 'consent') renderConsent(body);
@@ -599,16 +724,22 @@ export function initChat() {
   };
   store.on('enterWorld', reHome);
   store.on('leaveWorld', reHome);
-  store.on('reachable', refreshUnread);
-  store.on('online', refreshUnread);
+  const back = () => {
+    refreshUnread();
+    resumeRunning();
+  };
+  store.on('reachable', back);
+  store.on('online', back);
 
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) clearInterval(pollTimer);
-    else {
-      refreshUnread();
+    if (document.hidden) {
+      clearInterval(pollTimer);
+      pollTimer = 0;
+    } else {
       schedulePoll();
+      back();
     }
   });
-  schedulePoll();
-  refreshUnread();
+  // 동의 · 켜짐 · 준비 상태를 먼저 알아야 읽지 않음을 물을지 정한다(서버는 동의 전에 파이썬을 부르지 않는다)
+  loadSettings({ quiet: true }).then((ok) => ok && refreshUnread());
 }

@@ -149,3 +149,42 @@ export function askMeta(now = new Date()) {
     tz_offset_min: -now.getTimezoneOffset(),
   };
 }
+
+/**
+ * 챗봇 창이 보여 줄 것. 동의 전이면 'consent'(켜기 확인), 꺼져 있으면 'off'(탭은 그대로, 대화는 읽기만),
+ * 켜져 있지만 쓸 수 없으면 'unavailable', 아니면 'ready'.
+ */
+export function panelMode({ consented, enabled, rag, key } = {}) {
+  if (!consented) return 'consent';
+  if (!enabled) return 'off';
+  return unavailableMessage({ rag, key }) ? 'unavailable' : 'ready';
+}
+
+/** 읽지 않음을 물어도 되는지: 켜져 있고 쓸 수 있을 때, 탭이 보이고 연결돼 있을 때만. */
+export function shouldPollUnread({ settings, hidden, offline } = {}) {
+  return Boolean(settings) && !hidden && !offline && panelMode(settings) === 'ready';
+}
+
+const RETRY_DELAYS = [3_000, 10_000, 30_000];
+/** 실패를 n번 거듭한 뒤 다시 보기까지 기다릴 시간(0번 = 보통 간격 3초). 3초 → 10초 → 30초에서 멈춘다. */
+export function nextRetryDelay(failures) {
+  const n = Math.max(0, Math.floor(Number(failures) || 0));
+  return RETRY_DELAYS[Math.min(n, RETRY_DELAYS.length - 1)];
+}
+
+/** 챗봇 버튼의 접근 가능한 이름. */
+export function chatButtonLabel({ open, behind, unread } = {}) {
+  if (open && behind) return '챗봇 앞으로 가져오기';
+  if (open) return '챗봇 닫기';
+  return unread ? '챗봇 열기, 읽지 않은 답 있음' : '챗봇 열기';
+}
+
+export const ANNOUNCE_MAX = 200;
+/** 답이 끝났을 때 화면 읽기 프로그램에 한 번 읽어 줄 문구. m = { status, content, error } */
+export function answerAnnouncement(m = {}) {
+  if (m.status === 'stopped') return '답을 멈췄어요';
+  if (m.status === 'failed') return errorMessage(m.error);
+  const t = chars(String(m.content ?? '').replace(/\s+/g, ' ').trim());
+  if (!t.length) return '기록에서 찾지 못했어요.';
+  return t.length > ANNOUNCE_MAX ? `${t.slice(0, ANNOUNCE_MAX).join('')}…` : t.join('');
+}

@@ -4,7 +4,7 @@
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { esc, ico } from '../util.js';
-import { askMeta, canSend, counterText, errorMessage, sourceCardModel, titleFrom } from './chatLogic.js';
+import { answerAnnouncement, askMeta, canSend, counterText, errorMessage, sourceCardModel, titleFrom } from './chatLogic.js';
 import { toast } from './toast.js';
 
 let T = null; // 지금 그린 대화 화면 상태
@@ -19,7 +19,9 @@ const isNotFound = (content) => {
 /**
  * 대화 화면을 root에 그린다. convId가 없으면 빈 새 대화(첫 질문을 할 때 서버에 만든다).
  * hooks: onBack() · onChanged()(목록 · 읽지 않음을 다시 받을 때) · onSource(source) · getContext() ·
- *        getBlock() → '' | 막는 이유(꺼짐 · 준비 안 됨) · onChatOff()
+ *        getBlock() → '' | 막는 이유(꺼짐 · 준비 안 됨) · isOff() → 꺼져 있는지(막는 줄에 설정 열기 버튼) ·
+ *        onOpenSettings() · onChatOff()
+ * 화면 읽기: 흘려 받는 동안 말풍선 목록은 aria-live="off"이고, 숨은 role="status" 줄이 시작과 끝을 한 번씩 읽어 준다.
  * firstQuestion이 있으면 그리자마자 묻는다(홈 탭의 바로 묻기).
  */
 export async function openThread(root, head, convId, hooks = {}, { firstQuestion } = {}) {
@@ -102,7 +104,9 @@ function build(t) {
   t.root.innerHTML =
     '<div class="ct">' +
     '<div class="ct-msgs" role="log" aria-live="polite" aria-label="대화" tabindex="0"></div>' +
-    '<p class="ct-block" role="status" hidden></p>' +
+    '<p class="sr ct-say" role="status"></p>' +
+    '<div class="ct-block" role="status" hidden><span class="ct-block-t"></span>' +
+    '<button type="button" class="btn ghost sm" data-act="settings" hidden>설정 열기</button></div>' +
     '<form class="ct-form" novalidate>' +
     '<textarea class="ct-ta" rows="1" aria-label="질문" placeholder="기록에 대해 물어보세요"></textarea>' +
     '<div class="ct-row"><span class="ct-hint">Enter 묻기 · Shift+Enter 줄바꿈</span><span class="ct-count" aria-live="polite"></span>' +
@@ -110,6 +114,10 @@ function build(t) {
     '</form></div>';
   t.list = t.root.querySelector('.ct-msgs');
   t.block = t.root.querySelector('.ct-block');
+  t.blockText = t.root.querySelector('.ct-block-t');
+  t.blockGo = t.root.querySelector('[data-act="settings"]');
+  t.say = t.root.querySelector('.ct-say');
+  t.blockGo.addEventListener('click', () => t.hooks.onOpenSettings?.());
   t.form = t.root.querySelector('.ct-form');
   t.ta = t.root.querySelector('.ct-ta');
   t.go = t.root.querySelector('.ct-go');
@@ -252,8 +260,9 @@ function scrollDown(t, force = false) {
 
 function paintInput(t) {
   const block = t.hooks.getBlock?.() ?? '';
-  t.block.textContent = block;
+  if (t.blockText.textContent !== block) t.blockText.textContent = block; // 같은 글을 다시 넣어 또 읽히지 않게
   t.block.hidden = !block;
+  t.blockGo.hidden = !block || !t.hooks.isOff?.();
   t.ta.disabled = Boolean(block);
   t.count.textContent = counterText(t.ta.value);
   if (t.running) {
@@ -265,6 +274,20 @@ function paintInput(t) {
     t.go.className = 'btn ct-go';
     t.go.disabled = !canSend({ text: t.ta.value, composing: t.composing, busy: t.busy, enabled: !block });
   }
+}
+
+/* ---------- 화면 읽기 ---------- */
+// 흘려 받는 동안 말풍선 목록은 조용히(글자마다 읽지 않게), 시작 · 끝만 숨은 status 줄로 한 번씩
+function quiet(t, on) {
+  t.list.setAttribute('aria-live', on ? 'off' : 'polite');
+}
+
+function announce(t, text) {
+  t.say.textContent = '';
+  // 비운 뒤 조금 있다 넣어야 같은 문구도 다시 읽힌다
+  setTimeout(() => {
+    if (T === t) t.say.textContent = text;
+  }, 60);
 }
 
 /* ---------- 묻기 · 흘려 받기 ---------- */
@@ -285,6 +308,7 @@ async function submit(t) {
     if (T !== t) return;
     if (t.ta.value === text) t.ta.value = '';
     grow(t.ta);
+    quiet(t, true); // 새 말풍선 두 개를 목록이 읽지 않게(시작은 아래 subscribe가 알린다)
     if (!t.messages.length) t.list.textContent = '';
     if (!t.messages.length || t.conv.title === '새 대화') t.conv.title = titleFrom(question);
     paintHead(t);
@@ -311,15 +335,12 @@ async function submit(t) {
 function subscribe(t, m) {
   t.close?.();
   t.running = m.id;
+  quiet(t, true);
+  announce(t, '답을 만들고 있어요');
   paintInput(t);
   const finish = () => {
     if (T !== t || t.running !== m.id) return;
-    t.running = null;
-    t.close = null;
-    repaint(t, m);
-    paintInput(t);
-    scrollDown(t);
-    t.hooks.onChanged?.();
+    ended(t, m);
   };
   t.close = api.streamAnswer(m.id, {
     onSnapshot(d) {
@@ -362,6 +383,19 @@ function subscribe(t, m) {
   });
 }
 
+// 답이 끝났다(done · stopped · failed): 그리고, 한 번 읽어 주고, 목록을 다시 듣게 한다
+function ended(t, m) {
+  t.close?.();
+  t.close = null;
+  t.running = null;
+  repaint(t, m);
+  paintInput(t);
+  scrollDown(t);
+  announce(t, answerAnnouncement(m));
+  quiet(t, false);
+  t.hooks.onChanged?.();
+}
+
 async function stop(t) {
   const id = t.running;
   if (!id) return;
@@ -372,12 +406,7 @@ async function stop(t) {
     const m = t.messages.find((x) => x.id === id);
     if (T === t && m && t.running === id && r?.message) {
       Object.assign(m, r.message);
-      t.close?.();
-      t.close = null;
-      t.running = null;
-      repaint(t, m);
-      paintInput(t);
-      t.hooks.onChanged?.();
+      ended(t, m);
     }
   } catch (err) {
     if (err?.code !== 'not_running' && err?.code !== 'offline') toast('멈추지 못했어요. 다시 눌러 주세요');

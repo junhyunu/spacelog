@@ -1,15 +1,21 @@
 import { describe, expect, test } from 'vitest';
 import {
+  ANNOUNCE_MAX,
   QUESTION_MAX,
+  answerAnnouncement,
   askMeta,
   canSend,
+  chatButtonLabel,
   contextFor,
   counterText,
   errorMessage,
   failedLine,
   indexLine,
+  nextRetryDelay,
+  panelMode,
   quickQuestions,
   relativeTime,
+  shouldPollUnread,
   sourceCardModel,
   titleFrom,
   unavailableMessage,
@@ -200,5 +206,72 @@ describe('askMeta', () => {
   test('local date and offset', () => {
     const d = new Date(2026, 0, 5, 1, 2);
     expect(askMeta(d)).toEqual({ today: '2026-01-05', tz_offset_min: -d.getTimezoneOffset() });
+  });
+});
+
+describe('panelMode', () => {
+  const ready = { rag: { state: 'ready' }, key: true };
+  test('not consented → consent, whatever else', () => {
+    expect(panelMode({ consented: false, enabled: false, ...ready })).toBe('consent');
+    expect(panelMode({})).toBe('consent');
+  });
+  test('consented but off → off (tabs stay)', () => {
+    expect(panelMode({ consented: true, enabled: false, ...ready })).toBe('off');
+    expect(panelMode({ consented: true, enabled: false, rag: { state: 'missing' } })).toBe('off');
+  });
+  test('on but not usable → unavailable', () => {
+    expect(panelMode({ consented: true, enabled: true, rag: { state: 'starting' }, key: null })).toBe('unavailable');
+    expect(panelMode({ consented: true, enabled: true, rag: { state: 'ready' }, key: false })).toBe('unavailable');
+  });
+  test('on and usable → ready (unknown key does not block)', () => {
+    expect(panelMode({ consented: true, enabled: true, ...ready })).toBe('ready');
+    expect(panelMode({ consented: true, enabled: true, rag: { state: 'ready' }, key: null })).toBe('ready');
+  });
+});
+
+describe('shouldPollUnread', () => {
+  const settings = { consented: true, enabled: true, rag: { state: 'ready' }, key: true };
+  test('only when ready, visible and online', () => {
+    expect(shouldPollUnread({ settings, hidden: false, offline: false })).toBe(true);
+    expect(shouldPollUnread({ settings: null })).toBe(false);
+    expect(shouldPollUnread({ settings: { ...settings, consented: false } })).toBe(false);
+    expect(shouldPollUnread({ settings: { ...settings, enabled: false } })).toBe(false);
+    expect(shouldPollUnread({ settings: { ...settings, rag: { state: 'crashed' } } })).toBe(false);
+    expect(shouldPollUnread({ settings, hidden: true })).toBe(false);
+    expect(shouldPollUnread({ settings, offline: true })).toBe(false);
+  });
+});
+
+describe('nextRetryDelay', () => {
+  test('3 s → 10 s → 30 s, then stays at 30 s', () => {
+    expect([0, 1, 2, 3, 10].map(nextRetryDelay)).toEqual([3000, 10000, 30000, 30000, 30000]);
+  });
+  test('bad input counts as no failures', () => {
+    expect(nextRetryDelay(undefined)).toBe(3000);
+    expect(nextRetryDelay(-2)).toBe(3000);
+  });
+});
+
+describe('chatButtonLabel', () => {
+  test('closed', () => {
+    expect(chatButtonLabel({ open: false })).toBe('챗봇 열기');
+    expect(chatButtonLabel({ open: false, unread: true })).toBe('챗봇 열기, 읽지 않은 답 있음');
+  });
+  test('open in front / behind the planet panel', () => {
+    expect(chatButtonLabel({ open: true, unread: true })).toBe('챗봇 닫기');
+    expect(chatButtonLabel({ open: true, behind: true })).toBe('챗봇 앞으로 가져오기');
+  });
+});
+
+describe('answerAnnouncement', () => {
+  test('stopped and failed', () => {
+    expect(answerAnnouncement({ status: 'stopped', content: '반쯤' })).toBe('답을 멈췄어요');
+    expect(answerAnnouncement({ status: 'failed', error: 'openai_error' })).toBe(errorMessage('openai_error'));
+  });
+  test('done: whitespace folded, cut at ANNOUNCE_MAX code points', () => {
+    expect(answerAnnouncement({ status: 'done', content: ' 첫 줄\n\n둘째 ' })).toBe('첫 줄 둘째');
+    const long = '가'.repeat(ANNOUNCE_MAX + 5);
+    expect(answerAnnouncement({ status: 'done', content: long })).toBe(`${'가'.repeat(ANNOUNCE_MAX)}…`);
+    expect(answerAnnouncement({ status: 'done', content: '' })).toBe('기록에서 찾지 못했어요.');
   });
 });

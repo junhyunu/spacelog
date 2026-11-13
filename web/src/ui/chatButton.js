@@ -2,6 +2,7 @@
 // 그림: 보라 원 + 잉크 테두리, 흰 타원 궤도 3줄(0° · 60° · 120°, 잉크 외곽선), 가운데 노란 별(잉크 외곽선).
 // 궤도 그룹은 chat.css가 20초에 한 바퀴 돌린다(모션 줄이기에서는 멈춤). 열리면 ✕로 바뀐다.
 import { ico } from '../util.js';
+import { chatButtonLabel } from './chatLogic.js';
 
 const STAR = '32,21.5 34.59,28.44 41.99,28.76 36.18,33.36 38.17,40.49 32,36.4 25.83,40.49 27.82,33.36 22.01,28.76 29.41,28.44';
 const ORBIT = (deg, cls) => `<ellipse class="${cls}" cx="32" cy="32" rx="21" ry="8" transform="rotate(${deg} 32 32)"/>`;
@@ -19,7 +20,8 @@ const ATOM =
 
 /**
  * 버튼을 준비한다. onToggle()은 누를 때마다 불린다.
- * @returns {{ setOpen(open: boolean): void, setUnread(on: boolean): void, el: HTMLButtonElement }}
+ * 읽지 않음은 빨간 점(그림)과 버튼의 이름("챗봇 열기, 읽지 않은 답 있음")으로 함께 알린다.
+ * @returns {{ setOpen(open: boolean): void, setBehind(on: boolean): void, setUnread(on: boolean): void, el: HTMLButtonElement }}
  */
 export function initChatButton({ onToggle } = {}) {
   const el = document.getElementById('chatBtn');
@@ -27,10 +29,8 @@ export function initChatButton({ onToggle } = {}) {
   el.addEventListener('click', () => onToggle?.());
   let unread = false;
   let open = false;
-  const label = () => {
-    const base = open ? '챗봇 닫기' : '챗봇 열기';
-    el.setAttribute('aria-label', unread && !open ? `${base}, 읽지 않은 답 있음` : base);
-  };
+  let behind = false; // 열려 있지만 행성 패널 아래에 있다
+  const label = () => el.setAttribute('aria-label', chatButtonLabel({ open, behind, unread }));
   label();
   return {
     el,
@@ -38,6 +38,10 @@ export function initChatButton({ onToggle } = {}) {
       open = Boolean(next);
       el.classList.toggle('open', open);
       el.setAttribute('aria-expanded', String(open));
+      label();
+    },
+    setBehind(next) {
+      behind = Boolean(next);
       label();
     },
     setUnread(on) {

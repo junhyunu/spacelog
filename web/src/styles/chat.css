@@ -65,7 +65,8 @@ body:has(#left.drawer) #chatBtn{visibility:hidden}
 .cp-quick{display:flex;flex-direction:column;gap:9px}
 .cp-quick .btn{text-align:left;white-space:normal;overflow-wrap:anywhere;font-size:14px;min-height:44px;box-shadow:0 3px 0 var(--ink)}
 .cp-banner{white-space:normal;border-radius:14px;margin:0}
-.cp-banner span{overflow:visible}
+.cp-banner span{overflow:visible;flex:1}
+.cp-banner .btn{margin:0}
 .cp-new{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:2px}
 
 /* 대화 목록 */
@@ -119,7 +120,11 @@ button.src:hover{background:color-mix(in srgb,var(--yellow) 45%,var(--white))}
 .src.gone .pdot{opacity:.5}
 .bacts{margin-top:9px;display:flex}
 .bacts .btn{display:inline-flex;align-items:center;box-shadow:0 3px 0 var(--ink)}
-.ct-block{flex:none;margin:0 14px 10px;padding:7px 12px;font-size:13px;font-weight:600;line-height:1.5;background:var(--notice);border:var(--line-thin) solid var(--ink);border-radius:12px}
+.ct-block{flex:none;display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 14px 10px;padding:7px 12px;font-size:13px;font-weight:600;line-height:1.5;background:var(--notice);border:var(--line-thin) solid var(--ink);border-radius:12px}
+.ct-block[hidden]{display:none}
+.ct-block-t{flex:1;min-width:0}
+.ct-block .btn{flex:none;box-shadow:0 2px 0 var(--ink)}
+.cp-body:focus{outline:none}
 .ct-form{flex:none;display:flex;flex-direction:column;gap:7px;padding:10px 12px 12px;border-top:var(--line) solid var(--ink)}
 .ct-ta{width:100%;min-height:44px;max-height:150px;box-sizing:border-box;resize:none;border:var(--line-thin) solid var(--ink);border-radius:10px;padding:10px 12px;background:var(--white);color:var(--ink);font:500 14px/1.5 var(--f-body)}
 .ct-ta:disabled{background:var(--panel-2);color:var(--mute)}

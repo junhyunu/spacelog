@@ -220,18 +220,30 @@ export const api = {
   unread: () => request('GET', '/chat/unread'),
 
   /**
-   * 답 메시지를 흘려 받는다(SSE). 끊기면 EventSource가 스스로 다시 붙고, 서버는 다시 snapshot부터 보낸다.
-   * done · error(서버가 보낸 것)를 받으면 닫는다. 다시 붙을 수 없게 끊기면(404 등) onError({ code: 'rag_unavailable' }).
+   * 답 메시지를 흘려 받는다(SSE). 서버는 붙을 때마다 snapshot부터 보낸다.
+   * done · error(서버가 보낸 것)를 받으면 닫는다.
+   * 연결 오류가 나면 브라우저가 3초마다 다시 붙게 두지 않고 닫은 뒤 한 번 GET으로 상태를 본다:
+   *   404 → onError({ code: 'not_found' }), 그 밖의 4xx → onError({ code: 'internal' }),
+   *   200 → 바로 다시 붙는다(잠깐 끊긴 것), 연결 안 됨 → store 'offline'을 알리고 'reachable' · 'online'에 다시 붙는다.
    * handlers: onSnapshot({ content, sources, status, error }), onToken(text), onReplace(text), onSources(sources),
    *           onDone({ status, not_found }), onError({ status, code })
    * @returns {() => void} close
    */
   streamAnswer(messageId, { onSnapshot, onToken, onReplace, onSources, onDone, onError } = {}) {
-    const es = new EventSource(`/api/chat/messages/${id(messageId)}/stream`);
+    const url = `/api/chat/messages/${id(messageId)}/stream`;
     let closed = false;
+    let es = null;
+    let waitOff = []; // 다시 연결되기를 기다리는 store 구독
+    let quickRetries = 0; // 살아 있는데 끊기는 일이 거듭되면 천천히
+    const stopWaiting = () => {
+      for (const off of waitOff) off();
+      waitOff = [];
+    };
     const close = () => {
       closed = true;
-      es.close();
+      stopWaiting();
+      es?.close();
+      es = null;
     };
     const data = (e) => {
       try {
@@ -248,29 +260,88 @@ export const api = {
         console.error('[chat] 흘려 받기 처리 중 오류', err);
       }
     };
-    es.addEventListener('snapshot', (e) => {
-      const d = data(e);
-      if (d) call(onSnapshot, d);
-    });
-    es.addEventListener('token', (e) => call(onToken, String(data(e)?.text ?? '')));
-    es.addEventListener('replace', (e) => call(onReplace, String(data(e)?.text ?? '')));
-    es.addEventListener('sources', (e) => call(onSources, Array.isArray(data(e)?.sources) ? data(e).sources : []));
-    es.addEventListener('done', (e) => {
-      const d = data(e) ?? { status: 'done' };
-      call(onDone, d);
+    const fail = (code) => {
+      call(onError, { status: 'failed', code });
       close();
-    });
-    es.addEventListener('error', (e) => {
-      // 서버가 보낸 'error' 이벤트에는 data가 있다. 없으면 연결 오류(EventSource가 다시 붙는다)
-      if (typeof e.data === 'string') {
-        const d = data(e) ?? { status: 'failed', code: 'internal' };
-        call(onError, d);
-        close();
-      } else if (es.readyState === EventSource.CLOSED && !closed) {
-        call(onError, { status: 'failed', code: 'rag_unavailable', lost: true });
-        close();
+    };
+    const waitForServer = () => {
+      stopWaiting();
+      const again = () => {
+        stopWaiting();
+        if (!closed) connect();
+      };
+      waitOff = [store.on('reachable', again), store.on('online', again)];
+    };
+    // 연결 오류 뒤 한 번만 상태를 본다(흘려 받기 응답이면 머리만 받고 끊는다)
+    const probe = async () => {
+      const ctrl = new AbortController();
+      let res;
+      let text = '';
+      try {
+        res = await fetch(url, { headers: { Accept: 'text/event-stream' }, signal: ctrl.signal });
+        if (!res.ok) text = await res.text();
+      } catch {
+        res = null;
+      } finally {
+        ctrl.abort();
       }
-    });
+      if (closed) return;
+      if (!res) {
+        store.emit('offline');
+        waitForServer();
+        return;
+      }
+      if (res.ok) {
+        quickRetries += 1;
+        if (quickRetries > 3) setTimeout(() => !closed && connect(), 10_000);
+        else connect();
+        return;
+      }
+      const err = errorFrom(res.status, text);
+      if (err.code === 'offline') {
+        waitForServer(); // 개발용 프록시가 답했다(서버 꺼짐). errorFrom이 'offline'을 알렸다
+        return;
+      }
+      fail(res.status === 404 ? 'not_found' : res.status === 409 || res.status === 503 ? 'rag_unavailable' : 'internal');
+    };
+    function connect() {
+      if (closed) return;
+      if (store.state.offline) {
+        waitForServer();
+        return;
+      }
+      const src = new EventSource(url);
+      es = src;
+      const live = () => !closed && es === src;
+      src.addEventListener('snapshot', (e) => {
+        if (!live()) return;
+        quickRetries = 0;
+        const d = data(e);
+        if (d) call(onSnapshot, d);
+      });
+      src.addEventListener('token', (e) => live() && call(onToken, String(data(e)?.text ?? '')));
+      src.addEventListener('replace', (e) => live() && call(onReplace, String(data(e)?.text ?? '')));
+      src.addEventListener('sources', (e) => live() && call(onSources, Array.isArray(data(e)?.sources) ? data(e).sources : []));
+      src.addEventListener('done', (e) => {
+        if (!live()) return;
+        call(onDone, data(e) ?? { status: 'done' });
+        close();
+      });
+      src.addEventListener('error', (e) => {
+        if (!live()) return;
+        // 서버가 보낸 'error' 이벤트에는 data가 있다
+        if (typeof e.data === 'string') {
+          call(onError, data(e) ?? { status: 'failed', code: 'internal' });
+          close();
+          return;
+        }
+        // 연결 오류: 브라우저의 자동 재연결 대신 직접 본다
+        src.close();
+        es = null;
+        probe();
+      });
+    }
+    connect();
     return close;
   },
 };
