@@ -84,6 +84,9 @@
 
 <div id="worldMsg" class="card" hidden></div>
 
+<!-- 챗봇 창(2차 스펙 7장): 행성 패널과 같은 층, 나중에 연 것이 위(#panel 앞에 둔다: 같은 층이면 #panel이 위). 안은 chatPanel.js가 채운다 -->
+<section id="chatPanel" class="card" role="dialog" aria-label="챗봇" hidden></section>
+
 <aside id="panel" class="card" hidden aria-live="polite"></aside>
 
 <div id="dropveil" aria-hidden="true" hidden>
@@ -167,6 +170,9 @@
     <div class="row"><button type="button" class="btn ghost" id="cNo">취소</button><button type="button" class="btn pink" id="cYes">확인</button></div>
   </div>
 </div>
+
+<!-- 챗봇 버튼: 오른쪽 아래 맨 구석(W-00 · W-01 모두). 원자 그림은 chatButton.js가 채운다 -->
+<button type="button" id="chatBtn" aria-label="챗봇 열기" aria-expanded="false" aria-controls="chatPanel"></button>
 
 <div id="toast" class="card" role="status" aria-live="polite" hidden></div>
 

@@ -155,8 +155,8 @@ async function revalidateGuest() {
   if (guestMoved(guest, star)) clearGuestStar();
 }
 
-// 별로 날아간다(재발견 "날아가기"). 기간 밖이면 손님 별로 보여 주고, 도착하면 'openStar'.
-function flyToStar(star) {
+// 별로 날아간다(재발견 "날아가기" · 챗봇 출처 카드 chatPanel.js). 기간 밖이면 손님 별로 보여 주고, 도착하면 'openStar'.
+export function flyToStar(star) {
   const planetId = String(star.planet_id);
   const starId = String(star.id);
   if (isOutsidePeriod(star, store.state.range)) showGuestStar(star);
