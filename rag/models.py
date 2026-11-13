@@ -102,4 +102,6 @@ def get_chat(cfg, responses=None, responder=None):
         return fake_chat(responses, responder)
     from langchain_openai import ChatOpenAI
 
-    return ChatOpenAI(model=cfg.model, temperature=0, api_key=cfg.api_key or None)
+    # 수업 코드는 temperature=0 이지만, 그 값을 받지 않는 모델이 있어 .env 의 OPENAI_TEMPERATURE 가 있을 때만 보낸다.
+    extra = {} if cfg.temperature is None else {"temperature": cfg.temperature}
+    return ChatOpenAI(model=cfg.model, api_key=cfg.api_key or None, **extra)

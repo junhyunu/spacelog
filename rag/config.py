@@ -43,6 +43,8 @@ class Config:
     search_k: int = DEFAULT_SEARCH_K
     min_score: float = DEFAULT_MIN_SCORE
     sum_max_batches: int = DEFAULT_SUM_MAX_BATCHES
+    # None 이면 temperature 를 보내지 않는다(모델 기본값). 일부 모델(gpt-6-luna 등)은 기본값(1) 외에는 400 을 낸다.
+    temperature: float | None = None
 
 
 def _truthy(value) -> bool:
@@ -90,6 +92,14 @@ def load_config(environ=None, env_file=ENV_FILE) -> Config:
     if sum_max_batches < 1:
         raise ConfigError("SPACELOG_RAG_SUM_MAX_BATCHES must be >= 1")
 
+    temp_raw = str(values.get("OPENAI_TEMPERATURE") or "").strip()
+    try:
+        temperature = float(temp_raw) if temp_raw else None
+    except ValueError as err:
+        raise ConfigError("OPENAI_TEMPERATURE must be a number") from err
+    if temperature is not None and not 0.0 <= temperature <= 2.0:
+        raise ConfigError("OPENAI_TEMPERATURE must be within [0, 2]")
+
     return Config(
         data_dir=data_dir.resolve(),
         port=port,
@@ -102,4 +112,5 @@ def load_config(environ=None, env_file=ENV_FILE) -> Config:
         search_k=search_k,
         min_score=min_score,
         sum_max_batches=sum_max_batches,
+        temperature=temperature,
     )

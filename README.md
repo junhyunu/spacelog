@@ -87,7 +87,7 @@ OPENAI_MODEL=gpt-4o-mini
 OPENAI_EMBED_MODEL=text-embedding-3-small
 ```
 
-`OPENAI_MODEL`과 `OPENAI_EMBED_MODEL`은 비워 두면 위의 값을 써요. 키는 파이썬 쪽만 읽고, 화면이나 Node 서버로는 오가지 않아요.
+`OPENAI_MODEL`과 `OPENAI_EMBED_MODEL`은 비워 두면 위의 값을 써요. 키는 파이썬 쪽만 읽고, 화면이나 Node 서버로는 오가지 않아요. `OPENAI_TEMPERATURE`는 넣지 않는 것을 권해요(일부 모델은 기본값 외의 temperature를 받지 않아요). 수업처럼 0으로 두고 싶으면 `OPENAI_TEMPERATURE=0`을 더하세요.
 
 **켜는 법**
 

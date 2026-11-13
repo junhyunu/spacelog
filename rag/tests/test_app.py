@@ -94,3 +94,18 @@ def test_fake_models(make_config):
 
     # 기본 가짜 모델도 부를 수 있다
     assert isinstance(get_chat(cfg).invoke("q").content, str)
+
+
+def test_temperature_is_optional_and_validated(tmp_path):
+    from config import ConfigError, load_config
+
+    base = {"SPACELOG_DATA": str(tmp_path), "SPACELOG_RAG_TOKEN": "t", "SPACELOG_FAKE_MODELS": "1"}
+    assert load_config(dict(base), env_file=tmp_path / "none.env").temperature is None
+    assert load_config({**base, "OPENAI_TEMPERATURE": "0"}, env_file=tmp_path / "none.env").temperature == 0.0
+    for bad in ("abc", "3"):
+        try:
+            load_config({**base, "OPENAI_TEMPERATURE": bad}, env_file=tmp_path / "none.env")
+        except ConfigError:
+            pass
+        else:
+            raise AssertionError(bad)
