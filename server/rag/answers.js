@@ -76,7 +76,8 @@ export function createAnswers({ db, rag, now = Date.now, persistMs = PERSIST_MS,
     if (j.finished) return;
     j.finished = true;
     clearInterval(j.timer);
-    const watched = j.subscribers.size > 0;
+    // 사용자가 직접 멈춘 답은 읽지 않음으로 두지 않는다.
+    const watched = j.subscribers.size > 0 || status === 'stopped';
     if (db.open) {
       try {
         db.transaction(() => {

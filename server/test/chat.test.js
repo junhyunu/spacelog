@@ -403,6 +403,8 @@ describe('answer job', () => {
     expect(msgRow(mid)).toMatchObject({ status: 'stopped', content: '앞' });
     expect(await api('POST', `/api/chat/messages/${mid}/stop`)).toEqual({ code: 409, body: { error: 'not_running' } });
     expect((await api('POST', '/api/chat/messages/nope/stop')).code).toBe(404);
+    // 직접 멈춘 답은 빨간 점을 남기지 않는다(보고 있지 않았어도)
+    expect((await api('GET', '/api/chat/unread')).body).toEqual({ count: 0 });
   });
 
   test('unread: set when finished with no subscriber, cleared by GET; /api/chat/unread counts', async () => {
