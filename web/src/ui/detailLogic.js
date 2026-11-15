@@ -45,6 +45,16 @@ export function fileMeta(att) {
   return { ext, size, text: `${ext} · ${size}`, unknown };
 }
 
+// 챗봇이 내용까지 읽는 파일 형식(rag/extract.py와 같은 목록). 나머지 파일은 이름만 안다.
+export const CHAT_READABLE_EXTS = Object.freeze(['txt', 'md', 'csv', 'json', 'log', 'html', 'htm', 'pdf', 'docx', 'xlsx', 'pptx', 'hwpx']);
+
+/** 챗봇이 이 파일의 내용을 읽을 수 있나(파일 첨부만 본다. 이미지 · 링크는 true — 안내하지 않는다). */
+export function chatReadsFile(att) {
+  if (att?.kind !== 'file') return true;
+  const ext = typeof att.file_ext === 'string' ? att.file_ext.trim().toLowerCase().replace(/^\./, '') : '';
+  return CHAT_READABLE_EXTS.includes(ext);
+}
+
 const BY_POSITION = (a, b) => (Number(a?.position) || 0) - (Number(b?.position) || 0);
 
 /** 별의 첨부를 보이는 묶음으로 가른다(각각 position 순). 받은 배열은 바꾸지 않는다. */

@@ -18,6 +18,7 @@ import { ask } from './confirm.js';
 import {
   MEMO_STATUS,
   actionsFor,
+  chatReadsFile,
   contentLabel,
   createMemoLedger,
   createMemoSaver,
@@ -227,7 +228,9 @@ function fileRow(att) {
   const meta = fileMeta(att);
   return (
     `<li class="arow">${extIcon(att, 'file-text')}<div class="am"><b>${esc(attName(att))}</b>` +
-    `<small>${esc(meta.ext)} · ${meta.unknown ? `<span class="na">${esc(meta.size)}</span>` : esc(meta.size)}</small></div>` +
+    `<small>${esc(meta.ext)} · ${meta.unknown ? `<span class="na">${esc(meta.size)}</span>` : esc(meta.size)}</small>` +
+    (chatReadsFile(att) ? '' : '<small class="chat-na">챗봇은 이 파일의 이름만 알아요</small>') +
+    '</div>' +
     `<div class="acts">${actButtons(att)}</div></li>`
   );
 }

@@ -393,3 +393,68 @@ def test_ext_with_dot(d):
     p = d / "a.txt"
     p.write_text("점 붙은 확장자", encoding="utf-8")
     assert extract_text(str(p), ".TXT")[0] == "점 붙은 확장자"
+
+
+# ---------- HTML ----------
+
+
+def test_html_visible_text_only(d):
+    p = d / "수업.html"
+    p.write_text(
+        "<!doctype html><html><head><title>D22 워크북</title><style>body{color:red}</style>"
+        "<script>var secret = 1;</script></head><body>"
+        "<nav><a href='#a'>흐름</a><a href='#b'>자료실</a></nav>"
+        "<h1>RAG 4단계</h1><p>자르기 &rarr; 숫자로 바꾸기</p>"
+        "<table><tr><td>조각</td><td>800자</td></tr></table>"
+        "<svg><text>그림 글자</text></svg><noscript>꺼짐</noscript>"
+        "<p>찾고 나서&nbsp;답한다</p></body></html>",
+        encoding="utf-8",
+    )
+    text, note = extract_text(str(p), "html")
+    assert note is None
+    assert "D22 워크북" in text
+    assert "RAG 4단계" in text
+    assert "자르기 → 숫자로 바꾸기" in text
+    assert "흐름 자료실" in text
+    assert "조각" in text and "800자" in text
+    assert "찾고 나서 답한다" in text
+    for hidden in ("color:red", "secret", "그림 글자", "꺼짐", "<"):
+        assert hidden not in text
+
+
+@pytest.mark.parametrize("ext", ["htm", "HTML"])
+def test_htm_and_upper_ext(d, ext):
+    p = d / f"page.{ext}"
+    p.write_text("<p>안녕</p>", encoding="utf-8")
+    assert extract_text(str(p), ext) == ("안녕", None)
+
+
+def test_html_cp949(d):
+    p = d / "옛 문서.html"
+    p.write_bytes("<p>한글 문서</p>".encode("cp949"))
+    text, _ = extract_text(str(p), "html")
+    assert "한글 문서" in text
+
+
+def test_html_long_text_is_partial(d):
+    p = d / "long.html"
+    p.write_text("<p>" + "가" * 300 + "</p>", encoding="utf-8")
+    text, note = extract_text(str(p), "html", limit=100)
+    assert note == "partial"
+    assert len(text) == 100
+
+
+def test_html_without_text_is_empty(d):
+    p = d / "empty.html"
+    p.write_text("<html><head><script>x()</script></head><body></body></html>", encoding="utf-8")
+    text, _ = extract_text(str(p), "html")
+    assert text == ""
+
+
+def test_html_too_large(d, monkeypatch):
+    import extract
+
+    monkeypatch.setattr(extract, "MAX_HTML_BYTES", 10)
+    p = d / "big.html"
+    p.write_text("<p>" + "a" * 100 + "</p>", encoding="utf-8")
+    assert extract_text(str(p), "html") == ("", "error:too_large")

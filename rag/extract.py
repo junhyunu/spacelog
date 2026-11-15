@@ -8,6 +8,7 @@ extract_text(path, ext, limit) -> (text, note)
 """
 
 import codecs
+import html.parser
 import logging
 import os
 import re
@@ -39,6 +40,9 @@ _BOMS = (
 )
 
 TEXT_EXTS = {"txt", "md", "csv", "json", "log"}
+HTML_EXTS = {"html", "htm"}
+# HTML 은 태그 · 스크립트가 글자보다 훨씬 크다. 이 크기까지만 읽는다.
+MAX_HTML_BYTES = 20 * 1024 * 1024
 ZIP_EXTS = {"docx", "xlsx", "pptx", "hwpx"}
 
 # pypdf 는 깨진 PDF 에서 경고를 많이 찍는다. 오류만 남긴다.
@@ -89,6 +93,8 @@ def extract_text(path, ext, limit=DEFAULT_LIMIT):
     e = normalize_ext(ext)
     if e in TEXT_EXTS:
         reader = _read_text
+    elif e in HTML_EXTS:
+        reader = _read_html
     elif e == "pdf":
         reader = _read_pdf
     elif e == "docx":
@@ -150,7 +156,11 @@ def _looks_corrupt(err):
 
 def _read_text(path, out):
     # 한 글자는 utf-8 에서 최대 4바이트. 한도보다 조금 더 읽어 partial 여부를 안다.
-    cap = out.limit * 4 + 4
+    out.add(_decode_file(path, out.limit * 4 + 4))
+
+
+def _decode_file(path, cap):
+    """파일을 cap 바이트까지 읽어 글자로 바꾼다(BOM → utf-8 → cp949 순으로 믿는다)."""
     with open(path, "rb") as f:
         raw = f.read(cap + 1)
     truncated = len(raw) > cap
@@ -173,7 +183,88 @@ def _read_text(path, out):
             continue
     if text is None:
         text = raw.decode(encodings[0], errors="replace")
-    out.add(text)
+    return text
+
+
+# ---------- HTML ----------
+
+# 글이 아닌 것(코드 · 그림 · 숨은 틀)은 통째로 건너뛴다.
+_HTML_SKIP = {"script", "style", "noscript", "template", "svg", "math", "iframe", "object", "canvas", "head"}
+# 이 태그 앞뒤에서 줄을 바꾼다(문단이 한 줄로 붙지 않게).
+_HTML_BLOCK = {
+    "address", "article", "aside", "blockquote", "br", "dd", "details", "div", "dl", "dt", "figcaption", "figure",
+    "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "li", "main", "nav", "ol", "p", "pre",
+    "section", "summary", "table", "tr", "ul", "title",
+}
+_HTML_CELL = {"td", "th"}
+# 이 태그 앞뒤에는 빈칸을 둔다(메뉴 · 버튼 글자가 서로 붙지 않게).
+_HTML_SPACE = {"a", "button", "label", "option", "img"}
+# 닫는 태그가 없는 태그(건너뛰기 깊이를 세지 않는다).
+_HTML_VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+
+
+class _HtmlText(html.parser.HTMLParser):
+    """HTML 에서 보이는 글자만 모은다. <title> 은 head 안에 있어도 읽는다."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.skip = []  # 건너뛰는 중인 태그들
+        self.in_title = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "title":
+            self.in_title = True
+            return
+        if tag in _HTML_SKIP and tag not in _HTML_VOID:
+            self.skip.append(tag)
+            return
+        if not self.skip:
+            self._brk(tag)
+
+    def handle_startendtag(self, tag, attrs):
+        if not self.skip:
+            self._brk(tag)
+
+    def handle_endtag(self, tag):
+        if tag == "title":
+            self.in_title = False
+            self.parts.append("\n")
+            return
+        if self.skip and tag in self.skip:
+            while self.skip and self.skip.pop() != tag:
+                pass
+            return
+        if not self.skip:
+            self._brk(tag)
+
+    def _brk(self, tag):
+        if tag in _HTML_BLOCK:
+            self.parts.append("\n")
+        elif tag in _HTML_CELL:
+            self.parts.append("\t")
+        elif tag in _HTML_SPACE:
+            self.parts.append(" ")
+
+    def handle_data(self, data):
+        if self.in_title or not self.skip:
+            self.parts.append(data)
+
+
+def _read_html(path, out):
+    if os.path.getsize(path) > MAX_HTML_BYTES:
+        raise _TooLarge
+    parser = _HtmlText()
+    parser.feed(_decode_file(path, MAX_HTML_BYTES))
+    parser.close()
+    # 줄마다 앞뒤 공백을 접고, 빈 줄이 겹치지 않게 한다.
+    lines = []
+    for raw in "".join(parser.parts).split("\n"):
+        line = re.sub(r"[ \t\r\f\v\u00a0]+", " ", raw).strip()
+        if line or (lines and lines[-1]):
+            lines.append(line)
+    for line in lines:
+        out.line(line)
 
 
 # ---------- PDF ----------

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
+  chatReadsFile,
   KEEPALIVE_BYTES,
   MEMO_MAX,
   MEMO_STATUS,
@@ -757,5 +758,18 @@ describe('createMemoSaver', () => {
     await tick();
     expect(first).toEqual(['typing']);
     expect(second).toEqual(['saving', 'saved']);
+  });
+});
+
+describe('chatReadsFile', () => {
+  test('읽는 형식(대소문자 · 점 무시)', () => {
+    for (const ext of ['pdf', 'HTML', 'htm', '.docx', 'txt', 'hwpx']) expect(chatReadsFile({ kind: 'file', file_ext: ext })).toBe(true);
+  });
+  test('읽지 못하는 형식 · 확장자 없음', () => {
+    for (const ext of ['hwp', 'zip', 'mp4', '', null]) expect(chatReadsFile({ kind: 'file', file_ext: ext })).toBe(false);
+  });
+  test('이미지 · 링크는 안내하지 않는다', () => {
+    expect(chatReadsFile({ kind: 'image', file_ext: 'png' })).toBe(true);
+    expect(chatReadsFile({ kind: 'link', url: 'https://example.com' })).toBe(true);
   });
 });

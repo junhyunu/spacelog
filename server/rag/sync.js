@@ -129,8 +129,13 @@ export function starPayload(db, dataDir, id) {
   };
 }
 
+// 파일 읽기 방식의 판(rag/extract.py). 새 형식을 읽게 되면 올린다 → 해시가 바뀌어 저장된 별을 다시 읽는다.
+// 2: HTML(html · htm)
+export const READER_VERSION = 2;
+
 export function contentHash({ payload, fileKeys }) {
   const forHash = {
+    reader: READER_VERSION,
     ...payload,
     attachments: payload.attachments.map(({ path: _p, ...a }, i) => ({ ...a, file: fileKeys[i] })),
   };
