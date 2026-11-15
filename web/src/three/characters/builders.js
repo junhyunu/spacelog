@@ -61,7 +61,6 @@ function robot(c) {
   part(g, box(1.14, 0.76, 0.12), VISOR, [0, 1.05, 0.585], null, 1.06);
   rig.eyes = [-0.27, 0.27].map((x) => eye(g, box(0.22, 0.28, 0.05), EYE, [x, 1.11, 0.655]));
   flat(g, box(0.3, 0.055, 0.05), EYE, [0, 0.84, 0.655]);
-  flat(g, box(0.16, 0.07, 0.05), 0xffffff, [0.38, 1.33, 0.655]);
   part(g, box(0.7, 0.36, 0.1), VISOR, [0, 1.12, -0.6], null, 1.08); // 뒤통수 판(뒤에서 볼 때가 많다)
   earCaps(rig, 0.74, 1.05);
   antenna(rig, c, [-0.42, 1.6, 0], -0.12, { len: 0.36, ball: 0.12 });
@@ -185,9 +184,6 @@ function human(c) {
   shell.renderOrder = 2;
   g.add(ol(shell, 1.07));
   flat(g, sph(0.765, 28, 20), 0xd3ecff, [0, HY, 0], null, { side: THREE.BackSide });
-  const shine = flat(g, sph(0.1, 10, 8), 0xffffff, [0.28, 1.5, 0.62], [1.4, 0.6, 0.4], { transparent: true, opacity: 0.9, depthWrite: false });
-  shine.rotation.z = -0.5;
-  shine.renderOrder = 3;
   // 목 둘레(몸 색) · 귀마개 · 안테나
   const collar = part(g, new THREE.TorusGeometry(0.47, 0.1, 8, 28), c.suit, [0, 0.43, 0], null, 1.12);
   collar.rotation.x = Math.PI / 2;

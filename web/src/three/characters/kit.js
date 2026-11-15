@@ -149,7 +149,7 @@ export const HELMET_Y = 1.05;
 export const visorZ = (x, dy) => Math.sqrt((HELMET_R + 0.03) ** 2 - x * x - dy * dy);
 
 /**
- * 둥근 헬멧(몸 색) + 남색 바이저(잉크 테두리) + 반짝임 + 양옆 노랑 귀마개.
+ * 둥근 헬멧(몸 색) + 남색 바이저(잉크 테두리) + 양옆 노랑 귀마개. (반짝임 조각은 어색해 뺐다)
  * 시안의 바이저는 헬멧 안에 0.03 묻혀 보이지 않았다. 겉면에 붙는 조각으로 바꿔 보이게 했다.
  * tall은 바이저의 세로 반각(rad): 코까지 들어가야 하는 곰돌이는 더 크다.
  */
@@ -158,7 +158,6 @@ export function helmet(rig, c, { tall = 0.36, wide = 0.8 } = {}) {
   part(g, sph(HELMET_R, 28, 20), c.suit, [0, HELMET_Y, 0]);
   flat(g, domePatch(HELMET_R + 0.012, wide + 0.055, tall + 0.055), INK, [0, HELMET_Y - 0.03, 0]);
   part(g, domePatch(HELMET_R + 0.03, wide, tall), VISOR, [0, HELMET_Y - 0.03, 0], null, 0);
-  flat(g, sph(0.1, 10, 8), 0xffffff, [0.27, 1.24, 0.74], [1.3, 0.6, 0.4]);
   earCaps(rig, HELMET_R, HELMET_Y);
 }
 
