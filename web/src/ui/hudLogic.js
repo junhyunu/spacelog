@@ -31,6 +31,16 @@ export function shouldWiden({ period, inPeriod, total } = {}) {
   return period === 'today' && n(inPeriod) === 0 && n(total) >= 1;
 }
 
+/** 넓힌 이번 주에도 별이 없고 전체는 1개 이상이면 전체로 한 번 더 넓힌다. */
+export function shouldWidenToAll({ period, inPeriod, total } = {}) {
+  return period === 'week' && n(inPeriod) === 0 && n(total) >= 1;
+}
+
+/** 넓혔을 때 띄우는 안내. to = 넓힌 기간('week' | 'all') */
+export function widenToast(to) {
+  return to === 'all' ? '최근 일주일에도 별이 없어 전체를 보여드려요' : '오늘 별이 없어 이번 주를 보여드려요';
+}
+
 /**
  * 그 별이 지금 기간 밖인지(밖이면 재발견 "손님 별"로 그 별만 잠시 보여 준다).
  * range = { from(포함), to(미포함) } ISO. 한쪽이 없으면 그쪽은 보지 않는다. 날짜를 못 읽으면 false.

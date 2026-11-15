@@ -28,7 +28,7 @@ import { api } from '../api.js';
 import { store } from '../store.js';
 import { flyTo, setInputBlocked } from '../three/controls.js';
 import { STAR_CAP, setSelectedStar, syncUniverse } from '../three/planets.js';
-import { PLANET_COLORS, daysAgo, esc, periodRange } from '../util.js';
+import { PLANET_COLORS, daysAgo, esc, periodCountLabel, periodRange } from '../util.js';
 import { registerEscape } from './escape.js';
 import { trapTab } from './planetForm.js';
 import {
@@ -41,6 +41,8 @@ import {
   nextCustom,
   revertTarget,
   shouldWiden,
+  shouldWidenToAll,
+  widenToast,
   worldStateOf,
 } from './hudLogic.js';
 import { toast } from './toast.js';
@@ -86,7 +88,7 @@ let widenPending = false; // 들어올 때 이번 주로 넓히는 reload가 아
 let flightSeq = 0;
 let redisSeq = 0;
 let redisStar = null; // 지금 재발견 카드에 그려진 별
-let widened = false;
+let widened = false; // 들어오며 넓힌 기간('week' | 'all'), 넓히지 않았으면 false
 let sideCollapsed = false;
 let hintDismissed = false; // 이번 탭에서 ✕를 눌렀다(저장소를 못 써도 이번 탭에서는 다시 뜨지 않는다)
 
@@ -224,6 +226,7 @@ function onRangeChange() {
 
 /* ---------- 그리기 ---------- */
 function paintBrand() {
+  $('sRecLabel').textContent = periodCountLabel(store.state.period);
   $('sRec').textContent = num(store.state.summary?.in_period);
   $('sPlanet').textContent = num(store.state.planets.length);
 }
@@ -249,7 +252,7 @@ function paintDock() {
       .map((p) => {
         const count = num(p.count_in_period);
         return (
-          `<button type="button" data-planet="${esc(p.id)}" aria-label="${esc(`'${p.name}' 행성으로 날아가기, 이 기간 별 ${count}개`)}">` +
+          `<button type="button" data-planet="${esc(p.id)}" aria-label="${esc(`'${p.name}' 행성으로 날아가기, ${periodCountLabel(store.state.period)} ${count}개`)}">` +
           `<span class="dot" style="background:${faceOf(p)}"></span><span class="t">${esc(p.name)}</span><span class="n">${count}</span></button>`
         );
       })
@@ -542,7 +545,7 @@ export function initHud() {
   store.on('offline', paintHint);
   store.on('enterWorld', updateLayoutVars);
 
-  // 들어온 직후(잉크 막 뒤): 오늘 별이 없고 전체는 1개 이상이면 이번 주로 넓힌다.
+  // 들어온 직후(잉크 막 뒤): 오늘 별이 없고 전체는 1개 이상이면 이번 주로, 이번 주에도 없으면 전체로 넓힌다.
   // 사용자가 직접 "오늘"을 고른 때에는 넓히지 않는다.
   onBeforeWorldOpens(async () => {
     widened = false;
@@ -550,7 +553,8 @@ export function initHud() {
     if (widenPending) {
       // 넓히는 사이 8초를 넘겨 홈으로 되돌아갔다가 다시 들어왔다: 이번에 받은 것이 이미 이번 주다
       widenPending = false;
-      widened = store.state.period === 'week';
+      const p = store.state.period;
+      widened = p === 'week' || p === 'all' ? p : false;
       return;
     }
     const { period, summary } = store.state;
@@ -576,15 +580,30 @@ export function initHud() {
       store.reload().catch(() => {});
       return;
     }
-    widened = true;
+    // 이번 주에도 별이 없으면 전체로 한 번 더 넓힌다
+    const s = store.state.summary;
+    if (shouldWidenToAll({ period: 'week', inPeriod: s?.in_period, total: s?.total })) {
+      store.state.period = 'all';
+      paintPeriod();
+      try {
+        await store.reload();
+      } catch {
+        // 전체를 받지 못했으면 이번 주에 머문다
+        if (seq === widenSeq) store.state.period = 'week';
+      }
+      if (seq !== widenSeq) return;
+      paintPeriod();
+    }
+    widened = store.state.period;
   });
   // 토스트는 우주가 열린 뒤에 띄운다. transition.js가 바로 뒤에 띄우는 안내("WASD로…" · "비행 중…")보다
   // 나중에 나오게 한 박자 늦춘다. 손님 별 토스트가 떠 있으면 그것을 남긴다.
   store.on('enterWorld', () => {
     if (!widened) return;
+    const to = widened;
     widened = false;
     setTimeout(() => {
-      if (store.state.inWorld && !guest) toast('오늘 별이 없어 이번 주를 보여드려요');
+      if (store.state.inWorld && !guest) toast(widenToast(to));
     }, 0);
   });
 }

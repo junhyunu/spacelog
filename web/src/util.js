@@ -67,8 +67,10 @@ function parseDay(s) {
  * - today: 오늘 현지 자정 ~ 내일 자정
  * - week: 오늘 포함 최근 7일
  * - custom: { from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' } 끝 날짜 포함. 날짜가 없거나 틀리면 오늘.
+ * - all: 빈 범위(서버는 조건 없이 모든 별을 준다)
  */
 export function periodRange(period, custom, now = new Date()) {
+  if (period === 'all') return { from: '', to: '' };
   let start = midnight(now);
   let end = midnight(now, 1);
   if (period === 'week') {
@@ -83,6 +85,11 @@ export function periodRange(period, custom, now = new Date()) {
     }
   }
   return { from: start.toISOString(), to: end.toISOString() };
+}
+
+/** 기간에 맞는 별 개수 말머리: 전체면 "전체 별", 아니면 "이 기간 별" */
+export function periodCountLabel(period) {
+  return period === 'all' ? '전체 별' : '이 기간 별';
 }
 
 /** '11.11' (현지 날짜) */

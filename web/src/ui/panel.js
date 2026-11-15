@@ -79,7 +79,7 @@ function listHtml(planet, stars) {
     `<header><div class="planet-ico" style="background:${face}" aria-hidden="true"></div>` +
     `<div class="hd"><h2><span class="pn">${esc(planet.name)}</span> ` +
     `<button type="button" class="ic" data-act="edit" data-focus="edit" aria-label="행성 꾸미기" title="행성 꾸미기">${ico('pencil', 16)}</button></h2>` +
-    `<div class="sub">이 기간 별 ${num(stars.length)}개 · 전체 ${num(planet.count_total)}개</div></div>` +
+    `<div class="sub">${store.state.period === 'all' ? `전체 별 ${num(planet.count_total)}개` : `이 기간 별 ${num(stars.length)}개 · 전체 ${num(planet.count_total)}개`}</div></div>` +
     `<button type="button" class="btn x ghost" data-act="menu" data-focus="menu" aria-label="행성 메뉴" aria-expanded="${menuOpen}" aria-controls="pMenu">${ico('ellipsis')}</button>` +
     `<button type="button" class="btn x" data-act="close" data-focus="close" aria-label="닫기">${ico('x')}</button></header>` +
     (menuOpen
@@ -91,7 +91,9 @@ function listHtml(planet, stars) {
     '<div class="body"><div class="lbl">이 행성을 도는 별들</div>' +
     (stars.length
       ? `<div class="recs">${items}</div>`
-      : '<div class="empty">이 기간에는 이 행성에 별이 없어요.<br>위쪽에서 기간을 넓혀 보세요.</div>') +
+      : store.state.period === 'all'
+        ? '<div class="empty">이 행성에는 아직 별이 없어요.</div>'
+        : '<div class="empty">이 기간에는 이 행성에 별이 없어요.<br>위쪽에서 기간을 넓혀 보세요.</div>') +
     '</div>'
   );
 }

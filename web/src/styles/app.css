@@ -330,4 +330,13 @@ body:has(#panel:not([hidden])) #wHint{visibility:hidden}
   body:has(#panel:not([hidden])) #near{visibility:hidden}
   #panel{top:auto;left:calc(10px + env(safe-area-inset-left,0px));right:calc(10px + env(safe-area-inset-right,0px));width:auto;height:62vh;bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:4}
 }
+/* 기간 버튼 4개(전체 · 오늘 · 이번 주 · 직접 지정): 좁은 폰에서는 버튼을 조금 줄여 로고 옆 한 줄에 넣고,
+   그래도 모자라면(378px 이하) 로고 아래 줄로 내린다(--tr-bottom은 hud.js가 실제 위치로 다시 잰다) */
+@media (max-width:420px){
+  .seg{gap:2px}
+  .seg button{padding:6px 7px;font-size:12.5px}
+}
+@media (max-width:378px){
+  #period,body:has(#side:not([hidden])) #period{--left-w:-12px;top:calc(var(--edge) + 52px + env(safe-area-inset-top,0px))}
+}
 @media (prefers-reduced-motion:reduce){#panel{animation:none;transition:none}.rec.new{animation:none}#wLog.beckon::before{animation:none}#left.drawer #side{animation:none}#helpToggle .i{transition:none}}

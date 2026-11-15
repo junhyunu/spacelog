@@ -29,7 +29,7 @@ let lastPlanetId = readLastPlanet();
 const state = {
   inWorld: false,
   offline: false, // 연결 실패 카드가 떠 있는 동안 true
-  period: 'today', // 'today' | 'week' | 'custom'
+  period: 'today', // 'all' | 'today' | 'week' | 'custom'
   range: periodRange('today'), // { from, to } ISO. custom일 때는 화면이 직접 넣는다
   planets: [],
   stars: [],

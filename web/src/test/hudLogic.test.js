@@ -9,9 +9,11 @@ import {
   nextCustom,
   revertTarget,
   shouldWiden,
+  shouldWidenToAll,
+  widenToast,
   worldStateOf,
 } from '../ui/hudLogic.js';
-import { periodRange } from '../util.js';
+import { periodCountLabel, periodRange } from '../util.js';
 
 describe('worldStateOf', () => {
   test('stars in the period → normal', () => {
@@ -209,5 +211,31 @@ describe('initialSideCollapsed (왼쪽 패널 처음 상태, 스펙 6-8)', () =>
     expect(initialSideCollapsed({ stored: 'banana', narrow: false })).toBe(false);
     expect(initialSideCollapsed({})).toBe(false);
     expect(initialSideCollapsed()).toBe(false);
+  });
+});
+
+describe('전체 기간', () => {
+  test('periodRange all → 빈 범위', () => expect(periodRange('all')).toEqual({ from: '', to: '' }));
+  test('말머리', () => {
+    expect(periodCountLabel('all')).toBe('전체 별');
+    expect(periodCountLabel('today')).toBe('이 기간 별');
+    expect(periodCountLabel('custom')).toBe('이 기간 별');
+  });
+  test('isOutsidePeriod: 전체에서는 어떤 별도 밖이 아니다', () => {
+    expect(isOutsidePeriod({ created_at: '2001-01-01T00:00:00.000Z' }, periodRange('all'))).toBe(false);
+  });
+  test('worldStateOf: 전체에서 상한을 넘으면 오늘만 보기 버튼', () => {
+    expect(worldStateOf({ total: 2500, inPeriod: 2500, planets: 1, period: 'all' })).toEqual({ kind: 'cap', todayButton: true });
+  });
+});
+
+describe('shouldWidenToAll', () => {
+  test('이번 주도 비었고 전체는 있다 → 전체로', () => expect(shouldWidenToAll({ period: 'week', inPeriod: 0, total: 3 })).toBe(true));
+  test('이번 주에 별이 있다 → 아니다', () => expect(shouldWidenToAll({ period: 'week', inPeriod: 1, total: 3 })).toBe(false));
+  test('별이 하나도 없다 → 아니다', () => expect(shouldWidenToAll({ period: 'week', inPeriod: 0, total: 0 })).toBe(false));
+  test('이번 주가 아니다 → 아니다', () => expect(shouldWidenToAll({ period: 'today', inPeriod: 0, total: 3 })).toBe(false));
+  test('안내 문구', () => {
+    expect(widenToast('week')).toBe('오늘 별이 없어 이번 주를 보여드려요');
+    expect(widenToast('all')).toBe('최근 일주일에도 별이 없어 전체를 보여드려요');
   });
 });
