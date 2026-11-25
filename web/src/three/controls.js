@@ -192,7 +192,12 @@ function onKeyDown(e) {
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
     if (!e.repeat) store.emit('manualMove');
   }
-  if (e.code === 'KeyE' && !e.repeat && nearId) store.emit('land', nearId);
+  // 착륙은 Enter. 초점이 버튼 · 링크에 있으면 그 버튼이 Enter를 받는다(착륙하지 않는다)
+  const onControl = /^(BUTTON|A)$/.test(e.target?.tagName || '');
+  if (e.key === 'Enter' && !e.repeat && !e.isComposing && !onControl && nearId) {
+    e.preventDefault();
+    store.emit('land', nearId);
+  }
 }
 
 function onKeyUp(e) {
@@ -284,7 +289,7 @@ function showNearHint(id, name) {
     if (!nb.hidden) nb.hidden = true;
     return;
   }
-  const html = `<kbd>E</kbd>'${esc(name)}' 행성 열기`;
+  const html = `<kbd>Enter</kbd>'${esc(name)}' 행성 열기`;
   if (html !== nearHtml) {
     nb.innerHTML = html;
     nearHtml = html;
