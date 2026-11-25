@@ -4,7 +4,7 @@
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { esc, ico } from '../util.js';
-import { answerAnnouncement, askMeta, canSend, counterText, errorMessage, sourceCardModel, titleFrom } from './chatLogic.js';
+import { answerAnnouncement, askMeta, canSend, counterText, errorMessage, savedStarSource, sourceCardModel, titleFrom } from './chatLogic.js';
 import { toast } from './toast.js';
 
 let T = null; // 지금 그린 대화 화면 상태
@@ -92,6 +92,25 @@ export function threadRunning() {
 export function refreshThreadInput() {
   if (T) paintInput(T);
 }
+
+/* ---------- 별로 저장 → 띄운 별 잇기 ---------- */
+// 별 띄우기 창이 그 답에서 열려 별이 실제로 생겼을 때(saveModal.js). 취소하면 오지 않는다.
+// 대화 화면을 닫은 뒤에 끝나도 서버에는 잇고, 그 대화가 열려 있으면 버튼을 바로 "띄운 별 보기"로 바꾼다.
+store.on('savedFromAnswer', async ({ messageId, starId } = {}) => {
+  if (!messageId || !starId) return;
+  let r;
+  try {
+    r = await api.linkSavedStar(messageId, starId);
+  } catch (err) {
+    if (err?.code !== 'offline') toast('별은 띄웠지만 답에 표시하지 못했어요');
+    return;
+  }
+  const t = T;
+  const m = t?.messages.find((x) => String(x.id) === String(messageId));
+  if (!t || !m) return;
+  m.saved_star = r?.message?.saved_star ?? null;
+  repaint(t, m);
+});
 
 /* ---------- 그리기 ---------- */
 function build(t) {
@@ -237,7 +256,10 @@ function paintSources(li, m) {
   if (m.status !== 'running' && m.status !== 'failed' && !m.not_found && !isNotFound(m.content)) {
     const acts = document.createElement('div');
     acts.className = 'bacts';
-    acts.innerHTML = `<button type="button" class="btn ghost sm" data-save>${ico('star', 14)} 별로 저장</button>`;
+    // 이미 별로 띄웠으면 "띄운 별 보기 →"(누르면 그 별로 날아간다). 그 별을 지우면 서버가 null을 보내 다시 "별로 저장"이 된다
+    acts.innerHTML = savedStarSource(m)
+      ? `<button type="button" class="btn ghost sm saved" data-saved>${ico('star', 14)} 띄운 별 보기 →</button>`
+      : `<button type="button" class="btn ghost sm" data-save>${ico('star', 14)} 별로 저장</button>`;
     li.appendChild(acts);
   }
 }
@@ -435,8 +457,14 @@ function onListClick(t, e) {
     if (s && s.exists) t.hooks.onSource?.(s);
     return;
   }
+  if (target.closest('[data-saved]')) {
+    const s = savedStarSource(m);
+    if (s) t.hooks.onSource?.(s);
+    return;
+  }
   if (target.closest('[data-save]')) {
-    // 기록하기 창: 글 칸에 답 내용(쓰던 글이 있으면 덮어쓰지 않는다 — saveModal.js 규칙)
-    store.emit('openSave', { text: String(m.content ?? '') });
+    // 기록하기 창: 글 칸에 답 내용(쓰던 글이 있으면 덮어쓰지 않는다 — saveModal.js 규칙).
+    // 별이 실제로 생기면 'savedFromAnswer'가 와서 이 답에 잇는다(아래)
+    store.emit('openSave', { text: String(m.content ?? ''), fromAnswer: m.id });
   }
 }

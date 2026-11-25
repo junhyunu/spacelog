@@ -7,7 +7,8 @@ import { buildSearchText } from './stars.js';
 // 1 = 첨부 표(attachments). 별 하나에 첨부 여러 개(spec 6-9).
 // 2 = 챗봇 표(rag_status · conversations · messages). 2차의 표를 한 번에 만든다.
 // 3 = 메모를 본문으로 합침(별의 글은 body 하나. memo 열은 남기지만 쓰지 않는다).
-export const SCHEMA_VERSION = 3;
+// 4 = 답 → 띄운 별(messages.saved_star_id). "별로 저장"으로 그 답을 별로 띄웠으면 그 별 id. 별을 지워도 남지만 읽을 때 없는 별은 무시한다.
+export const SCHEMA_VERSION = 4;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS planets (
@@ -57,7 +58,8 @@ CREATE TABLE IF NOT EXISTS messages (
   sources TEXT NOT NULL DEFAULT '[]',
   status TEXT NOT NULL CHECK(status IN ('running','done','stopped','failed')),
   error TEXT,
-  created_at TEXT NOT NULL);
+  created_at TEXT NOT NULL,
+  saved_star_id TEXT);
 CREATE INDEX IF NOT EXISTS messages_conversation_created ON messages(conversation_id, created_at);
 `;
 
@@ -196,6 +198,9 @@ export function openDb(dataDir) {
         if (!fresh && version < 1) migrateTo1(db);
         // 1 → 2 는 새 표만 더한다(위 SCHEMA 의 CREATE TABLE IF NOT EXISTS).
         if (!fresh && version < 3) foldMemos(db);
+        // 3 → 4: messages 에 saved_star_id 를 더한다(판 2 이전에서 오면 위 SCHEMA 가 이미 그 칸을 가진 표를 만들었다)
+        const msgCols = db.prepare("SELECT name FROM pragma_table_info('messages')").all().map((r) => r.name);
+        if (!msgCols.includes('saved_star_id')) db.exec('ALTER TABLE messages ADD COLUMN saved_star_id TEXT');
         db.pragma(`user_version = ${SCHEMA_VERSION}`);
       }).immediate();
     }

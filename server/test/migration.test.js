@@ -100,7 +100,7 @@ test('a fresh data folder gets the new schema at the current version and no back
   const dataDir = tempDir();
   const db = openDb(dataDir);
   expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
-  expect(SCHEMA_VERSION).toBe(3);
+  expect(SCHEMA_VERSION).toBe(4);
   const cols = db.prepare("SELECT name FROM pragma_table_info('attachments')").all().map((r) => r.name);
   expect(cols).toEqual([
     'id', 'star_id', 'kind', 'position', 'file_name', 'file_ext', 'file_size', 'file_hash',
@@ -393,7 +393,7 @@ test('v2 → v3: memo is appended under body, then cleared; search_text keeps bo
   const dataDir = tempDir();
   makeV2(dataDir);
   const db = openDb(dataDir);
-  expect(db.pragma('user_version', { simple: true })).toBe(3);
+  expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
   expect(memoRow(db, 'A')).toMatchObject({ body: '본문\n\n메모', memo: '' });
   expect(memoRow(db, 'B')).toMatchObject({ body: '메모만', memo: '' });
   expect(memoRow(db, 'C')).toMatchObject({ body: '본문만', memo: '' });
@@ -471,4 +471,24 @@ test('a memo written after the migration (a tab still running the old page) is f
   expect(memoRow(db, 'A')).toMatchObject({ body: '본문\n\n메모', memo: '' });
   db.close();
   expect(fs.readdirSync(dataDir).filter((n) => n.includes('bak'))).toEqual(['spacelog.db.bak-3']);
+});
+
+// --- 판 3 → 4 (답 → 띄운 별) ---
+test('v3 → v4: messages get saved_star_id (null), existing messages are kept, re-opening is a no-op', () => {
+  const dataDir = tempDir();
+  const db0 = openDb(dataDir);
+  db0.exec("INSERT INTO conversations (id, title, created_at, updated_at) VALUES ('c1', '대화', '2026-11-01T00:00:00.000Z', '2026-11-01T00:00:00.000Z')");
+  db0.exec("INSERT INTO messages (id, conversation_id, role, content, status, created_at) VALUES ('m1', 'c1', 'assistant', '답', 'done', '2026-11-01T00:00:00.000Z')");
+  db0.exec('ALTER TABLE messages DROP COLUMN saved_star_id');
+  db0.pragma('user_version = 3');
+  db0.close();
+
+  const db = openDb(dataDir);
+  expect(db.pragma('user_version', { simple: true })).toBe(4);
+  const cols = db.prepare("SELECT name FROM pragma_table_info('messages')").all().map((r) => r.name);
+  expect(cols).toContain('saved_star_id');
+  expect(db.prepare("SELECT content, saved_star_id FROM messages WHERE id = 'm1'").get()).toEqual({ content: '답', saved_star_id: null });
+  db.close();
+  openDb(dataDir).close();
+  expect(fs.readdirSync(dataDir).filter((n) => n.includes('bak'))).toEqual(['spacelog.db.bak-4']);
 });

@@ -575,3 +575,57 @@ describe('SSE stream', () => {
     cleanup(dataDir);
   });
 });
+
+// --- 별로 저장: 답 → 띄운 별 ---
+describe('saved star (별로 저장)', () => {
+  async function answered(t) {
+    const p = await t.planet('화성');
+    const id = await t.conversation();
+    const res = (await t.ask(id)).body;
+    const s = t.rag.last();
+    s.push({ type: 'token', text: '답이에요' }, { type: 'done', not_found: false });
+    await waitFor(() => t.msgRow(res.assistant_message.id).status === 'done');
+    return { p, id, userId: res.user_message.id, mid: res.assistant_message.id };
+  }
+
+  test('a new answer has saved_star null; linking a star shows it on the message, also after reload', async () => {
+    const t = await setup();
+    const { p, id, mid } = await answered(t);
+    expect((await t.api('GET', `/api/chat/conversations/${id}`)).body.messages[1].saved_star).toBeNull();
+    const sid = await t.star(p, '답이에요');
+    const res = await t.api('PUT', `/api/chat/messages/${mid}/saved-star`, { star_id: sid });
+    expect(res.code).toBe(200);
+    expect(res.body.message.saved_star).toMatchObject({ id: sid, planet_id: p });
+    expect(res.body.message.saved_star.created_at).toEqual(expect.any(String));
+    const again = (await t.api('GET', `/api/chat/conversations/${id}`)).body.messages[1];
+    expect(again.saved_star).toMatchObject({ id: sid, planet_id: p });
+  });
+
+  test('deleting the star turns the message back to saved_star null', async () => {
+    const t = await setup();
+    const { p, id, mid } = await answered(t);
+    const sid = await t.star(p, '답이에요');
+    await t.api('PUT', `/api/chat/messages/${mid}/saved-star`, { star_id: sid });
+    await t.api('DELETE', `/api/stars/${sid}`);
+    expect((await t.api('GET', `/api/chat/conversations/${id}`)).body.messages[1].saved_star).toBeNull();
+  });
+
+  test('refused: unknown message 404, a question (user message) 400, unknown star 400, missing star_id 400', async () => {
+    const t = await setup();
+    const { p, userId, mid } = await answered(t);
+    const sid = await t.star(p, '답이에요');
+    expect((await t.api('PUT', '/api/chat/messages/nope/saved-star', { star_id: sid })).code).toBe(404);
+    const q = await t.api('PUT', `/api/chat/messages/${userId}/saved-star`, { star_id: sid });
+    expect(q.code).toBe(400);
+    expect(q.body).toEqual({ error: 'not_an_answer' });
+    const ghost = await t.api('PUT', `/api/chat/messages/${mid}/saved-star`, { star_id: 'ghost' });
+    expect(ghost.code).toBe(400);
+    expect(ghost.body).toEqual({ error: 'unknown_star' });
+    for (const body of [{}, { star_id: 5 }, { star_id: '' }]) {
+      const bad = await t.api('PUT', `/api/chat/messages/${mid}/saved-star`, body);
+      expect(bad.code).toBe(400);
+      expect(bad.body).toEqual({ error: 'invalid_star_id' });
+    }
+    expect(t.msgRow(mid).saved_star_id).toBeNull();
+  });
+});

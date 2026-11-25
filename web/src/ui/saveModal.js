@@ -57,6 +57,7 @@ let stash = null;
 
 function fresh() {
   return {
+    fromAnswer: null, // 챗봇 답의 "별로 저장"으로 열었으면 그 답(메시지) id. 별이 생기면 'savedFromAnswer'로 알린다
     items: [], // { id, kind: 'file', file, thumb, hint, skip } | { id, kind: 'link', url, bad }
     planet: 'new',
     pick: false, // 고른 행성이 사라져 다시 골라야 하는 동안(선택 상자 맨 위에 "행성을 골라 주세요"가 생긴다)
@@ -403,6 +404,7 @@ function snapshot(c) {
     newName: $('svNewName').value,
     planet: c.planet,
     extra: [...c.extra],
+    fromAnswer: c.fromAnswer,
     items: c.items.map((it) => (it.kind === 'file' ? { kind: 'file', file: it.file, hint: it.hint } : { kind: 'link', url: it.url })),
   };
 }
@@ -428,6 +430,7 @@ function restore(snap) {
   $('svTitle').value = snap.title;
   $('svUrl').value = snap.url;
   $('svNewName').value = snap.newName;
+  S.fromAnswer = snap.fromAnswer ?? null;
   S.extra = snap.extra.filter((p) => !store.state.planets.some((q) => String(q.id) === String(p.id)));
   const known = snap.planet === 'new' || planetList().some((p) => String(p.id) === String(snap.planet));
   if (!known) {
@@ -595,6 +598,8 @@ async function submit() {
     // 멈출지 · 닫을지 묻는 사이에 끝났으면 그 물음은 거둔다
     if (c.asking && c.busy) closeAsk();
     if (S === c) close();
+    // 챗봇 답에서 연 창이면 그 답에 "띄운 별"을 잇게 한다(chatThread.js가 듣는다)
+    if (c.fromAnswer && res?.star?.id) store.emit('savedFromAnswer', { messageId: c.fromAnswer, starId: res.star.id });
     await land(planetId, res?.star, res?.skipped ?? []);
   } catch (err) {
     clearTimeout(slowTimer);
@@ -821,7 +826,7 @@ export function closeSave() {
  * @param {{ text?: string, url?: string, files?: File[], hints?: (string|null)[] }} [o]
  * @returns {boolean} 받았으면 true(저장 중이거나, 닫혀 있는데 담을 것이 하나도 없으면 false)
  */
-export function openSave({ text, url, files, hints } = {}) {
+export function openSave({ text, url, files, hints, fromAnswer } = {}) {
   wire();
   const list = Array.from(files ?? []);
   const hasText = typeof text === 'string' && text.trim() !== '';
@@ -834,6 +839,7 @@ export function openSave({ text, url, files, hints } = {}) {
     if (hasText) {
       if ($('svText').value.trim() === '') {
         $('svText').value = text;
+        if (fromAnswer) S.fromAnswer = String(fromAnswer); // 답이 실제로 들어갔을 때만
         onTextInput();
       } else {
         toast(KEPT_TOAST);
@@ -853,6 +859,7 @@ export function openSave({ text, url, files, hints } = {}) {
   clearFields();
   setLinkRow(false);
   if (hasText) $('svText').value = text;
+  if (hasText && fromAnswer) S.fromAnswer = String(fromAnswer);
   showError('');
   setBusy(false);
   rebuildPlanets(null);

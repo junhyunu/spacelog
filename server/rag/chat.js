@@ -160,6 +160,8 @@ function registerConversations(app, { now, persistMs, heartbeatMs, log }) {
       WHERE conversation_id = ? AND status != 'running' AND content != ''
       ORDER BY created_at DESC, rowid DESC LIMIT ${HISTORY_MAX}`),
     message: db.prepare('SELECT * FROM messages WHERE id = ?'),
+    savedStar: db.prepare('SELECT id, planet_id, created_at FROM stars WHERE id = ?'),
+    setSavedStar: db.prepare('UPDATE messages SET saved_star_id = ? WHERE id = ?'),
     insertConversation: db.prepare('INSERT INTO conversations (id, title, created_at, updated_at, unread) VALUES (?, ?, ?, ?, 0)'),
     insertMessage: db.prepare(`INSERT INTO messages (id, conversation_id, role, content, sources, status, error, created_at)
       VALUES (@id, @conversation_id, @role, @content, '[]', @status, NULL, @created_at)`),
@@ -203,6 +205,8 @@ function registerConversations(app, { now, persistMs, heartbeatMs, log }) {
       status: row.status,
       error: row.error ?? null,
       created_at: row.created_at,
+      // "별로 저장"으로 띄운 별. 그 별이 지워졌으면 null(버튼이 다시 "별로 저장"이 된다)
+      saved_star: row.saved_star_id ? (q.savedStar.get(row.saved_star_id) ?? null) : null,
     };
   }
 
@@ -343,6 +347,18 @@ function registerConversations(app, { now, persistMs, heartbeatMs, log }) {
       user_message: messageJson(q.message.get(userId)),
       assistant_message: messageJson(q.message.get(assistantId)),
     });
+  });
+
+  // 답을 "별로 저장"해 띄운 별을 그 답에 이어 둔다. → { message }
+  app.put('/api/chat/messages/:id/saved-star', async (req, reply) => {
+    const row = q.message.get(req.params.id);
+    if (!row) return notFound(reply);
+    if (row.role !== 'assistant') return reply.code(400).send({ error: 'not_an_answer' });
+    const starId = req.body && typeof req.body === 'object' ? req.body.star_id : undefined;
+    if (typeof starId !== 'string' || !starId) return reply.code(400).send({ error: 'invalid_star_id' });
+    if (!q.savedStar.get(starId)) return reply.code(400).send({ error: 'unknown_star' });
+    q.setSavedStar.run(starId, row.id);
+    return { message: messageJson(q.message.get(row.id)) };
   });
 
   app.post('/api/chat/messages/:id/stop', async (req, reply) => {

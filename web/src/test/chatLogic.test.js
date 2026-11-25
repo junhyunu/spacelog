@@ -16,6 +16,7 @@ import {
   nextRetryDelay,
   panelMode,
   quickQuestions,
+  savedStarSource,
   relativeTime,
   shouldPollUnread,
   sourceCardModel,
@@ -289,6 +290,23 @@ describe('chatHintVisible (first-time bubble over the button)', () => {
     expect(chatHintVisible({ ...base, total: 0 })).toBe(false);
     expect(chatHintVisible({ ...base, total: undefined })).toBe(false);
     expect(chatHintVisible()).toBe(false);
+  });
+});
+
+describe('savedStarSource (별로 저장한 답 → 띄운 별로 날아가기)', () => {
+  test('a linked star becomes a source the planet panel can fly to', () => {
+    expect(savedStarSource({ saved_star: { id: 's1', planet_id: 'p1', created_at: '2026-11-25T00:00:00.000Z' } })).toEqual({
+      exists: true,
+      star_id: 's1',
+      planet_id: 'p1',
+      created_at: '2026-11-25T00:00:00.000Z',
+    });
+  });
+  test('not saved yet, or the star was deleted (server sends null) → null', () => {
+    expect(savedStarSource({ saved_star: null })).toBeNull();
+    expect(savedStarSource({})).toBeNull();
+    expect(savedStarSource(undefined)).toBeNull();
+    expect(savedStarSource({ saved_star: { id: 's1' } })).toBeNull(); // 행성을 모르면 날아갈 수 없다
   });
 });
 

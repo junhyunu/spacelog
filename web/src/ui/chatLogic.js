@@ -193,6 +193,16 @@ export function chatHintVisible({ inWorld, total, open, dismissed, offline } = {
   return Boolean(inWorld) && Number(total) > 0 && !open && !dismissed && !offline;
 }
 
+/**
+ * "별로 저장"으로 띄운 별(m.saved_star)을 출처 카드처럼 날아갈 수 있는 모양으로. 없거나(아직 안 띄움 · 그 별을 지움) 행성을 모르면 null.
+ * → { exists: true, star_id, planet_id, created_at } (chatPanel.js onSource가 받는 모양)
+ */
+export function savedStarSource(m) {
+  const s = m?.saved_star;
+  if (!s || !s.id || !s.planet_id) return null;
+  return { exists: true, star_id: s.id, planet_id: s.planet_id, created_at: s.created_at ?? null };
+}
+
 export const ANNOUNCE_MAX = 200;
 /** 답이 끝났을 때 화면 읽기 프로그램에 한 번 읽어 줄 문구. m = { status, content, error } */
 export function answerAnnouncement(m = {}) {

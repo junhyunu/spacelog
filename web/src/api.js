@@ -207,6 +207,8 @@ export const api = {
     request('POST', `/chat/conversations/${id(convId)}/messages`, { question, context: context ?? {}, today, tz_offset_min }),
   /** → { message } | 409 not_running */
   stopAnswer: (messageId) => request('POST', `/chat/messages/${id(messageId)}/stop`),
+  /** 답을 "별로 저장"해 띄운 별을 그 답에 이어 둔다. → { message } */
+  linkSavedStar: (messageId, starId) => request('PUT', `/chat/messages/${id(messageId)}/saved-star`, { star_id: starId }),
   /** → { count } */
   unread: () => request('GET', '/chat/unread'),
 
