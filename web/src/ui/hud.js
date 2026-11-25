@@ -32,7 +32,9 @@ import { flyTo, setInputBlocked } from '../three/controls.js';
 import { STAR_CAP, setSelectedStar, syncUniverse } from '../three/planets.js';
 import { PLANET_COLORS, daysAgo, esc, periodCountLabel, periodRange } from '../util.js';
 import { registerEscape } from './escape.js';
-import { trapTab } from './planetForm.js';
+import { confirmDeletePlanet } from './planetDelete.js';
+import { openPlanetForm, trapTab } from './planetForm.js';
+import { openRowMenu } from './rowMenu.js';
 import {
   defaultCustom,
   emptyHint,
@@ -84,6 +86,7 @@ let guestSeq = 0; // 손님 별 다시 확인(api.star)의 세대
 let holdGuest = false; // 손님 별로 날아가기를 시작하는 순간의 'leftPanelPlanet'은 흘려보낸다
 // 마지막으로 받는 데 성공한 기간. 기간 바꾸기가 실패하면 여기로 되돌린다
 let loaded = { period: store.state.period, range: store.state.range, custom };
+const MORE = '<svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>';
 let periodSeq = 0;
 let widenSeq = 0;
 let widenPending = false; // 들어올 때 이번 주로 넓히는 reload가 아직 끝나지 않았다
@@ -248,13 +251,22 @@ function syncNewPlanetWidth() {
 function paintDock() {
   const dock = $('dock');
   const focused = dock.contains(document.activeElement) ? document.activeElement : null;
-  const focusPlanet = focused?.dataset.planet;
+  // 다시 그린 뒤 같은 자리로 초점을 돌리려고 적어 둔다(날아가기 버튼 · ⋯ 버튼)
+  const focusSel = focused?.dataset.planet !== undefined
+    ? `button[data-planet="${CSS.escape(focused.dataset.planet)}"]`
+    : focused?.dataset.more !== undefined
+      ? `button[data-more="${CSS.escape(focused.dataset.more)}"]`
+      : null;
+  // 한 행 = 날아가기 버튼 + ⋯ 버튼(버튼 안에 버튼을 넣을 수 없어 나란히 둔다).
+  // ⋯은 마우스를 올리거나 키보드로 그 행에 오면 개수 배지 자리에 나타난다. 터치 화면에서는 늘 보인다(app.css)
   const html = store.state.planets
       .map((p) => {
         const count = num(p.count_in_period);
         return (
+          '<div class="drow">' +
           `<button type="button" data-planet="${esc(p.id)}" aria-label="${esc(`'${p.name}' 행성으로 날아가기, ${periodCountLabel(store.state.period)} ${count}개`)}">` +
-          `<span class="dot" style="background:${faceOf(p)}"></span><span class="t">${esc(p.name)}</span><span class="n">${count}</span></button>`
+          `<span class="dot" style="background:${faceOf(p)}"></span><span class="t">${esc(p.name)}</span><span class="n">${count}</span></button>` +
+          `<button type="button" class="more" data-more="${esc(p.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(`'${p.name}' 행성 메뉴`)}" title="행성 메뉴">${MORE}</button></div>`
         );
       })
       .join('');
@@ -266,9 +278,7 @@ function paintDock() {
   syncNewPlanetWidth();
   markNear();
   // 다시 그리기 전에 초점이 있던 버튼으로 되돌린다
-  if (focusPlanet !== undefined && !dock.contains(document.activeElement)) {
-    [...dock.querySelectorAll('button[data-planet]')].find((b) => b.dataset.planet === focusPlanet)?.focus({ preventScroll: true });
-  }
+  if (focusSel && !dock.contains(document.activeElement)) dock.querySelector(focusSel)?.focus({ preventScroll: true });
 }
 
 // 띠 배너(기간 바 바로 아래): 별 상한 초과. 빈 우주 안내는 말풍선(paintHint)으로 옮겼다
@@ -337,6 +347,10 @@ function render() {
 function onDockClick(e) {
   const el = e.target instanceof Element ? e.target.closest('button') : null;
   if (!el) return;
+  if (el.dataset.more !== undefined) {
+    openPlanetMenu(el);
+    return;
+  }
   const planetId = el.dataset.planet;
   if (!planetId) return;
   closeDrawer(); // 좁은 화면: 날아가는 모습이 보이게 서랍을 닫는다
@@ -344,6 +358,26 @@ function onDockClick(e) {
   if (store.state.panelPlanetId === null || store.state.panelPlanetId === undefined) clearGuestStar();
   flightSeq += 1;
   flyTo(planetId).then((arrived) => arrived && store.emit('land', planetId));
+}
+
+// 행성 ⋯ 메뉴: 꾸미기 · 지우기. 지우기는 행성 삭제 확인 창(안의 별을 어떻게 할지 고른다)을 거친다.
+// 좁은 화면에서는 서랍을 닫고 창을 연다(창이 서랍 뒤에 가리지 않게)
+function openPlanetMenu(button) {
+  const planet = store.state.planets.find((p) => same(p.id, button.dataset.more));
+  if (!planet) return;
+  const run = (fn) => () => {
+    closeDrawer();
+    fn();
+  };
+  openRowMenu(button, `'${planet.name}' 행성 메뉴`, [
+    { key: 'edit', label: '꾸미기', run: run(() => openPlanetForm({ planet })) },
+    {
+      key: 'del',
+      label: '지우기',
+      danger: true,
+      run: run(() => confirmDeletePlanet(planet, store.state.planets.filter((p) => !same(p.id, planet.id)))),
+    },
+  ]);
 }
 
 /* ---------- 왼쪽 패널 · 조작 안내 ---------- */

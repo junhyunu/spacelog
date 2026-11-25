@@ -1,0 +1,37 @@
+/* 목록 행의 ⋯ 버튼과 떠 있는 메뉴(rowMenu.js). 왼쪽 패널 행성 목록(.drow) · 행성 패널 별 목록(.recw)이 함께 쓴다.
+   ⋯은 마우스를 올리거나 키보드로 그 행에 오면 오른쪽 끝(개수 배지 · 날짜 자리)에 겹쳐 나타난다.
+   터치 화면(마우스 없음)에서는 늘 보이고, 그 자리만큼 행 오른쪽을 비운다. 값은 tokens.css의 토큰만 쓴다. */
+
+.drow,.recw{position:relative;flex:none;min-width:0}
+.drow > button[data-planet],.recw > .rec{width:100%}
+
+.drow .more,.recw .more{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:34px;height:34px;min-height:0;padding:0;margin:0;border:0;border-radius:10px;background:var(--panel-2);box-shadow:none;color:var(--ink);display:grid;place-items:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .1s}
+/* 실제로 누를 수 있는 넓이는 44px */
+.drow .more::after,.recw .more::after{content:"";position:absolute;inset:-5px}
+.drow .more:hover,.recw .more:hover,.drow .more[aria-expanded="true"],.recw .more[aria-expanded="true"]{background:var(--yellow)}
+.drow .more:focus-visible,.recw .more:focus-visible{outline:3px solid var(--sky);outline-offset:1px}
+.drow > button.here + .more{background:color-mix(in srgb,var(--ink) 10%,var(--yellow))}
+
+/* 보이기: 마우스를 올렸을 때 · 키보드로 그 행에 왔을 때 · 메뉴가 열려 있을 때. 그동안 개수 · 날짜는 숨는다 */
+:is(.drow,.recw):is(:hover,:focus-within) .more,
+.more[aria-expanded="true"]{opacity:1;pointer-events:auto}
+.drow:is(:hover,:focus-within) .n,.drow:has(.more[aria-expanded="true"]) .n,
+.recw:is(:hover,:focus-within) .d,.recw:has(.more[aria-expanded="true"]) .d{visibility:hidden}
+
+/* 터치 화면: 늘 보이고, 행 오른쪽을 비워 개수 · 날짜는 그 왼쪽에 그대로 둔다 */
+@media (hover:none){
+  .drow .more,.recw .more{opacity:1;pointer-events:auto}
+  .drow > button[data-planet],.recw > .rec{padding-right:48px}
+  .drow:is(:hover,:focus-within) .n,.recw:is(:hover,:focus-within) .d{visibility:visible}
+}
+@media (prefers-reduced-motion:reduce){.drow .more,.recw .more{transition:none}}
+
+/* 떠 있는 메뉴: 화면 기준(position:fixed). 패널 위, 꾸미기 · 확인 창 아래 */
+#rowMenu{position:fixed;z-index:40;min-width:168px;max-width:calc(100vw - 16px);box-sizing:border-box;padding:6px;display:flex;flex-direction:column;box-shadow:0 5px 0 var(--ink),0 14px 28px rgba(10,6,30,.35);animation:rowMenuIn .12s ease-out}
+@keyframes rowMenuIn{from{opacity:0;transform:translateY(-4px)}}
+#rowMenu button{font:600 14px var(--f-body);text-align:left;min-height:44px;padding:0 12px;border:0;border-radius:10px;background:transparent;color:var(--ink);cursor:pointer;white-space:nowrap}
+#rowMenu button:hover:not(:disabled){background:var(--panel-2)}
+#rowMenu button:focus-visible{outline:3px solid var(--sky);outline-offset:-3px}
+#rowMenu button:disabled{color:#9a94bd;cursor:not-allowed}
+#rowMenu button.danger{color:var(--danger-text);border-top:1.5px solid #d6d1f2;border-radius:0 0 10px 10px;margin-top:4px}
+@media (prefers-reduced-motion:reduce){#rowMenu{animation:none}}
