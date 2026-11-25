@@ -1,0 +1,359 @@
+<title>spaceLog 문제 가설</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one column of light "panels" on the dark space ground, spaceLog's own ink-border + hard-shadow style. Single dark theme by design. */
+:root {
+  --ink: #1a1430;
+  --space: #15103a;
+  --panel: #f4f2ff;
+  --panel-2: #e6e2ff;
+  --mute: #5b5480;
+  --white: #ffffff;
+  --yellow: #ffd23f;
+  --pink: #ff5d8f;
+  --violet: #7a6cff;
+  --sky: #5ec8ff;
+  --star: #c9c2ff;
+  --f-display: "Black Han Sans", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --f-body: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--space);
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 8%, var(--star) 50%, transparent 51%),
+    radial-gradient(1px 1px at 78% 4%, var(--star) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 90% 22%, var(--star) 50%, transparent 51%),
+    radial-gradient(1px 1px at 30% 18%, var(--star) 50%, transparent 51%),
+    radial-gradient(1px 1px at 55% 12%, var(--star) 50%, transparent 51%);
+  background-repeat: no-repeat;
+  color: var(--white);
+  font-family: var(--f-body);
+  font-size: 15px;
+  line-height: 1.65;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+.wrap { max-width: 880px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+
+header { display: flex; flex-direction: column; gap: 10px; padding-bottom: 8px; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--yellow); }
+h1 { font-family: var(--f-display); font-weight: 400; font-size: clamp(32px, 6vw, 48px); line-height: 1.15; margin: 0; text-wrap: balance; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag { font-size: 13px; padding: 3px 10px; border: 2px solid var(--ink); border-radius: 999px; background: var(--panel-2); color: var(--ink); font-weight: 500; }
+.tag.warn { background: var(--yellow); }
+.lede { max-width: 62ch; color: var(--panel-2); margin: 4px 0 0; }
+
+.panel {
+  background: var(--panel); color: var(--ink); color-scheme: light;
+  border: 3px solid var(--ink); border-radius: 18px; box-shadow: 0 6px 0 var(--ink);
+  padding: 24px clamp(16px, 4vw, 32px);
+  display: flex; flex-direction: column; gap: 16px; min-width: 0;
+}
+.panel h2 { font-family: var(--f-display); font-weight: 400; font-size: 26px; line-height: 1.25; margin: 0; display: flex; align-items: baseline; gap: 12px; text-wrap: balance; }
+.panel h2 .n { font-family: var(--f-mono); font-size: 14px; color: var(--violet); font-weight: 500; }
+.panel h3 { font-size: 17px; margin: 8px 0 0; }
+.panel p { margin: 0; max-width: 68ch; }
+.note { color: var(--mute); font-size: 14px; }
+
+.quote {
+  background: var(--ink); color: var(--white); border-radius: 12px; padding: 16px 20px;
+  font-size: 18px; font-weight: 700; line-height: 1.5;
+}
+.quote.light { background: var(--yellow); color: var(--ink); }
+
+.scroll { overflow-x: auto; min-width: 0; border: 2px solid var(--ink); border-radius: 12px; background: var(--white); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--panel-2); }
+tr:last-child td { border-bottom: 0; }
+thead th { background: var(--panel-2); font-weight: 700; white-space: nowrap; }
+tbody th { font-weight: 700; white-space: nowrap; color: var(--mute); }
+.wide table { min-width: 720px; }
+.wide th:last-child, .wide td:last-child { background: #fff8d6; }
+.wide thead th:last-child { background: var(--yellow); }
+td.k { font-family: var(--f-mono); font-weight: 500; color: var(--violet); white-space: nowrap; }
+
+.chip { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 999px; border: 2px solid var(--ink); white-space: nowrap; }
+.chip.high { background: var(--pink); color: var(--white); }
+.chip.mid { background: var(--yellow); color: var(--ink); }
+.chip.low { background: var(--panel-2); color: var(--ink); }
+
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.step { background: var(--white); border: 2px solid var(--ink); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.step b { font-size: 15px; }
+.step span { font-size: 14px; color: var(--mute); }
+.step em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--violet); }
+
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.two > div { min-width: 0; }
+ol.q { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 8px; }
+ol.q li { padding-left: 4px; }
+ol.q .opt { display: block; color: var(--mute); font-size: 13.5px; }
+ol.q .a { font-family: var(--f-mono); font-size: 12px; color: var(--violet); }
+
+.decide { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.decide li { display: flex; gap: 12px; align-items: flex-start; background: var(--white); border: 2px solid var(--ink); border-radius: 12px; padding: 12px 14px; }
+.decide input { width: 20px; height: 20px; margin-top: 3px; accent-color: var(--violet); flex: none; }
+.decide label { cursor: pointer; }
+.decide small { display: block; color: var(--mute); font-size: 13.5px; }
+input:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
+
+.panel h4 { font-size: 15px; margin: 10px 0 -4px; color: var(--violet); }
+.intro { background: var(--white); border: 2px dashed var(--mute); border-radius: 12px; padding: 12px 16px; font-size: 14px; }
+.intro b { display: block; font-size: 12px; color: var(--mute); }
+ul.rules { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; max-width: 72ch; }
+.qt table, table.qt { min-width: 640px; }
+table.qt td:nth-child(2) { min-width: 220px; }
+table.qt td.a { font-family: var(--f-mono); font-size: 12px; color: var(--violet); white-space: nowrap; }
+.fmt { display: inline-block; font-size: 11.5px; font-weight: 700; color: var(--ink); background: var(--panel-2); border-radius: 6px; padding: 0 6px; margin-right: 4px; }
+.cond { display: inline-block; font-size: 11.5px; font-weight: 700; color: var(--white); background: var(--violet); border-radius: 6px; padding: 0 6px; margin-right: 4px; }
+td.stage { font-weight: 700; white-space: nowrap; background: var(--panel); }
+td.stage span { display: block; font-family: var(--f-mono); font-size: 12px; font-weight: 500; color: var(--mute); }
+table.iv td { border-left: 1px solid var(--panel-2); }
+footer { color: var(--panel-2); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+footer a { color: var(--sky); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Team meeting · 2026-11-24</div>
+    <h1>spaceLog 문제 정의 가설</h1>
+    <div class="meta">
+      <span class="tag">발표 12월 2일</span>
+      <span class="tag">팀 4명</span>
+      <span class="tag warn">가설 단계 · 리서치 전</span>
+    </div>
+    <p class="lede">팀원 한 명(기획자)의 경험에서 출발한 가설입니다. 오늘 회의에서 리서치 방법을 정하고, 그 결과로 문제 정의를 확정합니다.</p>
+  </header>
+
+  <section class="panel">
+    <h2><span class="n">01</span>문제 가설</h2>
+    <div class="quote">가볍게 모아 두고 싶을 뿐인데, 기존 도구는 쓰기 전엔 배워야 하고 쌓인 뒤엔 다시 찾을 수 없다.</div>
+    <div class="scroll">
+      <table>
+        <tbody>
+          <tr><th>대상</th><td>레퍼런스·자료를 꾸준히 모으는 기획자, 마케터, 디자이너. 대부분 ChatGPT나 Claude를 이미 쓴다</td></tr>
+          <tr><th>상황</th><td>새 작업(기획서, 캠페인, 시안)을 하다가 예전에 저장해 둔 자료가 필요해진다</td></tr>
+          <tr><th>문제</th><td>① 무엇을 적었는지 기억나지 않는다<br>② 같은 도구 안에서도 어디(어느 페이지·폴더)에 뒀는지 기억나지 않는다<br>③ 너무 많이 쌓여 훑어볼 수 없다</td></tr>
+          <tr><th>지금의 대안</th><td>노션, 메모장, 브라우저 북마크, 스크린샷 폴더, 카톡 "나에게 보내기" 등 <span class="note">(추정, 리서치로 확인)</span></td></tr>
+          <tr><th>대안의 한계</th><td>노션처럼 기능·설정이 많은 도구는 배워야 쓸 수 있다. 쌓인 뒤에는 다시 찾기가 어렵다</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2><span class="n">02</span>spaceLog의 답</h2>
+    <p><b>간편하게 저장하고, 편하게 찾아 꺼내 쓴다.</b> 각자 자기 기록만 보는 개인 계정이고, 로컬 저장에서 서버 + DB로 옮긴다.</p>
+    <div class="steps">
+      <div class="step"><b>저장</b><span>설치형 바로 캡처·링크 등록, 평소 쓰는 AI에서 MCP로 저장, 끌어다 놓기</span></div>
+      <div class="step"><b>다시 찾기</b><span>AI 사용자는 MCP로, 아니면 챗봇으로. 북마크, 우주 화면(행성·기간)</span></div>
+      <div class="step"><b>다시 떠올리기</b><span>리마인드</span><em>방식 미정</em></div>
+      <div class="step"><b>새 영감</b><span>기록끼리 연결하기 (connecting the dots)</span><em>방식 미정</em></div>
+    </div>
+    <p class="note">우주 콘셉트: 기록 서비스가 많은 만큼, 사람들이 좋아할 특별함으로 가져간다. 그룹화는 아직 정의 전.</p>
+  </section>
+
+  <section class="panel">
+    <h2><span class="n">03</span>경쟁 서비스</h2>
+    <p>가장 가까운 경쟁자는 <b>mymind</b>입니다. "모든 걸 기억하고, 아무것도 정리하지 않는다"를 내세우고, 디자이너·마케터를 겨냥하며, 미감과 프라이버시로 팬을 만들었습니다. 발표에서 "mymind와 뭐가 다르냐"는 질문은 반드시 나옵니다.</p>
+    <div class="scroll wide">
+      <table>
+        <thead><tr><th></th><th>mymind</th><th>Raindrop.io</th><th>노션</th><th>spaceLog (계획)</th></tr></thead>
+        <tbody>
+          <tr><th>정체성</th><td>정리 없는 개인 영감 저장소</td><td>북마크 관리자</td><td>다목적 작업 공간</td><td>우주 콘셉트 아카이브</td></tr>
+          <tr><th>정리 방식</th><td>자동(AI 태그)</td><td>수동(컬렉션·태그)</td><td>수동(페이지 계층·DB)</td><td>행성 선택 + 그룹화(미정)</td></tr>
+          <tr><th>다시 찾기</th><td>색·글자·이미지 검색</td><td>검색, 전문 검색은 유료</td><td>검색, 노션 AI</td><td>챗봇, MCP, 우주 화면, 북마크</td></tr>
+          <tr><th>리마인드</th><td>Serendipity (잊은 것 다시 보여 주기)</td><td>확인 못 함</td><td>없음</td><td>계획 중</td></tr>
+          <tr><th>기록 연결</th><td>양방향 링크, 그래프 예정</td><td>없음</td><td>링크·관계형 DB</td><td>고민 중</td></tr>
+          <tr><th>AI 채팅·MCP</th><td>없음</td><td>유료에 AI 도우미</td><td>노션 AI, 공식 MCP</td><td>챗봇 + MCP</td></tr>
+          <tr><th>협업</th><td>일부러 없음</td><td>컬렉션 공유</td><td>강함</td><td>없음 (개인 계정)</td></tr>
+          <tr><th>배우는 부담</th><td>낮음</td><td>중간</td><td>높음</td><td>낮게</td></tr>
+          <tr><th>한국어</th><td>언급 없음</td><td>-</td><td>지원</td><td>지원</td></tr>
+          <tr><th>가격</th><td>무료 100개, 월 $4.99 / $7.99 / $12.99</td><td>무료(무제한), Pro 약 월 $3</td><td>무료 ~ 유료</td><td>-</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>차별점 한 문장 (초안)</h3>
+    <div class="quote light">평소 쓰는 AI 안에서 그대로 저장하고 꺼내 쓰고, 쌓인 기록이 별자리처럼 이어져 새 영감이 되는, 한국어 아카이브.</div>
+    <p class="note">근거: 조사한 서비스 중 "AI 대화 안에서 저장·꺼내기"는 없었다(노션 MCP는 있지만 배워야 하는 노션 위에 있다). 기록 연결을 별자리로 보여 주면 우주 콘셉트가 꾸밈이 아니라 기능이 된다 — 제안이며 팀 결정이 필요하다.</p>
+  </section>
+
+  <section class="panel">
+    <h2><span class="n">04</span>확인해야 할 가정</h2>
+    <p>위험한 순서입니다. 리서치는 위쪽 가정부터 확인해야 합니다.</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>#</th><th>가정</th><th>틀리면</th><th>위험도</th></tr></thead>
+        <tbody>
+          <tr><td class="k">A1</td><td>저장한 자료를 다시 못 찾는 일이 자주 있고, 그때 손해가 크다</td><td>문제 자체가 약해진다 ("다시 검색하면 그만")</td><td><span class="chip high">높음</span></td></tr>
+          <tr><td class="k">A2</td><td>못 찾는 원인은 "기억이 안 나서"(무엇·어디)다. 애초에 저장을 안 한 게 아니다</td><td>해결책이 "저장을 쉽게" 쪽으로만 옮겨 간다</td><td><span class="chip high">높음</span></td></tr>
+          <tr><td class="k">A3</td><td>대상은 AI 챗을 자주 쓰고, 그 안에서 저장·불러오기를 원한다</td><td>MCP라는 핵심 차별점의 근거가 약해진다</td><td><span class="chip high">높음</span></td></tr>
+          <tr><td class="k">A4</td><td>업무 자료(고객사 자료 포함)를 서버와 AI에 맡기는 데 큰 거부감이 없다</td><td>서버 전환과 챗봇이 신뢰 문제에 막힌다</td><td><span class="chip mid">중간</span></td></tr>
+          <tr><td class="k">A5</td><td>기존 도구가 복잡해서 기록을 포기하거나 대충 한 경험이 있다</td><td>"단순함" 차별점이 약해진다</td><td><span class="chip mid">중간</span></td></tr>
+          <tr><td class="k">A6</td><td>잊은 기록을 다시 보여 주거나 이어 주면 실제로 도움이 된다</td><td>리마인드·연결의 근거가 약해진다</td><td><span class="chip mid">중간</span></td></tr>
+          <tr><td class="k">A7</td><td>우주 화면이 찾기나 다시 보기를 더 즐겁게 만든다</td><td>핵심 화면이 장식이 된다</td><td><span class="chip low">낮음</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2><span class="n">05</span>리서치 방법 고르기</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th></th><th>인터뷰</th><th>설문</th></tr></thead>
+        <tbody>
+          <tr><th>잘하는 것</th><td>몰랐던 문제와 이유를 발견한다 (A2, A6)</td><td>이미 아는 선택지가 얼마나 흔한지 숫자로 보여 준다 (A1, A3, A4)</td></tr>
+          <tr><th>못하는 것</th><td>숫자로 보여 주기 어렵다</td><td>선택지 밖의 문제를 못 찾는다</td></tr>
+          <tr><th>필요한 것</th><td>5~8명, 1인 30분</td><td>많을수록 좋다(100명 이상 권장), 1인 5~6분</td></tr>
+          <tr><th>발표에 남는 것</th><td>인용문, 대표 장면</td><td>그래프, 비율</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="quote light">권고: 시간이 없다면 설문으로 가고, 설문 끝에서 인터뷰 지원자를 받아 2~3명과 15분 통화를 더한다.</div>
+    <h3>질문을 만든 원칙</h3>
+    <ul class="rules">
+      <li>미래·가정("쓰시겠어요?")이 아니라 <b>가장 최근의 실제 행동</b>을 묻는다.</li>
+      <li>유도하지 않는다. "불편하셨죠?"가 아니라 "그때 어떠셨어요?"</li>
+      <li>우리 가설을 선택지로만 주지 않는다. 주관식과 "기타(직접 입력)"를 둔다.</li>
+      <li>주관식 경험 질문을 앞에 둔다. 선택지를 먼저 보면 그 표현이 답에 섞인다.</li>
+      <li>AI 이야기는 늦게 꺼낸다. 응답자가 먼저 AI를 말하는지가 증거가 된다.</li>
+      <li>지인 30명 안팎이면 "통계적으로 그렇다"가 아니라 "경향이 보였다"로만 말한다.</li>
+    </ul>
+  </section>
+
+  <section class="panel">
+    <h2><span class="n">05-1</span>설문</h2>
+    <div class="meta"><span class="tag">대상자 거르기 2 + 본 문항 14</span><span class="tag">약 5~6분</span></div>
+    <div class="intro"><b>시작 안내문</b> 업무 자료를 저장하고 다시 찾는 경험에 대한 설문입니다. 5분 정도 걸리고, 정답은 없습니다. 답변은 수업 프로젝트 발표에만 쓰고, 개인을 알아볼 수 있는 정보는 공개하지 않습니다.</div>
+
+    <h4>대상자 거르기</h4>
+    <div class="scroll"><table class="qt">
+      <thead><tr><th>#</th><th>질문</th><th>형식 · 선택지</th></tr></thead>
+      <tbody>
+        <tr><td class="k">S1</td><td>하시는 일은 무엇인가요?</td><td><span class="fmt">하나 선택</span> 서비스·전략 기획 / 마케팅 / 디자인 / 학생(위 분야 지망) / 기타(직접 입력)</td></tr>
+        <tr><td class="k">S2</td><td>지난 한 달 동안 업무나 과제에 쓰려고 참고 자료(링크, 캡처, 이미지, 파일, 글)를 따로 저장한 적이 있나요?</td><td>있음 / 없음 <span class="cond">없음이면 설문 종료</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <h4>A. 최근 경험</h4>
+    <div class="scroll"><table class="qt">
+      <thead><tr><th>#</th><th>질문</th><th>형식 · 선택지</th><th>가정</th></tr></thead>
+      <tbody>
+        <tr><td class="k">1</td><td>가장 최근에, 저장해 둔 자료를 다시 찾아야 했던 때를 적어 주세요. 무엇을, 어디서 찾았고, 어떻게 됐나요?</td><td><span class="fmt">주관식</span> 2~3문장</td><td class="a">A1 A2</td></tr>
+        <tr><td class="k">2</td><td>그때 결과는 어땠나요?</td><td><span class="fmt">하나 선택</span> 바로 찾음(5분 이내) / 오래 걸려 찾음 / 못 찾아서 다시 검색하거나 새로 만듦 / 찾다가 포기함 / 떠오르는 경험이 없음</td><td class="a">A1</td></tr>
+        <tr><td class="k">3</td><td><span class="cond">2번 "오래 걸림·못 찾음·포기"만</span> 찾기 어려웠던 이유는 무엇인가요?</td><td><span class="fmt">여러 개 선택</span> 무엇을 저장했는지 정확히 기억나지 않아서 / 어디(어떤 도구·폴더·페이지)에 뒀는지 기억나지 않아서 / 너무 많이 쌓여 훑어보기 어려워서 / 검색해도 원하는 결과가 안 나와서 / 링크가 깨졌거나 지워져서 / 애초에 저장하지 않았던 것 같아서 / 기타(직접 입력)</td><td class="a">A2</td></tr>
+        <tr><td class="k">4</td><td>지난 한 달 동안, 저장해 둔 자료를 찾으려다 못 찾은 적은 몇 번인가요?</td><td><span class="fmt">하나 선택</span> 없음 / 1~2번 / 3~5번 / 6번 이상</td><td class="a">A1</td></tr>
+        <tr><td class="k">5</td><td><span class="cond">4번이 1번 이상만</span> 못 찾아서 어떤 일이 생겼나요?</td><td><span class="fmt">여러 개 선택</span> 다시 찾느라 시간을 썼다 / 대신할 자료를 새로 찾거나 만들었다 / 결과물의 질이 떨어졌다 / 동료·지인에게 다시 부탁했다 / 큰 영향은 없었다 / 기타(직접 입력)</td><td class="a">A1 심각도</td></tr>
+      </tbody>
+    </table></div>
+
+    <h4>B. 저장 습관</h4>
+    <div class="scroll"><table class="qt">
+      <thead><tr><th>#</th><th>질문</th><th>형식 · 선택지</th><th>가정</th></tr></thead>
+      <tbody>
+        <tr><td class="k">6</td><td>자료를 저장하는 곳을 모두 골라 주세요.</td><td><span class="fmt">여러 개 선택</span> 노션 / 메모 앱(애플 메모, 삼성 노트 등) / 브라우저 북마크 / 카톡 "나에게 보내기" / 스크린샷·사진첩 / PC 폴더·클라우드 드라이브 / 핀터레스트 / 슬랙 등 메신저 / 기타(직접 입력)</td><td class="a">대안</td></tr>
+        <tr><td class="k">7</td><td>그중 가장 많이 쓰는 곳 하나는?</td><td><span class="fmt">하나 선택</span> 6번에서 고른 것 중</td><td class="a">대안</td></tr>
+        <tr><td class="k">8</td><td>자료를 저장할 때 폴더나 태그로 분류하나요?</td><td><span class="fmt">하나 선택</span> 저장할 때마다 / 가끔 / 나중에 몰아서 / 거의 안 함</td><td class="a">A5</td></tr>
+        <tr><td class="k">9</td><td>쓰다가 그만둔 기록·저장 도구가 있나요? 있다면 그 이유는?</td><td>없음 / 있음 → 도구 이름(직접 입력) + <span class="fmt">여러 개 선택</span> 배울 기능·설정이 많아서 / 정리하는 게 귀찮아서 / 저장해도 다시 안 봐서 / 찾기 어려워서 / 다른 도구로 옮겨서 / 유료라서 / 기타(직접 입력)</td><td class="a">A5</td></tr>
+      </tbody>
+    </table></div>
+
+    <h4>C. AI 사용과 신뢰</h4>
+    <div class="scroll"><table class="qt">
+      <thead><tr><th>#</th><th>질문</th><th>형식 · 선택지</th><th>가정</th></tr></thead>
+      <tbody>
+        <tr><td class="k">10</td><td>ChatGPT, Claude 같은 AI 챗을 얼마나 자주 쓰나요?</td><td><span class="fmt">하나 선택</span> 거의 매일 / 주 2~3번 / 주 1번 이하 / 쓰지 않음</td><td class="a">A3</td></tr>
+        <tr><td class="k">11</td><td><span class="cond">10번 "쓰지 않음" 제외</span> 지난 일주일 동안 AI가 만들어 준 결과물을 나중에 쓰려고 보관한 적이 있나요? 있다면 어떻게?</td><td><span class="fmt">여러 개 선택</span> 보관하지 않음 / AI 앱 대화 기록에 그대로 둠 / 다른 도구에 복사해 붙여 넣음 / 파일로 저장 / 캡처 / 기타(직접 입력)</td><td class="a">A3</td></tr>
+        <tr><td class="k">12</td><td>최근 한 달 동안 글이나 파일을 AI에 넣으려다 망설이거나 그만둔 적이 있나요?</td><td>있음 / 없음 / AI를 쓰지 않음 → <span class="cond">있음이면</span> <span class="fmt">여러 개 선택</span> 내 정보가 밖으로 새어 나갈까 봐 / AI 학습에 쓰일까 봐 / 답이 정확하지 않을까 봐 / 기타(직접 입력)</td><td class="a">A4</td></tr>
+        <tr><td class="k">13</td><td>내가 저장한 기록을 AI가 읽고 찾아 주는 것을 얼마나 믿을 수 있나요?</td><td><span class="fmt">5점</span> 1 전혀 못 믿음 – 2 – 3 보통 – 4 – 5 매우 믿음</td><td class="a">A4</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">12번 이유는 프라이버시(새어 나감, 학습)와 정확성(틀린 답)으로 나뉩니다. 정확성 걱정이 크면 챗봇의 "출처 카드"가 답이 되고, 프라이버시 걱정이 크면 서버 저장을 안심시킬 설명이 필요합니다.</p>
+
+    <h4>D. 잊었다가 다시 만난 기록</h4>
+    <div class="scroll"><table class="qt">
+      <thead><tr><th>#</th><th>질문</th><th>형식 · 선택지</th><th>가정</th></tr></thead>
+      <tbody>
+        <tr><td class="k">14</td><td>저장해 두고 잊고 있다가, <b>필요했던 때가 지난 뒤에야</b> 다시 발견한 적이 있나요? ("그때 이게 있었으면…" 했던 순간)</td><td><span class="fmt">하나 선택</span> 자주 있음 / 가끔 있음 / 한두 번 있음 / 없음 → <span class="cond">없음 제외, 선택</span> 어떤 자료였고 언제 필요했는지 짧게</td><td class="a">A6 리마인드</td></tr>
+        <tr><td class="k">15</td><td>지난 3개월 동안, 예전에 저장한 자료를 우연히 다시 보고 일에 쓴 적이 있나요?</td><td>있음 / 없음 → <span class="cond">있음이면, 선택</span> 짧게</td><td class="a">A6 다시 보기</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">14번은 "너무 늦게 떠오른" 경우, 15번은 "제때 떠오른" 경우입니다. 14번을 먼저 두어 15번이 긍정 쪽으로 쏠리지 않게 합니다.</p>
+
+    <h4>마무리</h4>
+    <div class="scroll"><table class="qt">
+      <thead><tr><th>#</th><th>질문</th><th>형식</th></tr></thead>
+      <tbody>
+        <tr><td class="k">16</td><td>15분 통화 인터뷰에 참여해 주실 수 있다면 연락처를 남겨 주세요.</td><td><span class="fmt">선택 · 주관식</span> + 개인정보 수집·이용 동의 (목적: 인터뷰 연락, 보관: 발표 후 삭제)</td></tr>
+      </tbody>
+    </table></div>
+    <div class="quote light">보내기 전에: 팀원이 아닌 사람 2명에게 먼저 풀어 보게 하고, 헷갈린 문항과 걸린 시간을 확인해 고친다.</div>
+  </section>
+
+  <section class="panel">
+    <h2><span class="n">05-2</span>인터뷰 가이드</h2>
+    <div class="meta"><span class="tag">30분</span><span class="tag">2인 1조</span></div>
+    <ul class="rules">
+      <li>한 명은 묻고, 한 명은 받아 적는다. 녹음은 동의를 받고 한다.</li>
+      <li>받아 적을 때는 해석하지 말고 <b>들은 말 그대로</b> 적는다.</li>
+      <li>유도하지 않기("불편하셨죠?" ✕ → "그때 어떠셨어요?" ○), 침묵을 견디기, 파고들기("왜요?", "그다음엔요?", "예를 들면요?").</li>
+    </ul>
+    <div class="scroll"><table class="qt iv">
+      <thead><tr><th>단계</th><th>질문</th><th>파고들 질문 · 볼 것</th><th>가정</th></tr></thead>
+      <tbody>
+        <tr><td class="stage">시작<span>3분</span></td><td>"제품을 평가받는 자리가 아니라, 자료를 모으고 찾는 경험을 듣는 자리예요. 정답은 없어요. 녹음해도 될까요?"</td><td></td><td></td></tr>
+        <tr><td class="stage" rowspan="2">맥락<span>5분</span></td><td>1. 요즘 어떤 일을 하고 계세요?</td><td>맡은 업무, 요즘 프로젝트</td><td></td></tr>
+        <tr><td>2. 일하면서 참고 자료를 모으게 되는 건 주로 어떤 때인가요?</td><td>어떤 종류(이미지, 링크, 글, 파일)를, 얼마나 자주</td><td></td></tr>
+        <tr><td class="stage" rowspan="4">최근 사건<span>15분</span></td><td>3. 가장 최근에, 예전에 저장해 둔 자료를 다시 찾아야 했던 때를 처음부터 순서대로 이야기해 주세요.</td><td>무엇을 하다가 필요해졌나요? / 그때 무엇이 기억났나요? (언제쯤, 무슨 내용, 어디에) / 어디부터 찾아보셨어요? / <b>그 화면을 지금 보여 주실 수 있을까요?</b> / 결국 어떻게 됐고, 얼마나 걸렸나요?</td><td class="a">A1 A2</td></tr>
+        <tr><td>4. 그 자료는 처음에 어떻게 저장하셨어요?</td><td>저장할 때 정리를 했나요? 왜 그렇게 했나요?</td><td class="a">A2 A5</td></tr>
+        <tr><td>5. 끝내 못 찾았던 적도 있나요?</td><td>그때 어떻게 했나요? 그 결과 어떤 일이 있었나요?</td><td class="a">A1 심각도</td></tr>
+        <tr><td>6. 저장해 두고 잊었다가, 필요했던 때가 지난 뒤에 발견한 적이 있나요?</td><td>그게 무엇이었나요? 그때 어떤 생각이 들었나요? 반대로, 우연히 다시 봐서 쓴 적은요?</td><td class="a">A6</td></tr>
+        <tr><td class="stage" rowspan="4">도구<span>5분</span></td><td>7. 지금 자료를 모아 두는 곳을 전부 보여 주세요.</td><td>각각 언제 쓰나요? 어떻게 나눠 쓰나요?</td><td class="a">대안</td></tr>
+        <tr><td>8. 쓰다가 그만둔 도구가 있나요?</td><td>마지막으로 쓴 게 언제였고, 왜 그만뒀나요?</td><td class="a">A5</td></tr>
+        <tr><td>9. 최근 일주일 동안 작업하면서 나중에 다시 쓰려고 보관한 게 있나요? 어떻게 보관했나요?</td><td><b>AI를 먼저 꺼내지 않는다.</b> 응답자가 AI를 말하면: 그 결과물은 어떻게 했나요? 다시 꺼내 본 적이 있나요?</td><td class="a">A3</td></tr>
+        <tr><td>10. <span class="cond">AI를 쓴다고 했다면</span> AI에 무언가를 넣으려다 망설인 적이 있나요?</td><td>무엇이 걱정됐나요? (정보가 새어 나갈까 / 틀린 답을 줄까)</td><td class="a">A4</td></tr>
+        <tr><td class="stage">반응<span>5분</span></td><td>spaceLog를 짧게 보여 준다 (저장 → 우주 화면 → 챗봇 질문)</td><td>어디가 헷갈리세요? / 아까 말씀하신 그 상황이었다면 이걸 썼을까요? 왜 그렇게 생각하세요? <i>반응은 참고로만 쓴다</i></td><td class="a">A7</td></tr>
+        <tr><td class="stage">마무리<span>2분</span></td><td>더 하고 싶은 말씀이 있나요? 이야기를 들어 볼 만한 분을 소개해 주실 수 있나요?</td><td>감사 인사</td><td></td></tr>
+      </tbody>
+    </table></div>
+    <div class="quote light">인터뷰 직후 10분: 둘이서 기억에 남는 말 3개, 놀라웠던 점 1개, 가정 A1~A7 중 맞았던 것과 흔들린 것을 적는다.</div>
+  </section>
+
+  <section class="panel">
+    <h2><span class="n">06</span>회의에서 정할 것</h2>
+    <p class="note">체크 표시는 이 브라우저에만 남습니다.</p>
+    <ul class="decide">
+      <li><input type="checkbox" id="d1"><label for="d1">리서치 방식<small>설문만 / 설문 + 짧은 통화 / 인터뷰 — 누가, 언제까지</small></label></li>
+      <li><input type="checkbox" id="d2"><label for="d2">"왜 mymind가 아니라 spaceLog인가" 한 문장 확정</label></li>
+      <li><input type="checkbox" id="d3"><label for="d3">하지 않을 것 목록<small>단순함을 지키는 장치. 예: 폴더 계층은 만들지 않는다, 저장할 때 행성 고르기를 강제하지 않는다</small></label></li>
+      <li><input type="checkbox" id="d4"><label for="d4">기능 5개 범위<small>12/2까지 완성할 것 / 시연용으로만 보여 줄 것 / 다음으로 미룰 것</small></label></li>
+      <li><input type="checkbox" id="d5"><label for="d5">그룹화, 리마인드, 기록 연결의 정의<small>리서치 결과를 보고 확정해도 된다</small></label></li>
+      <li><input type="checkbox" id="d6"><label for="d6">발표 대표 장면 하나<small>예: 기획자가 GPT에서 저장 → 일주일 뒤 리마인드 → 이어진 기록에서 영감 → 챗봇이나 MCP로 꺼내기</small></label></li>
+      <li><input type="checkbox" id="d7"><label for="d7">성공 기준 하나<small>예: 찾는 데 걸리는 시간, 못 찾은 경험 비율</small></label></li>
+    </ul>
+  </section>
+
+  <footer>
+    <div>출처: <a href="https://mymind.com/what" target="_blank" rel="noopener">mymind — what</a> · <a href="https://www.mymind.com/pricing" target="_blank" rel="noopener">mymind pricing</a> · <a href="https://help.raindrop.io/premium-features" target="_blank" rel="noopener">Raindrop.io plans</a></div>
+    <div>노션 항목은 작성자의 기존 지식이며 2026-11-24 기준으로 다시 확인하지 않았습니다. 가격은 바뀔 수 있습니다.</div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var boxes = document.querySelectorAll('.decide input[type=checkbox]');
+  boxes.forEach(function (b) {
+    try { b.checked = localStorage.getItem('sl-' + b.id) === '1'; } catch (e) {}
+    b.addEventListener('change', function () {
+      try { localStorage.setItem('sl-' + b.id, b.checked ? '1' : '0'); } catch (e) {}
+    });
+  });
+})();
+</script>

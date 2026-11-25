@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "concurrently \"node --watch server/index.js --dev\" \"vite\"",
     "build": "vite build",
+    "build:abtest": "vite build --config vite.abtest.config.js",
     "start": "node server/index.js",
     "test": "vitest run",
     "rag:setup": "node scripts/rag-setup.mjs",
