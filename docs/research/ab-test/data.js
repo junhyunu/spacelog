@@ -18,8 +18,11 @@
     { id: 'p6', name: 'CSV 데이터', color_index: 2, color: '#5ec8ff' },
     { id: 'p7', name: '분류 안 된 기록', color_index: 8, color: '#9aa7ff' },
   ];
-  /* 앱의 행성 색 12개(PLANET_COLORS face). 새 행성 만들기에서 고른다 */
-  var COLORS = ['#ff7a59', '#5ec8ff', '#8fdc5a', '#c29bff', '#ffb13b', '#ff6fb5', '#4fd1c5', '#9aa7ff', '#ff5a5a', '#7cf0b0', '#4f8dff', '#d96bff'];
+  /* 앱의 행성 색 16개(util.js PLANET_COLORS의 face, 1번부터 차례로). 새 행성 만들기 · 꾸미기에서 고른다.
+     3D 우주(mockApi.js)도 color_index로 이 표에서 색을 찾는다 */
+  var COLORS = ['#ff7a59', '#5ec8ff', '#8fdc5a', '#c29bff', '#ffb13b', '#ff6fb5', '#4fd1c5', '#9aa7ff', '#ff5a5a', '#7cf0b0', '#4f8dff', '#d96bff', '#c6e84a', '#ffc9a3', '#b9c6e0', '#c98a5a'];
+  /* 색 이름(앱과 같은 순서): 색 원의 이름표 */
+  var COLOR_NAMES = ['주황', '하늘', '연두', '연보라', '호박', '분홍', '청록', '남보라', '빨강', '민트', '파랑', '자주', '라임', '살구', '은회색', '코코아'];
 
   /* 기록 본문. CSV는 앞 몇 줄, 글은 내용. 상세 미리보기와 챗봇 답이 이 글을 쓴다 */
   var BODY = {
@@ -168,5 +171,5 @@
     };
   }
 
-  window.SPACELOG_TEST = { KEY: KEY, COLORS: COLORS, load: load, save: save, reset: reset, chat: CHAT, answerFor: answerFor };
+  window.SPACELOG_TEST = { KEY: KEY, COLORS: COLORS, COLOR_NAMES: COLOR_NAMES, load: load, save: save, reset: reset, chat: CHAT, answerFor: answerFor };
 })();
