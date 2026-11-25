@@ -277,25 +277,6 @@ export function registerStars(app) {
     return reply.code(204).send();
   });
 
-  // '/api/stars/:id' 와 겹치지 않도록 별도 경로에 둔다.
-  app.get('/api/rediscovery', async (req, reply) => {
-    const { today, before } = req.query;
-    if (typeof today !== 'string' || !today || typeof before !== 'string' || !before) {
-      return reply.code(400).send({ error: 'invalid_query' });
-    }
-    const { c } = db.prepare('SELECT COUNT(*) AS c FROM stars WHERE created_at < ?').get(before);
-    let star = null;
-    if (c > 0) {
-      let sum = 0;
-      for (const ch of today) sum += ch.charCodeAt(0);
-      const row = db
-        .prepare('SELECT * FROM stars WHERE created_at < ? ORDER BY id LIMIT 1 OFFSET ?')
-        .get(before, sum % c);
-      star = row ? toStarJson(row, attachmentsOf(db, row.id)) : null;
-    }
-    return reply.type('application/json; charset=utf-8').send(JSON.stringify(star));
-  });
-
   app.get('/api/summary', async (req) => {
     const cond = [];
     const params = {};

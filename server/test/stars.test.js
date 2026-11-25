@@ -471,7 +471,6 @@ test('response never leaks vault_path, file_hash, search_text', async () => {
     await call('GET', '/api/stars'),
     await call('GET', `/api/stars/${fileStar.id}`),
     await call('PATCH', `/api/stars/${fileStar.id}`, { memo: '새 메모' }),
-    await call('GET', '/api/rediscovery?today=2026-11-12&before=2100-01-01T00:00:00.000Z'),
   ];
   for (const res of responses) {
     expect(res.statusCode).toBeLessThan(300);
@@ -496,52 +495,6 @@ test('title with <script> is stored verbatim', async () => {
   expect((await call('GET', `/api/stars/${star.id}`)).json().title).toBe(title);
 });
 
-test('rediscovery: null when nothing older than `before`', async () => {
-  const empty = await call('GET', '/api/rediscovery?today=2026-11-12&before=2026-11-05T00:00:00.000Z');
-  expect(empty.statusCode).toBe(200);
-  expect(empty.headers['content-type']).toContain('application/json');
-  expect(empty.json()).toBeNull();
-
-  seed('2026-11-05T00:00:00.000Z'); // before 와 같으면 포함하지 않는다
-  seed('2026-11-10T00:00:00.000Z');
-  const res = await call('GET', '/api/rediscovery?today=2026-11-12&before=2026-11-05T00:00:00.000Z');
-  expect(res.statusCode).toBe(200);
-  expect(res.json()).toBeNull();
-
-  for (const q of ['', '?today=2026-11-12', '?before=2026-11-05T00:00:00.000Z']) {
-    const bad = await call('GET', `/api/rediscovery${q}`);
-    expect(bad.statusCode, q).toBe(400);
-    expect(bad.json()).toEqual({ error: 'invalid_query' });
-  }
-});
-
-test('rediscovery: same star for same `today`, deterministic', async () => {
-  const old = [];
-  for (let i = 0; i < 5; i++) old.push(seed(`2026-10-0${i + 1}T00:00:00.000Z`, { title: `옛 별 ${i}` }));
-  seed('2026-11-11T00:00:00.000Z', { title: '새 별' });
-  const sorted = old.map((s) => s.id).sort();
-  const before = encodeURIComponent('2026-11-05T00:00:00.000Z');
-
-  const pick = async (today) => {
-    const res = await call('GET', `/api/rediscovery?today=${today}&before=${before}`);
-    expect(res.statusCode).toBe(200);
-    return res.json();
-  };
-
-  const first = await pick('2026-11-12');
-  expect(first.id).toBe(sorted[sumCodes('2026-11-12') % 5]);
-  expect(Object.keys(first).sort()).toEqual(STAR_KEYS);
-  expect((await pick('2026-11-12')).id).toBe(first.id);
-
-  const seen = new Set();
-  for (const today of ['2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15', '2026-11-16']) {
-    const star = await pick(today);
-    expect(star.id).toBe(sorted[sumCodes(today) % 5]);
-    seen.add(star.id);
-  }
-  expect(seen.size).toBe(5);
-});
-
 test('summary counts', async () => {
   const empty = await call('GET', '/api/summary');
   expect(empty.statusCode).toBe(200);
@@ -561,7 +514,7 @@ test('summary counts', async () => {
   expect(fromOnly.json()).toEqual({ in_period: 1, total: 4, planets: 2 });
 });
 
-test('a star literally named "rediscovery" or "summary" does not shadow those routes', async () => {
+test('"/api/stars/<word>" is a star id lookup: unknown words are 404 and /api/summary is unaffected', async () => {
   const res = await call('GET', '/api/stars/rediscovery');
   expect(res.statusCode).toBe(404);
   expect(res.json()).toEqual({ error: 'not_found' });

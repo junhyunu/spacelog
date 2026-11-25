@@ -136,7 +136,7 @@ export function stopFlight() {
  * 행성으로 자동 비행한다(거리와 상관없이 1.2초, 천천히 출발해 천천히 멈춘다).
  * 도착하고 0.2초 뒤 true로 끝난다. 이동 키(도착 뒤 0.2초 사이에도) · 다른 flyTo · 우주에서 나가기 ·
  * 그 행성이 사라짐으로 끊기면 false로 끝난다.
- * 던지지 않는다. starId는 재발견 별(guest)이면 "비행 중" 토스트를 생략하는 데만 쓴다.
+ * 던지지 않는다. starId는 손님 별(기간 밖 별, 챗봇 출처 카드로 온 것)이면 "비행 중" 토스트를 생략하는 데만 쓴다.
  */
 export function flyTo(planetId, starId) {
   ensureReady();

@@ -1,11 +1,11 @@
-// W-01 조작 UI: 왼쪽 패널(로고 · 숫자 · 바로 날아가기 목록 · 조작 안내) · 기간 바 · 띠 배너 · 재발견 카드 ·
+// W-01 조작 UI: 왼쪽 패널(로고 · 숫자 · 바로 날아가기 목록 · 조작 안내) · 기간 바 · 띠 배너 ·
 // 빈 우주 말풍선 · 손님 별. 배치는 스펙 6-8(왼쪽 패널 · 오른쪽 위 기간 바 · 기록하기 위 말풍선).
 // 시안 611~656행(renderDock · applyPeriod · pickRedis · renderRedis · worldState)과 guest · clearGuest를 옮겼다.
 // 착륙 안내(#near)는 controls.js가 한다.
 //
 // store로 알리는 것:
 //   'land'       planetId               목록에서 눌러 그 행성에 도착했을 때
-//   'openStar'   { planetId, starId }   재발견 "날아가기"로 그 별의 행성에 도착했을 때
+//   'openStar'   { planetId, starId }   별로 날아가기(챗봇 출처 카드)로 그 별의 행성에 도착했을 때
 //   'openSave'                          "기록하기"(#wLog · 빈 우주 카드)
 //   'newPlanet'                         "+ 새 행성"(#wNewPlanet, 왼쪽 패널 목록 맨 위)
 //   'openCharacter'                     "캐릭터 꾸미기"(#wCharacter, 왼쪽 패널 요약 둘째 줄, 홈 옆)
@@ -55,7 +55,7 @@ const SIDE_KEY = 'spacelog.leftPanel'; // 'open' | 'closed'
 const HINT_KEY = 'spacelog.emptyHintOff'; // '1'이면 ✕로 끈 말풍선을 다시 띄우지 않는다
 const narrowMq = typeof matchMedia === 'function' ? matchMedia('(max-width: 760px)') : { matches: false };
 // 서랍이 펼쳐진 동안 inert로 잠그는 것(막 아래에 있는 우주 위 UI)
-const DRAWER_INERT = ['stage', 'period', 'near', 'redis', 'wHint', 'wLog', 'worldMsg', 'panel'];
+const DRAWER_INERT = ['stage', 'period', 'near', 'wHint', 'wLog', 'worldMsg', 'panel'];
 // 저장소를 못 쓰는 환경(사생활 보호 창 등)에서도 화면은 그대로 동작한다
 function readKey(key) {
   try {
@@ -76,7 +76,7 @@ const same = (a, b) => a !== null && a !== undefined && b !== null && b !== unde
 let ready = false;
 let custom = defaultCustom(); // "직접 지정"의 날짜 { from, to } 'YYYY-MM-DD'
 let nearId = null;
-let guest = null; // 손님 별 { id, planet_id }: 기간 밖인데 재발견으로 들어와 잠시 보여 주는 별
+let guest = null; // 손님 별 { id, planet_id }: 기간 밖인데 챗봇 출처 카드 등으로 들어와 잠시 보여 주는 별
 let guestArrived = false; // 손님 별에 도착했는지('openStar'). 가는 길에 끊기면 손님 별을 숨긴다
 let guestSeq = 0; // 손님 별 다시 확인(api.star)의 세대
 let holdGuest = false; // 손님 별로 날아가기를 시작하는 순간의 'leftPanelPlanet'은 흘려보낸다
@@ -86,8 +86,6 @@ let periodSeq = 0;
 let widenSeq = 0;
 let widenPending = false; // 들어올 때 이번 주로 넓히는 reload가 아직 끝나지 않았다
 let flightSeq = 0;
-let redisSeq = 0;
-let redisStar = null; // 지금 재발견 카드에 그려진 별
 let widened = false; // 들어오며 넓힌 기간('week' | 'all'), 넓히지 않았으면 false
 let sideCollapsed = false;
 let hintDismissed = false; // 이번 탭에서 ✕를 눌렀다(저장소를 못 써도 이번 탭에서는 다시 뜨지 않는다)
@@ -105,7 +103,7 @@ function sync() {
 
 /* ---------- 손님 별 ---------- */
 /**
- * 기간 밖의 별 하나만 잠시 핑크로 보여 준다(DESIGN.md W-01 "재발견으로 들어온 별이 기간 밖일 때").
+ * 기간 밖의 별 하나만 잠시 핑크로 보여 준다(DESIGN.md W-01 "기간 밖 별로 날아갈 때", 지금은 챗봇 출처 카드).
  * 기간 · 개수 · 다른 별은 그대로다. star = { id, planet_id, created_at }.
  */
 export function showGuestStar(star) {
@@ -157,7 +155,7 @@ async function revalidateGuest() {
   if (guestMoved(guest, star)) clearGuestStar();
 }
 
-// 별로 날아간다(재발견 "날아가기" · 챗봇 출처 카드 chatPanel.js). 기간 밖이면 손님 별로 보여 주고, 도착하면 'openStar'.
+// 별로 날아간다(챗봇 출처 카드 chatPanel.js). 기간 밖이면 손님 별로 보여 주고, 도착하면 'openStar'.
 export function flyToStar(star) {
   const planetId = String(star.planet_id);
   const starId = String(star.id);
@@ -315,43 +313,6 @@ function dismissHint() {
   paintHint();
 }
 
-function hideRedis() {
-  const el = $('redis');
-  el.hidden = true;
-  el.textContent = '';
-  redisStar = null;
-}
-
-// 재발견 카드: 색 점 · "N일 전 오늘의 별" · 제목 · "날아가기". 없으면 숨긴다(760px 이하는 CSS가 숨긴다).
-// 받는 동안 더 새로운 그리기가 시작됐으면 버린다.
-async function paintRedis(kind) {
-  const seq = ++redisSeq;
-  if (kind === 'empty' || kind === 'emptyPlanets') {
-    hideRedis();
-    return;
-  }
-  let star;
-  try {
-    star = await api.rediscovery();
-  } catch (err) {
-    if (seq === redisSeq && err?.code !== 'offline') hideRedis();
-    return;
-  }
-  if (seq !== redisSeq || !store.state.inWorld) return;
-  const planet = star ? store.state.planets.find((p) => same(p.id, star.planet_id)) : null;
-  if (!star || !planet) {
-    hideRedis();
-    return;
-  }
-  const el = $('redis');
-  redisStar = star;
-  el.innerHTML =
-    `<span class="pdot" style="background:${faceOf(planet)}"></span>` +
-    `<div class="tx"><span class="eyebrow">${num(daysAgo(star.created_at))}일 전 오늘의 별</span><b>${esc(star.title || '제목 없음')}</b></div>` +
-    '<button type="button" class="btn" id="redisGo">날아가기</button>';
-  el.hidden = false;
-}
-
 function render() {
   if (!store.state.inWorld) return;
   const { planets, summary, period } = store.state;
@@ -368,7 +329,6 @@ function render() {
   paintDock();
   paintBanner(st);
   paintHint();
-  paintRedis(st.kind);
 }
 
 /* ---------- 누르기 ---------- */
@@ -439,11 +399,6 @@ function updateLayoutVars() {
   if (!hint.hidden && hint.offsetHeight) root.setProperty('--hint-lift', `${innerHeight - hint.offsetTop}px`);
 }
 
-function onRedisClick(e) {
-  const el = e.target instanceof Element ? e.target.closest('#redisGo') : null;
-  if (el && redisStar) flyToStar(redisStar);
-}
-
 /* ---------- 시작 ---------- */
 /** 조작 UI를 준비한다(한 번만). 그리기는 store의 'data'가 올 때마다(우주 안에서만) 한다. */
 export function initHud() {
@@ -462,7 +417,6 @@ export function initHud() {
     closeDrawer(); // 좁은 화면: 초점이 펼치기 버튼으로 간다 → 창을 닫으면 거기로 돌아온다
     store.emit('openCharacter');
   });
-  $('redis').addEventListener('click', onRedisClick);
   $('wLog').addEventListener('click', () => store.emit('openSave'));
   $('wHintX').addEventListener('click', dismissHint);
   paintPeriod();
@@ -538,8 +492,6 @@ export function initHud() {
     dropGuest();
     setSelectedStar(null);
     nearId = null;
-    redisSeq += 1;
-    redisStar = null;
     paintHint(); // 우주 밖: 말풍선과 기록하기 테두리를 내린다
     if (narrowMq.matches) setSide(true); // 좁은 화면은 다음에 들어올 때도 접힌 채로
   });

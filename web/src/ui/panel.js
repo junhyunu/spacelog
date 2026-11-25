@@ -178,7 +178,7 @@ export function renderPanel() {
 
 /**
  * 행성 패널을 연다. starId를 주면 그 별의 상세로, 없으면 목록으로.
- * 별이 지금 기간 목록에 없으면(재발견으로 온 기간 밖 별) 서버에서 받아 온다. 못 받으면 목록을 보인다.
+ * 별이 지금 기간 목록에 없으면(챗봇 출처 카드로 온 기간 밖 별) 서버에서 받아 온다. 못 받으면 목록을 보인다.
  */
 export function openPanel(id, starId) {
   const planet = planetOf(id);

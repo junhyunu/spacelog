@@ -7,7 +7,7 @@
 //   'leaveWorld'                          홈이 다시 나타난 뒤
 //   'guestStar'    star                   들어온 별이 지금 기간 밖일 때, 날아가기 직전(Task 8이 그 별만 핑크로 보여 준다)
 //   'land'         planetId               행성을 눌러 들어와 도착했을 때
-//   'openStar'     { planetId, starId }   별(최근 별 · 재발견)을 눌러 들어와 도착했을 때
+//   'openStar'     { planetId, starId }   별(최근 별)을 눌러 들어와 도착했을 때
 //   'offline'                             4단계에서 연결이 끊겨 홈으로 되돌아갔을 때(연결 실패 카드를 홈에 띄우게)
 // store.state.inWorld는 잉크 막 뒤에서(4단계 시작 · 돌아가기의 구멍이 닫힌 뒤) 바뀐다.
 // 4단계의 store.reload()가 내는 'data'는 inWorld가 이미 true인 채로 온다.
@@ -23,9 +23,9 @@ const $ = (id) => document.getElementById(id);
 const reduceMq = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
 
 // 들어오면 보이는 조작 UI. #left(왼쪽 패널 · 접힌 로고 버튼)와 #period(기간 바 + 띠 배너)는 스펙 6-8 배치.
-// #redis · #worldMsg · #near · #wHint(빈 우주 말풍선) · #panel은 주인(hud.js · main.js · controls.js · panel.js)이 켜고 끈다.
+// #worldMsg · #near · #wHint(빈 우주 말풍선) · #panel은 주인(hud.js · main.js · controls.js · panel.js)이 켜고 끈다.
 const WORLD_UI = ['left', 'period', 'wLog'];
-const WORLD_UI_ALL = [...WORLD_UI, 'redis', 'worldMsg', 'near', 'wHint'];
+const WORLD_UI_ALL = [...WORLD_UI, 'worldMsg', 'near', 'wHint'];
 const ENTERING = 'world-entering'; // body에 붙어 있는 동안 조작 UI가 투명하다(app.css)
 
 const OPEN_TIMEOUT = 8000; // 4단계(3D 준비 + 데이터)를 기다려 주는 한도

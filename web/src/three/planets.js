@@ -32,7 +32,7 @@ const stars = new Map(); // id → S
 const flying = []; // { S, t, from }
 let selectedId = null;
 let guestId = null;
-const warnedGuests = new Set(); // 찾지 못해 이미 경고한 재발견 별 id
+const warnedGuests = new Set(); // 찾지 못해 이미 경고한 손님 별 id
 let capMode = false;
 let layoutVer = 0;
 
@@ -52,7 +52,7 @@ const starGeo = (() => {
   return g;
 })();
 let starMat = null; // 노랑
-let starMatOn = null; // 핑크(고른 별 · 기간 밖 재발견 별)
+let starMatOn = null; // 핑크(고른 별 · 기간 밖 손님 별)
 function starMats() {
   if (!starMat) {
     starMat = toon(YELLOW, { emissive: 0x4a3000 });
@@ -524,7 +524,7 @@ function toV3(p) {
  * DB 상태와 3D를 맞춘다.
  * - planets: 지금 있는 모든 행성(count_in_period가 기간 안의 별 수)
  * - stars: 기간 안의 별, 최신순
- * - guestStarId: 기간 밖인데 잠시 보여 줄 별(재발견). stars에 없으면 guestStar로 그 별의 { id, planet_id }를 함께 준다.
+ * - guestStarId: 기간 밖인데 잠시 보여 줄 별(챗봇 출처 카드로 온 별). stars에 없으면 guestStar로 그 별의 { id, planet_id }를 함께 준다.
  * 없는 것은 만들고 사라진 것은 지우며, 색 · 장식 · 고리가 바뀐 행성은 같은 자리에서 다시 만든다(별은 그대로).
  */
 export function syncUniverse({ planets: planetList = [], stars: starList = [], guestStarId = null, guestStar = null } = {}) {

@@ -1,4 +1,4 @@
-// W-00 메인 홈: 인사말 · 개수 · 블랙홀 엠블럼 · 재발견 · 행성 목록 · 최근 별.
+// W-00 메인 홈: 인사말 · 개수 · 블랙홀 엠블럼 · 행성 목록 · 최근 별.
 // 시안 934~987행(renderHome · homeStates · drawBH)을 옮겼다. 데이터만 API에서 받는다.
 //
 // store로 알리는 것:
@@ -10,7 +10,7 @@
 // 연결 실패 상태는 main.js(showOffline)가 그린다. 여기서는 그 카드를 건드리지 않는다.
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { PLANET_COLORS, daysAgo, esc, ico, periodRange, shortDate } from '../util.js';
+import { PLANET_COLORS, esc, ico, periodRange, shortDate } from '../util.js';
 import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
@@ -34,7 +34,7 @@ function recRow(planet, star, right) {
 
 const NEW_PLANET_BTN = `<button type="button" class="btn ghost sm" id="hNewPlanet" data-act="newPlanet">${ico('plus', 12)} 새 행성</button>`;
 
-function paint({ summary, planets, recent, redis, now }) {
+function paint({ summary, planets, recent }) {
   const total = Number(summary?.total) || 0;
   const todayN = Number(summary?.in_period) || 0;
   const empty = total === 0; // 전체 0개: 별이 하나도 없다(빈 행성은 있을 수 있다)
@@ -46,23 +46,6 @@ function paint({ summary, planets, recent, redis, now }) {
       ? `오늘 별 <em>${num(todayN)}개</em>를 띄웠어요`
       : '오늘은 아직 별이 없어요';
   $('hStats').innerHTML = `<b>${num(total)}</b>개의 별 <b>${num(summary?.planets ?? planets.length)}</b>개의 행성`;
-
-  // 재발견 카드: 없으면 숨긴다
-  const redisEl = $('hRedis');
-  const redisPlanet = redis ? byId.get(String(redis.planet_id)) : null;
-  if (empty || !redis || !redisPlanet) {
-    redisEl.hidden = true;
-    redisEl.textContent = '';
-  } else {
-    const text = redis.body || redis.memo; // 본문이 있으면 본문, 없으면 메모
-    redisEl.hidden = false;
-    redisEl.innerHTML =
-      `<div class="eyebrow">${num(daysAgo(redis.created_at, now))}일 전 오늘의 별</div>` +
-      `<h3>${esc(redis.title || '제목 없음')}</h3>` +
-      (text ? `<p>${esc(text)}</p>` : '') +
-      `<button type="button" class="btn" id="hRedisGo" data-planet="${esc(redisPlanet.id)}" data-star="${esc(redis.id)}">` +
-      `<span class="pdot" style="background:${faceOf(redisPlanet)}"></span><span class="t">${esc(redisPlanet.name)}에서 보기</span></button>`;
-  }
 
   // 행성 목록: 색 점 · 이름 · 전체 별 개수. 맨 끝에 "+ 새 행성"(전체 0개일 때는 빈 우주 카드 안에 둔다)
   const planetsEl = $('hPlanets');
@@ -113,14 +96,9 @@ export async function renderHome() {
   const seq = ++renderSeq;
   const now = new Date();
   const today = periodRange('today', null, now);
-  let summary, planets, recent, redis;
+  let summary, planets, recent;
   try {
-    [summary, planets, recent, redis] = await Promise.all([
-      api.summary(today),
-      api.planets(today),
-      api.stars({ limit: 5 }),
-      api.rediscovery(now),
-    ]);
+    [summary, planets, recent] = await Promise.all([api.summary(today), api.planets(today), api.stars({ limit: 5 })]);
   } catch (err) {
     if (err?.code !== 'offline' && seq === renderSeq) toast('데이터를 불러오지 못했어요. 새로고침해 주세요');
     return false;
@@ -130,7 +108,7 @@ export async function renderHome() {
   // 기다리는 사이 전환이 시작됐거나 우주 안이면 그리지 않는다(흡입 중인 요소를 갈아 끼우지 않게).
   // 돌아올 때 leaveWorld가 다시 그린다.
   if (home.inert || store.state.inWorld) return false;
-  paint({ summary, planets: planets || [], recent: recent || [], redis, now });
+  paint({ summary, planets: planets || [], recent: recent || [] });
   return true;
 }
 

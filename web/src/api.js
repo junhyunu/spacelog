@@ -77,9 +77,6 @@ async function request(method, path, body, { signal } = {}) {
   return parseOk(res.status, text);
 }
 
-const localDay = (d) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
 export const api = {
   health: () => request('GET', '/health'),
 
@@ -181,12 +178,6 @@ export const api = {
       }
       xhr.send(form);
     });
-  },
-
-  /** 오늘의 재발견 별. 없으면 null. 넣은 지 7일 이상 된 별만 대상이다. */
-  rediscovery(now = new Date()) {
-    const before = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString();
-    return request('GET', `/rediscovery${qs({ today: localDay(now), before })}`);
   },
 
   /** 첨부의 보관함 사본을 기본 프로그램으로 연다(열면 안 되는 종류는 폴더에서 보여 준다). → { action: 'opened' | 'revealed' } */

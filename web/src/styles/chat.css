@@ -37,10 +37,9 @@
 #chatHint::after{right:57px;bottom:-9px;border-width:11px 8px 0;border-top-color:var(--panel)}
 body:has(#panel:not([hidden])) #chatHint,body:has(#left.drawer) #chatHint,body.world-entering #chatHint{display:none}
 
-/* 기록하기 · 말풍선은 챗봇 버튼 왼쪽으로(스펙 7장). 재발견 카드는 그만큼 좁힌다 */
+/* 기록하기 · 말풍선은 챗봇 버튼 왼쪽으로(스펙 7장) */
 #wLog{right:calc(var(--edge) + var(--chat-w) + var(--chat-gap) + env(safe-area-inset-right,0px));bottom:calc(16px + (var(--chat-btn) - 50px) / 2 + env(safe-area-inset-bottom,0px))}
 #wHint{right:calc(var(--edge) + var(--chat-w) + var(--chat-gap) + env(safe-area-inset-right,0px));width:min(296px,calc(100vw - 2 * var(--edge) - var(--chat-w) - var(--chat-gap)))}
-#redis{max-width:min(520px,calc(100vw - 574px))}
 /* W-00: 홈의 기록하기는 위 줄 그대로. 맨 아래 카드가 버튼에 가리지 않게 아래 여백을 넓힌다 */
 .home-wrap{padding-bottom:calc(28px + var(--chat-btn) + 16px + env(safe-area-inset-bottom,0px))}
 /* 좁은 화면에서 왼쪽 서랍을 펼치면 버튼을 숨긴다(서랍 막 위에 남지 않게) */

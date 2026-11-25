@@ -42,7 +42,7 @@ export function widenToast(to) {
 }
 
 /**
- * 그 별이 지금 기간 밖인지(밖이면 재발견 "손님 별"로 그 별만 잠시 보여 준다).
+ * 그 별이 지금 기간 밖인지(밖이면 "손님 별"로 그 별만 잠시 보여 준다).
  * range = { from(포함), to(미포함) } ISO. 한쪽이 없으면 그쪽은 보지 않는다. 날짜를 못 읽으면 false.
  */
 export function isOutsidePeriod(star, range) {
