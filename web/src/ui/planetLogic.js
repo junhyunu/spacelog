@@ -143,12 +143,14 @@ export function moveIndex(index, keyName, count, cols) {
 /* ---------- 행성 패널 (DESIGN.md W-02) ---------- */
 
 /**
- * 별 상세를 다시 그려야 하는지 가르는 열쇠. 메모는 뺀다(메모 칸은 상세가 쥐고 있고,
- * 자동 저장 뒤의 'data'가 쓰던 글을 건드리지 않게). 행성은 이름 · 색까지 본다(옮기기 목록에 보인다).
+ * 별 상세를 다시 그려야 하는지 가르는 열쇠. 메모 칸의 글(본문 body, 옛 memo)은 뺀다(메모 칸은 상세가 쥐고 있고,
+ * 자동 저장 뒤의 'data'가 쓰던 글을 건드리지 않게). 글이 있는지만 본다("종류"의 "글"이 달라진다).
+ * 행성은 이름 · 색까지 본다(옮기기 목록에 보인다).
  */
 export function detailKey(star, planets) {
-  const { memo: _memo, ...rest } = star ?? {};
-  return JSON.stringify([rest, (planets ?? []).map((p) => [String(p.id), p.name, p.color_index])]);
+  const { memo: _memo, body, ...rest } = star ?? {};
+  const hasBody = typeof body === 'string' && body.trim() !== '';
+  return JSON.stringify([rest, hasBody, (planets ?? []).map((p) => [String(p.id), p.name, p.color_index])]);
 }
 
 /**

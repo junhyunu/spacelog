@@ -159,6 +159,13 @@ export function checkMemo(memo) {
   return memo;
 }
 
+// 본문(화면의 "메모"). 문자열이 아니거나 한도(메모와 같은 2만 자, 코드 포인트)를 넘으면 받지 않는다. 공백뿐이면 null.
+export function checkBody(body) {
+  if (typeof body !== 'string') throw new ApiError(400, 'invalid_body');
+  if (body.length > MEMO_MAX && [...body].length > MEMO_MAX) throw new ApiError(400, 'invalid_body');
+  return body.trim() === '' ? null : body;
+}
+
 // 본문의 비어 있지 않은 첫 줄, 40자까지.
 export function firstLine(body) {
   const line = body.split(/\r?\n/).map((l) => l.trim()).find((l) => l !== '') ?? '';
@@ -175,10 +182,11 @@ export function isHttpUrl(url) {
 }
 
 // 수정 요청에서 있는 것만 검사한다. 빈 제목은 받지 않는다(400 invalid_title), 긴 제목은 만들 때처럼 200자로 자른다.
-// 본문 · 첨부는 고치지 않는다.
+// 본문은 비울 수 있다(null). 첨부는 고치지 않는다.
 function parsePatch(db, body) {
   const src = body && typeof body === 'object' ? body : {};
   const out = {};
+  if (src.body !== undefined) out.body = checkBody(src.body);
   if (src.title !== undefined) {
     if (typeof src.title !== 'string' || src.title.trim() === '') throw new ApiError(400, 'invalid_title');
     out.title = cutTitle(src.title);
@@ -234,8 +242,8 @@ export function registerStars(app) {
         next.attachments = attachmentsOf(db, id);
         next.search_text = buildSearchText(next, next.attachments);
         db.prepare(
-          'UPDATE stars SET title = @title, memo = @memo, planet_id = @planet_id, search_text = @search_text WHERE id = @id',
-        ).run({ id, title: next.title, memo: next.memo, planet_id: next.planet_id, search_text: next.search_text });
+          'UPDATE stars SET title = @title, body = @body, memo = @memo, planet_id = @planet_id, search_text = @search_text WHERE id = @id',
+        ).run({ id, title: next.title, body: next.body ?? null, memo: next.memo, planet_id: next.planet_id, search_text: next.search_text });
         return next;
       })();
       app.ragSync?.markStars([id], 'patch');

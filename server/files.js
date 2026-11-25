@@ -1,13 +1,13 @@
 import crypto from 'node:crypto';
 import multipart from '@fastify/multipart';
-import { ApiError, checkMemo, cutTitle, firstLine, insertStar, isHttpUrl, planetExists } from './stars.js';
+import { ApiError, checkBody, checkMemo, cutTitle, firstLine, insertStar, isHttpUrl, planetExists } from './stars.js';
 import { makeThumb, removeFiles, saveUpload } from './vault.js';
 
 export { parseRange } from './attachments.js';
 
 const FILE_NAME_MAX = 200;
 const FALLBACK_NAME = 'untitled';
-/** 본문 상한(UTF-8 바이트). multipart 글 필드 하나의 상한도 이것이다. */
+/** 요청으로 받는 본문의 상한(UTF-8 바이트). multipart 글 필드 하나의 상한도 이것이다. 저장하는 본문은 2만 자까지다(stars.js checkBody). */
 export const BODY_MAX_BYTES = 1024 * 1024;
 // JSON 만들기 요청의 본문 상한. 본문 한도를 조금 넘는 글이 413 이 아니라 라우트의 검사(400 invalid_body)를 받도록
 // 본문 한도보다 넉넉히 잡는다. 이보다 큰 JSON 은 읽기 전에 413 too_large.
@@ -67,7 +67,7 @@ function parseStarFields(db, src) {
     if (typeof src.body !== 'string' || Buffer.byteLength(src.body, 'utf8') > BODY_MAX_BYTES) {
       throw new ApiError(400, 'invalid_body');
     }
-    out.body = src.body.trim() === '' ? null : src.body;
+    out.body = checkBody(src.body);
   }
   if (src.memo !== undefined && src.memo !== null) out.memo = checkMemo(src.memo);
   if (src.links !== undefined && src.links !== null) {

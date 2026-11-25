@@ -201,9 +201,10 @@ export function openPanel(id, starId) {
     clearGuestStar(); // 목록에서는 손님 별을 보이지 않는다
   }
 
-  renderPanel();
+  // 그리기 전에 먼저 보이게 한다: 숨은 채로 그리면 상세의 메모 칸이 글 높이를 재지 못해 3줄로만 열린다(detail.js growMemo)
   const el = panelEl();
   el.hidden = false;
+  renderPanel();
   $('near').hidden = true;
   store.emit('panelOpened', planetId); // 챗봇 창이 자리를 나눌지 정한다(chatPanel.js)
 

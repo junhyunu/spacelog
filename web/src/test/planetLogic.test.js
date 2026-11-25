@@ -179,6 +179,15 @@ describe('detailKey', () => {
   test('a memo change alone does not change the key', () => {
     expect(detailKey({ ...star, memo: '고친 메모' }, planets)).toBe(detailKey(star, planets));
   });
+  // 메모 칸이 본문을 고친다: 쓰는 중에 저장돼도 상세를 다시 그리지 않는다(쓰던 글 · 한글 조합을 지킨다)
+  test('a body text change alone does not change the key', () => {
+    expect(detailKey({ ...star, body: '고친 글' }, planets)).toBe(detailKey({ ...star, body: '처음 글' }, planets));
+  });
+  test('a body appearing or disappearing does (the 종류 label changes)', () => {
+    expect(detailKey({ ...star, body: '글' }, planets)).not.toBe(detailKey({ ...star, body: null }, planets));
+    expect(detailKey({ ...star, body: '  ' }, planets)).toBe(detailKey({ ...star, body: null }, planets));
+    expect(detailKey({ ...star, body: '' }, planets)).toBe(detailKey(star, planets));
+  });
   test('a title change does', () => {
     expect(detailKey({ ...star, title: '새 제목' }, planets)).not.toBe(detailKey(star, planets));
   });

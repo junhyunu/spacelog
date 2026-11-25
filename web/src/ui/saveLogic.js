@@ -1,6 +1,7 @@
 // 기록하기 창(W-05 대체, 스펙 6-9) · 끌어다 놓기 · 붙여넣기의 순수 함수(DOM 없음).
 // 글 + 첨부 파일 + 링크를 저장하면 별 하나가 된다. 한도는 서버와 같다:
-// 첨부(파일 + 링크) 50개, 파일 하나 500MB, 제목 200자, 행성 이름 20자.
+// 첨부(파일 + 링크) 50개, 파일 하나 500MB, 제목 200자, 행성 이름 20자, 메모(본문) 2만 자.
+import { MEMO_MAX } from './detailLogic.js';
 
 export const FILE_MAX = 500 * 1024 * 1024;
 export const ATTACH_MAX = 50;
@@ -122,9 +123,11 @@ export function planetNameLength(name) {
   return [...cleanPlanetName(name)].length;
 }
 
-/** "별 띄우기"를 누를 수 있는지: 글이나 첨부(count개, 50개까지)가 있고 행성이 정해졌을 때. */
+/** "별 띄우기"를 누를 수 있는지: 메모나 첨부(count개, 50개까지)가 있고 행성이 정해졌을 때. 메모는 2만 자(코드 포인트)까지. */
 export function canSubmit({ text, count = 0, planetId, newPlanetName } = {}) {
   if (planetId === null || planetId === undefined || planetId === '') return false;
+  const memo = str(text);
+  if (memo.length > MEMO_MAX && [...memo].length > MEMO_MAX) return false;
   if (planetId === 'new') {
     const n = planetNameLength(newPlanetName);
     if (n < 1 || n > PLANET_NAME_MAX) return false;

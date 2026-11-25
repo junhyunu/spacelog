@@ -468,12 +468,15 @@ test('a bad text field fails fast: answered before any file part is read, no fil
   expect(vaultFiles()).toEqual([]);
 });
 
-test('body is limited to 1 MB of UTF-8 text', async () => {
-  const exact = 'a'.repeat(1024 * 1024);
+test('body is limited to 20000 characters (and 1 MB on the wire)', async () => {
+  const exact = '가'.repeat(20000);
   const ok = await sendOk({ body: exact }, [file('a.txt', 'a')]);
   expect(ok.star.body).toHaveLength(exact.length);
+  const tooMany = await send({ body: `${exact}나` }, [file('c.txt', 'c')]);
+  expect(tooMany.statusCode).toBe(400);
+  expect(tooMany.json()).toEqual({ error: 'invalid_body' });
 
-  const over = await send({ body: `${exact}b` }, [file('b.txt', 'b')]);
+  const over = await send({ body: 'a'.repeat(1024 * 1024 + 1) }, [file('b.txt', 'b')]);
   expect(over.statusCode).toBe(400);
   expect(over.json()).toEqual({ error: 'invalid_body' });
   const overNoFiles = await send({ body: '가'.repeat(400000) });
@@ -675,7 +678,10 @@ test('search_text: patching title or memo keeps the attachment names, URLs and l
   expect(res.json().attachments).toEqual(star.attachments);
   const row = app.db.prepare('SELECT search_text FROM stars WHERE id = ?').get(star.id);
   expect(row.search_text).toBe('새 제목\n본문\n새 메모\n파일.txt\n제목 https://example.com/s\nhttps://example.com/s');
-  // 본문은 고치지 않는다.
+  // 본문을 고쳐도 첨부의 이름 · 주소는 검색어에 남는다.
   const body = await app.inject({ method: 'PATCH', url: `/api/stars/${star.id}`, headers: HOST, payload: { body: '바꾸기' } });
-  expect(body.json().body).toBe('본문');
+  expect(body.json().body).toBe('바꾸기');
+  expect(body.json().attachments).toEqual(star.attachments);
+  const after = app.db.prepare('SELECT search_text FROM stars WHERE id = ?').get(star.id);
+  expect(after.search_text).toBe('새 제목\n바꾸기\n새 메모\n파일.txt\n제목 https://example.com/s\nhttps://example.com/s');
 });

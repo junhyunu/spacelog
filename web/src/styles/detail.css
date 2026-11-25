@@ -11,13 +11,14 @@
 #panel .pv.file>div{min-width:0}
 #panel .pv.file .fi{color:var(--ink)}
 
-/* 글: 길면 상자 안에서 스크롤해 아래 메모 · 옮기기에 바로 닿게 한다 */
-#panel .detail{max-height:42vh;overflow:auto;flex:none}
-
 #panel .meta dd{overflow-wrap:anywhere}
 #panel .acts .btn:disabled{cursor:progress}
 
-#panel #memo{flex:none;min-height:44px;max-height:40vh}
+/* 메모(별의 본문): 최소 3줄, 쓰는 만큼 늘어나 화면의 40%까지. 넘으면 칸 안에서 스크롤한다(별 띄우기 창의 메모 칸과 같다) */
+#panel #memo{flex:none;min-height:calc(3 * 1.55em + 21px);max-height:40vh;overflow-y:auto;resize:none}
+#panel .memofoot{flex:none;display:flex;justify-content:space-between;align-items:baseline;gap:var(--gap-2);margin-top:-8px}
+#panel .memofoot .st{margin-top:0}
+#panel .memofoot .cnt{margin-left:auto;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 #panel .st.bad{color:var(--danger-text);font-weight:700}
 
 #panel .mv{flex:none}

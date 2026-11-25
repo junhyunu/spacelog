@@ -100,7 +100,7 @@ test('a fresh data folder gets the new schema at the current version and no back
   const dataDir = tempDir();
   const db = openDb(dataDir);
   expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
-  expect(SCHEMA_VERSION).toBe(2);
+  expect(SCHEMA_VERSION).toBe(3);
   const cols = db.prepare("SELECT name FROM pragma_table_info('attachments')").all().map((r) => r.name);
   expect(cols).toEqual([
     'id', 'star_id', 'kind', 'position', 'file_name', 'file_ext', 'file_size', 'file_hash',
@@ -296,7 +296,7 @@ test('v1 → v2: creates rag_status, conversations and messages in one go, backs
   const dataDir = tempDir();
   makeV1(dataDir);
   const db = openDb(dataDir);
-  expect(db.pragma('user_version', { simple: true })).toBe(2);
+  expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
   expect(tablesOf(db)).toEqual(V2_TABLES);
   expect(db.prepare("SELECT name FROM pragma_table_info('rag_status')").all().map((r) => r.name)).toEqual([
     'star_id', 'content_hash', 'status', 'error', 'notes', 'attempts', 'next_try_at', 'indexed_at',
@@ -328,7 +328,7 @@ test('v1 → v2: re-opening is a no-op and an existing bak-2 is never overwritte
   expect(after[1]).toMatch(/^spacelog\.db\.bak-2-/);
 
   const db = openDb(dataDir);
-  expect(db.pragma('user_version', { simple: true })).toBe(2);
+  expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
   expect(tablesOf(db)).toEqual(V2_TABLES);
   db.close();
   expect(fs.readdirSync(dataDir).filter((n) => n.includes('bak')).sort()).toEqual(after);
@@ -353,7 +353,7 @@ test('v1 → v2 that fails and is retried reuses the bak-2 of the same version i
   fix.exec('DROP TABLE messages');
   fix.close();
   const db = openDb(dataDir);
-  expect(db.pragma('user_version', { simple: true })).toBe(2);
+  expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
   db.close();
   expect(baks()).toEqual(['spacelog.db.bak-2']);
   const bak = new Database(path.join(dataDir, 'spacelog.db.bak-2'), { readonly: true });
@@ -368,4 +368,107 @@ test('v0 straight to v2 makes one backup (bak-1) and has the chatbot tables', as
   expect(tablesOf(db)).toEqual(V2_TABLES);
   db.close();
   expect(fs.readdirSync(dataDir).filter((n) => n.includes('bak'))).toEqual(['spacelog.db.bak-1']);
+});
+
+// --- 판 2 → 3 (메모를 본문으로 합친다) ---
+const MEMO_IDS = { A: 'a0000000-0000-4000-8000-000000000001', B: 'a0000000-0000-4000-8000-000000000002', C: 'a0000000-0000-4000-8000-000000000003', D: 'a0000000-0000-4000-8000-000000000004' };
+
+// 판 2 DB 를 만든다: 지금 스키마로 만든 뒤 별 넷을 넣고 user_version 을 2 로 되돌린다.
+function makeV2(dataDir) {
+  const db = openDb(dataDir);
+  db.prepare("INSERT INTO planets VALUES (?, '행성', '', 1, 'town', 0, 0, '2026-11-01T00:00:00.000Z')").run(IDS.planet);
+  const ins = db.prepare(`INSERT INTO stars (id, type, title, body, memo, planet_id, created_at, search_text)
+    VALUES (?, 'text', '글', ?, ?, ?, '2026-11-02T00:00:00.000Z', '')`);
+  ins.run(MEMO_IDS.A, '본문', '메모', IDS.planet);
+  ins.run(MEMO_IDS.B, null, '메모만', IDS.planet);
+  ins.run(MEMO_IDS.C, '본문만', '', IDS.planet);
+  ins.run(MEMO_IDS.D, '  ', '메모', IDS.planet);
+  db.pragma('user_version = 2');
+  db.close();
+}
+
+const memoRow = (db, key) => db.prepare('SELECT body, memo, search_text FROM stars WHERE id = ?').get(MEMO_IDS[key]);
+
+test('v2 → v3: memo is appended under body, then cleared; search_text keeps both; backs up to bak-3 first', () => {
+  const dataDir = tempDir();
+  makeV2(dataDir);
+  const db = openDb(dataDir);
+  expect(db.pragma('user_version', { simple: true })).toBe(3);
+  expect(memoRow(db, 'A')).toMatchObject({ body: '본문\n\n메모', memo: '' });
+  expect(memoRow(db, 'B')).toMatchObject({ body: '메모만', memo: '' });
+  expect(memoRow(db, 'C')).toMatchObject({ body: '본문만', memo: '' });
+  expect(memoRow(db, 'D')).toMatchObject({ body: '메모', memo: '' });
+  expect(memoRow(db, 'A').search_text).toBe('글\n본문\n\n메모');
+  expect(memoRow(db, 'B').search_text).toBe('글\n메모만');
+  db.close();
+  expect(fs.readdirSync(dataDir).filter((n) => n.includes('bak'))).toEqual(['spacelog.db.bak-3']);
+  const bak = new Database(path.join(dataDir, 'spacelog.db.bak-3'), { readonly: true });
+  expect(bak.pragma('user_version', { simple: true })).toBe(2);
+  expect(bak.prepare('SELECT body, memo FROM stars WHERE id = ?').get(MEMO_IDS.A)).toEqual({ body: '본문', memo: '메모' });
+  bak.close();
+});
+
+test('v2 → v3: re-opening does not append the memo twice', () => {
+  const dataDir = tempDir();
+  makeV2(dataDir);
+  openDb(dataDir).close();
+  const db = openDb(dataDir);
+  expect(memoRow(db, 'A')).toMatchObject({ body: '본문\n\n메모', memo: '' });
+  db.close();
+  expect(fs.readdirSync(dataDir).filter((n) => n.includes('bak'))).toEqual(['spacelog.db.bak-3']);
+});
+
+test('v2 → v3 that fails part-way leaves memo and body untouched and retries next time', () => {
+  const dataDir = tempDir();
+  makeV2(dataDir);
+  const raw = new Database(path.join(dataDir, 'spacelog.db'));
+  raw.exec("CREATE TRIGGER boom BEFORE UPDATE OF search_text ON stars BEGIN SELECT RAISE(ABORT, 'boom'); END;");
+  raw.close();
+  expect(() => openDb(dataDir)).toThrow(/boom/);
+  const check = new Database(path.join(dataDir, 'spacelog.db'));
+  expect(check.pragma('user_version', { simple: true })).toBe(2);
+  expect(check.prepare('SELECT body, memo FROM stars WHERE id = ?').get(MEMO_IDS.A)).toEqual({ body: '본문', memo: '메모' });
+  check.exec('DROP TRIGGER boom');
+  check.close();
+  const db = openDb(dataDir);
+  expect(memoRow(db, 'A')).toMatchObject({ body: '본문\n\n메모', memo: '' });
+  db.close();
+});
+
+test('v0 straight to v3 folds an old memo into the body too', async () => {
+  const dataDir = tempDir();
+  const old = await makeOldData(dataDir);
+  old.prepare("UPDATE stars SET memo = '옛 메모' WHERE id = ?").run(IDS.text);
+  old.close();
+  const db = openDb(dataDir);
+  expect(db.prepare('SELECT body, memo FROM stars WHERE id = ?').get(IDS.text)).toEqual({ body: '본문\n\n옛 메모', memo: '' });
+  db.close();
+});
+
+test('v2 → v3: a whitespace-only memo is dropped, not appended', () => {
+  const dataDir = tempDir();
+  makeV2(dataDir);
+  const raw = new Database(path.join(dataDir, 'spacelog.db'));
+  raw.prepare("UPDATE stars SET memo = ' ' || char(10) || char(9) WHERE id IN (?, ?)").run(MEMO_IDS.A, MEMO_IDS.B);
+  raw.close();
+  const db = openDb(dataDir);
+  expect(memoRow(db, 'A')).toMatchObject({ body: '본문', memo: '' });
+  expect(memoRow(db, 'B')).toMatchObject({ body: null, memo: '' });
+  expect(memoRow(db, 'B').search_text).toBe('글');
+  db.close();
+});
+
+test('a memo written after the migration (a tab still running the old page) is folded in on the next start', () => {
+  const dataDir = tempDir();
+  makeV2(dataDir);
+  openDb(dataDir).close(); // 판 3
+  const raw = new Database(path.join(dataDir, 'spacelog.db'));
+  raw.prepare("UPDATE stars SET memo = '늦은 메모' WHERE id = ?").run(MEMO_IDS.C);
+  raw.close();
+  const db = openDb(dataDir);
+  expect(memoRow(db, 'C')).toMatchObject({ body: '본문만\n\n늦은 메모', memo: '' });
+  expect(memoRow(db, 'C').search_text).toBe('글\n본문만\n\n늦은 메모');
+  expect(memoRow(db, 'A')).toMatchObject({ body: '본문\n\n메모', memo: '' });
+  db.close();
+  expect(fs.readdirSync(dataDir).filter((n) => n.includes('bak'))).toEqual(['spacelog.db.bak-3']);
 });

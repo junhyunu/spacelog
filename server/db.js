@@ -6,7 +6,8 @@ import { buildSearchText } from './stars.js';
 // PRAGMA user_version 으로 스키마 판을 적는다. 0 = 15600bb 까지(별 하나가 파일 · 링크를 직접 가졌다).
 // 1 = 첨부 표(attachments). 별 하나에 첨부 여러 개(spec 6-9).
 // 2 = 챗봇 표(rag_status · conversations · messages). 2차의 표를 한 번에 만든다.
-export const SCHEMA_VERSION = 2;
+// 3 = 메모를 본문으로 합침(별의 글은 body 하나. memo 열은 남기지만 쓰지 않는다).
+export const SCHEMA_VERSION = 3;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS planets (
@@ -118,6 +119,28 @@ function migrateTo1(db) {
   rebuildSearchText(db, db.prepare('SELECT id FROM stars').all().map((r) => r.id));
 }
 
+// 판 2 → 3, 그리고 켤 때마다: 메모가 있는 별은 메모를 본문 아래에 (빈 줄 하나 두고) 이어 붙이고 메모를 비운다.
+// 본문이 없으면 메모가 본문이 된다. 공백뿐인 메모는 붙이지 않고 비우기만 한다.
+// 메모가 빈 별은 건드리지 않으므로 다시 돌려도 두 번 붙지 않는다. 챗봇 색인은 켤 때의 비교(content_hash)가 다시 넣는다.
+// 켤 때마다 도는 이유: 판 3 뒤에도 옛 화면이 열려 있던 탭이 memo 로 저장할 수 있다(PATCH 가 memo 를 계속 받는다).
+// 새 화면은 memo 를 보여 주지 않으므로, 그 글이 숨지 않게 다음에 켤 때 본문으로 옮긴다. → 고친 별 id
+const BLANK = 'char(32, 9, 10, 13)';
+function foldMemos(db) {
+  const ids = db.prepare("SELECT id FROM stars WHERE memo <> ''").all().map((r) => r.id);
+  if (ids.length === 0) return ids;
+  db.exec(`
+    UPDATE stars
+    SET body = CASE
+          WHEN trim(memo, ${BLANK}) = '' THEN body
+          WHEN body IS NULL OR trim(body, ${BLANK}) = '' THEN memo
+          ELSE body || char(10) || char(10) || memo END,
+        memo = ''
+    WHERE memo <> '';
+  `);
+  rebuildSearchText(db, ids);
+  return ids;
+}
+
 // 옮기기 전의 DB 를 spacelog.db.bak-<판> 으로 남긴다. VACUUM INTO 는 WAL 에만 있는 쓰기까지 담은 한 파일을 만든다.
 // 임시 이름으로 만든 뒤 바꿔 달아, 복사가 중간에 끊겨도 반쪽짜리 백업이 남지 않게 한다.
 // 옮기기는 한 트랜잭션이라 실패하면 DB 가 그대로 남으므로, 다시 켤 때는 같은 판의 백업을 그대로 쓴다.
@@ -172,6 +195,7 @@ export function openDb(dataDir) {
         db.exec(SCHEMA);
         if (!fresh && version < 1) migrateTo1(db);
         // 1 → 2 는 새 표만 더한다(위 SCHEMA 의 CREATE TABLE IF NOT EXISTS).
+        if (!fresh && version < 3) foldMemos(db);
         db.pragma(`user_version = ${SCHEMA_VERSION}`);
       }).immediate();
     }
@@ -183,6 +207,7 @@ export function openDb(dataDir) {
         db.exec('UPDATE stars SET file_hash = NULL WHERE file_hash IS NOT NULL');
         rebuildSearchText(db, adopted);
       }
+      foldMemos(db); // 판 3 뒤에 옛 화면 · 옛 서버가 쓴 메모(없으면 아무 일도 없다)
     }).immediate();
     return db;
   } catch (err) {

@@ -1,5 +1,5 @@
-// W-03 별 상세(스펙 6-9): 본문 · 첨부 목록(이미지 격자 · 파일 줄 · 링크 줄, 첨부마다 원본 열기 / 폴더에서 보기) ·
-// 정보 · 메모 자동 저장 · 행성 옮기기 · 지우기. 이미지를 누르면 패널 안에서 크게 본다(Esc · ✕로 닫는다).
+// W-03 별 상세(스펙 6-9): 첨부 목록(이미지 격자 · 파일 줄 · 링크 줄, 첨부마다 원본 열기 / 폴더에서 보기) ·
+// 정보 · 메모(별의 본문 body를 고친다, 자동 저장) · 행성 옮기기 · 지우기. 이미지를 누르면 패널 안에서 크게 본다(Esc · ✕로 닫는다).
 // 시안 715~759행(renderDetail · 메모 · moveRec · removeRec)을 옮겼다. 발(싣기 버튼)은 없다(탐사선 제외).
 // panel.js가 부르는 모양:
 //   renderDetail(container, star, planet, { onBack, onClose })  container(#panel)의 내용을 통째로 그린다
@@ -28,6 +28,7 @@ import {
   flushDirty,
   focusKeyOf,
   groupAttachments,
+  memoCount,
   openFailToast,
   safeHttpUrl,
 } from './detailLogic.js';
@@ -45,21 +46,27 @@ const live = (ctx) => current === ctx && ctx.memoEl.isConnected;
 
 /* ---------- 메모 저장 ---------- */
 
-// 저장된 메모를 화면이 쥔 별에도 적어 둔다(목록에 갔다가 다시 열어도 새 메모가 보이게)
+// 저장된 메모(별의 본문)를 화면이 쥔 별에도 적어 둔다(목록에 갔다가 다시 열어도 새 메모가 보이게).
+// 서버처럼 비운 글은 null로 둔다. 글이 생기거나 없어지면 "종류"가 달라지므로 위 조각을 다시 그린다.
 function remember(id, memo) {
   ledger.record(id, memo);
+  const text = memo.trim() === '' ? null : memo;
   const inStore = store.state.stars.find((s) => same(s.id, id));
-  if (inStore) inStore.memo = memo;
-  if (current && current.id === id) current.star.memo = memo;
+  if (inStore) inStore.body = text;
+  if (current && current.id === id) {
+    current.star.body = text;
+    if (live(current)) renderPart(current, 'top');
+  }
 }
 
+// 메모 칸의 글은 별의 본문(body)으로 저장한다
 async function patchMemo(id, memo, keepalive) {
   if (!keepalive) {
-    await api.patchStar(id, { memo });
+    await api.patchStar(id, { body: memo });
     return;
   }
   // 화면이 사라지는 중: 응답을 기다릴 수 없으니 keepalive로 보낸다(sendBeacon은 PATCH를 못 보낸다)
-  const body = JSON.stringify({ memo });
+  const body = JSON.stringify({ body: memo });
   const res = await fetch(`/api/stars/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -250,9 +257,6 @@ function topHtml(ctx, star) {
   const na = (text, unknown) => (unknown ? `<span class="na">${esc(text)}</span>` : esc(text));
   const { images, files, links } = groupAttachments(star);
   const viewing = images.find((a) => same(a.id, ctx.view)) ?? null;
-  const hasBody = typeof star.body === 'string' && star.body.trim() !== '';
-  // 본문: 그대로, 점선 상자. 길면 상자 안에서 스크롤한다(키보드로도 내릴 수 있게 tabindex)
-  const body = hasBody ? `<div class="detail" tabindex="0" role="group" aria-label="본문">${esc(star.body)}</div>` : '';
   const count = images.length + files.length + links.length;
   const atts = count
     ? `<div class="atts"><div class="lbl">첨부 ${count.toLocaleString('ko-KR')}개</div>` +
@@ -261,8 +265,8 @@ function topHtml(ctx, star) {
       (files.length || links.length ? `<ul class="arows">${files.map(fileRow).join('')}${links.map(linkRow).join('')}</ul>` : '') +
       '</div>'
     : '';
+  // 본문은 여기 그리지 않는다: 아래 "메모" 칸이 본문을 보여 주고 고친다
   return (
-    body +
     atts +
     `<dl class="meta"><dt>종류</dt><dd>${na(kind, kind === '미확인')}</dd>` +
     `<dt>넣은 날짜</dt><dd class="mono">${na(date, date.includes('미확인'))}</dd></dl>`
@@ -479,7 +483,7 @@ function renderPart(ctx, part) {
   const html = partHtml(ctx, part);
   if (ctx.html[part] === html) return;
   ctx.html[part] = html;
-  // data-a가 없는 것(글 미리보기 상자)도 초점을 돌려받는다
+  // data-a가 없는 것도(id · tabindex로) 초점을 돌려받는다
   const focusKey = el.contains(document.activeElement) ? focusKeyOf(document.activeElement) : null;
   el.innerHTML = html;
   bindPart(ctx, part, el);
@@ -489,6 +493,24 @@ function renderPart(ctx, part) {
 function showStatus(ctx, state) {
   ctx.statusEl.textContent = MEMO_STATUS[state] ?? MEMO_STATUS.idle;
   ctx.statusEl.classList.toggle('bad', state === 'error' || state === 'toolong');
+}
+
+// 메모 칸은 쓰는 만큼 늘어난다(최소 3줄 · 최대 높이는 CSS, 그 뒤로는 칸 안에서 스크롤). 패널의 스크롤 자리는 지킨다
+function growMemo(ctx) {
+  const el = ctx.memoEl;
+  const scroller = el.closest('.body');
+  const top = scroller ? scroller.scrollTop : 0;
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight + 6}px`;
+  if (scroller) scroller.scrollTop = top;
+}
+
+// 1만 8천 자부터 "18,200 / 20,000". 한도를 넘으면 빨갛게
+function showCount(ctx) {
+  const count = memoCount(ctx.memoEl.value);
+  ctx.countEl.hidden = !count;
+  ctx.countEl.textContent = count ? count.text : '';
+  ctx.countEl.classList.toggle('bad', Boolean(count?.over));
 }
 
 /**
@@ -514,7 +536,7 @@ export function renderDetail(container, star, planet, { onBack, onClose } = {}) 
   }
   if (current) leave(current).catch(() => {});
 
-  const saver = saverFor(id, star.memo ?? '');
+  const saver = saverFor(id, star.body ?? '');
   const ctx = {
     id,
     star,
@@ -530,26 +552,34 @@ export function renderDetail(container, star, planet, { onBack, onClose } = {}) 
     viewNote: '',
     memoEl: null,
     statusEl: null,
+    countEl: null,
   };
   container.innerHTML =
     '<header data-part="head"></header>' +
     '<div class="body">' +
     '<div class="dsec" data-part="top"></div>' +
     '<label class="lbl" for="memo">메모</label>' +
-    '<textarea id="memo" rows="3" placeholder="이 별에 덧붙일 말" autocomplete="off"></textarea>' +
-    '<small class="st" id="memoSt"></small>' +
+    '<textarea id="memo" rows="3" placeholder="이 별에 남길 말" autocomplete="off" aria-describedby="memoSt memoCnt"></textarea>' +
+    '<div class="memofoot"><small class="st" id="memoSt"></small><small class="st cnt" id="memoCnt" aria-live="polite" hidden></small></div>' +
     '<div class="dsec" data-part="bottom"></div>' +
     '</div>';
   ctx.memoEl = container.querySelector('#memo');
   ctx.statusEl = container.querySelector('#memoSt');
+  ctx.countEl = container.querySelector('#memoCnt');
   ctx.memoEl.value = saver.value(); // 저장하지 못하고 떠났던 별이면 쓰던 글이 그대로 있다
   current = ctx;
   for (const part of ['head', 'top', 'bottom']) renderPart(ctx, part);
+  growMemo(ctx);
+  showCount(ctx);
 
   showStatus(ctx, saver.state());
   saver.setListener((state) => showStatus(ctx, state));
   // 조합 중인 한글도 input으로 온다. 저장은 화면을 다시 그리지 않으므로 조합을 끊지 않는다
-  const typed = () => saver.input(ctx.memoEl.value);
+  const typed = () => {
+    growMemo(ctx);
+    showCount(ctx);
+    saver.input(ctx.memoEl.value);
+  };
   ctx.memoEl.addEventListener('input', typed);
   ctx.memoEl.addEventListener('compositionend', typed);
   ctx.memoEl.addEventListener('blur', () => {

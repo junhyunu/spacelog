@@ -207,6 +207,11 @@ describe('canSubmit', () => {
     const twenty = '가나다라마바사아자차카타파하거너더러머버'.normalize('NFD');
     expect(canSubmit({ text: 'x', planetId: 'new', newPlanetName: twenty })).toBe(true);
   });
+  test('memo text over 20,000 characters is false, even with attachments (code points)', () => {
+    expect(canSubmit({ text: '😀'.repeat(20000), planetId: '1' })).toBe(true);
+    expect(canSubmit({ text: '가'.repeat(20001), planetId: '1' })).toBe(false);
+    expect(canSubmit({ text: '가'.repeat(20001), count: 2, planetId: '1' })).toBe(false);
+  });
   test('more than 50 attachments is false', () => {
     expect(canSubmit({ count: ATTACH_MAX, planetId: '1' })).toBe(true);
     expect(canSubmit({ count: ATTACH_MAX + 1, planetId: '1' })).toBe(false);

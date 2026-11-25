@@ -125,10 +125,27 @@ function longerThan(text, max) {
   return false;
 }
 
+/** 이 글자 수부터 메모 칸 아래에 "18,200 / 20,000"을 보인다. */
+export const MEMO_COUNT_FROM = 18000;
+
+/**
+ * 메모 칸 아래의 글자 수(코드 포인트). 18,000자보다 짧으면 null(보이지 않는다).
+ * → { text: '18,200 / 20,000', over: 한도를 넘었는지 }
+ */
+export function memoCount(text) {
+  const s = typeof text === 'string' ? text : '';
+  if (s.length < MEMO_COUNT_FROM) return null; // 코드 포인트 수는 length를 넘지 않는다
+  let n = 0;
+  for (const _ of s) n += 1;
+  if (n < MEMO_COUNT_FROM) return null;
+  const fmt = (v) => v.toLocaleString('ko-KR');
+  return { text: `${fmt(n)} / ${fmt(MEMO_MAX)}`, over: n > MEMO_MAX };
+}
+
 /** keepalive 요청 본문의 한도(바이트). 브라우저는 64KiB(65,536)를 넘으면 거절한다. 조금 남겨 둔다. */
 export const KEEPALIVE_BYTES = 64000;
 
-/** 본문이 keepalive로 보낼 수 있는 크기인지. 한글 20,000자 메모({"memo":"…"})는 60,011바이트다. */
+/** 본문이 keepalive로 보낼 수 있는 크기인지. 한글 20,000자 메모({"body":"…"})는 60,011바이트다. */
 export function fitsKeepalive(bytes) {
   return bytes <= KEEPALIVE_BYTES;
 }
@@ -147,7 +164,7 @@ export function focusKeyOf(el) {
 }
 
 /**
- * 별마다 "마지막으로 저장한 메모"를 적어 두는 장부.
+ * 별마다 "마지막으로 저장한 메모"를 적어 두는 장부. 메모 칸의 글은 별의 본문(body)이다.
  * 저장보다 먼저 떠난 다시 받기가 저장 뒤에 도착하면 옛 메모를 들고 온다. 그때 이쪽 것을 쓴다.
  * 겹친 다시 받기는 마지막 것만 반영되므로(store.reload), 저장 뒤 첫 번째 동기화만 옛것일 수 있다.
  * 두 번째부터는 저장 뒤에 떠난 것이라 서버 값을 믿는다.
@@ -170,14 +187,14 @@ export function createMemoLedger() {
       const entry = saved.get(String(id));
       return entry ? entry.memo : serverMemo;
     },
-    /** 별들의 memo를 그 자리에서 고친다. 고친 것이 있으면 true */
+    /** 별들의 body를 그 자리에서 고친다(비운 글과 null은 같은 것으로 본다). 고친 것이 있으면 true */
     apply(stars) {
       let changed = false;
       if (saved.size === 0) return changed;
       for (const star of stars ?? []) {
         const entry = saved.get(String(star?.id));
-        if (entry && star.memo !== entry.memo) {
-          star.memo = entry.memo;
+        if (entry && (star.body ?? '') !== entry.memo) {
+          star.body = entry.memo;
           changed = true;
         }
       }
@@ -242,7 +259,8 @@ export function createMemoSaver({ save, delay = MEMO_DELAY, onState, onGone, ini
   const tooLong = () => longerThan(value, maxLength);
   const clean = () => value === saved && doubt === 0;
   const isGone = (err) => err?.status === 404;
-  const failState = (err) => (err?.code === 'invalid_memo' ? 'toolong' : 'error');
+  // 서버가 너무 길다고 한 것: 메모 칸은 본문을 저장하므로 invalid_body, 옛 메모는 invalid_memo
+  const failState = (err) => (err?.code === 'invalid_memo' || err?.code === 'invalid_body' ? 'toolong' : 'error');
 
   // n번 요청이 성공했다
   function landed(n, sending) {

@@ -350,9 +350,63 @@ test('patch title updates title and search_text; blank or non-string title → 4
   await call('PATCH', `/api/stars/${star.id}`, { title: '새 제목' });
 
   // 바꿀 것이 없으면 그대로 돌려준다. 다른 필드는 바뀌지 않는다.
-  const noop = await call('PATCH', `/api/stars/${star.id}`, { body: '몰래 바꾸기', type: 'link', id: 'x', created_at: 'y' });
+  const noop = await call('PATCH', `/api/stars/${star.id}`, { type: 'link', id: 'x', created_at: 'y' });
   expect(noop.statusCode).toBe(200);
   expect(noop.json()).toEqual({ ...star, title: '새 제목' });
+});
+
+// --- 본문(화면의 "메모")을 고친다 ---
+test('PATCH body: saves, rebuilds search_text, marks the star for the chatbot; blank → null; title stays', async () => {
+  const star = await post({ type: 'text', title: '제목', body: '처음', planet_id: planet.id });
+  const marked = [];
+  app.ragSync = { markStars: (ids, reason) => marked.push([ids, reason]) };
+  const res = await call('PATCH', `/api/stars/${star.id}`, { body: '고친 글\n둘째 줄' });
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toMatchObject({ body: '고친 글\n둘째 줄', title: '제목', type: 'text' });
+  expect(dbRow(star.id).body).toBe('고친 글\n둘째 줄');
+  expect(dbRow(star.id).search_text).toBe('제목\n고친 글\n둘째 줄');
+  expect(marked).toEqual([[[star.id], 'patch']]);
+
+  // 첨부 없는 별의 글을 다 지워도 받는다(별은 빈 채로 남는다).
+  for (const blank of ['', '  \n\t']) {
+    const cleared = await call('PATCH', `/api/stars/${star.id}`, { body: blank });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json()).toMatchObject({ body: null, title: '제목' });
+  }
+  expect(dbRow(star.id).body).toBeNull();
+  expect(dbRow(star.id).search_text).toBe('제목');
+
+  // 옛 클라이언트의 memo 도 계속 받는다. 본문은 그대로다.
+  await call('PATCH', `/api/stars/${star.id}`, { body: '다시' });
+  const memo = await call('PATCH', `/api/stars/${star.id}`, { memo: '옛 메모' });
+  expect(memo.json()).toMatchObject({ body: '다시', memo: '옛 메모' });
+});
+
+test('PATCH body: 20000 code points ok; 20001 or a non-string → 400 invalid_body and nothing changes', async () => {
+  const star = await post({ type: 'text', title: '제목', body: '처음', planet_id: planet.id });
+  const full = '😀'.repeat(MEMO_MAX);
+  const ok = await call('PATCH', `/api/stars/${star.id}`, { body: full });
+  expect(ok.statusCode).toBe(200);
+  expect(ok.json().body).toBe(full);
+  for (const body of ['가'.repeat(MEMO_MAX + 1), `${full}a`, 5, null, ['글']]) {
+    const res = await call('PATCH', `/api/stars/${star.id}`, { title: '같이 온 제목', body });
+    expect(res.statusCode, String(body).slice(0, 5)).toBe(400);
+    expect(res.json()).toEqual({ error: 'invalid_body' });
+  }
+  expect(dbRow(star.id).body).toBe(full);
+  expect(dbRow(star.id).title).toBe('제목');
+});
+
+test('POST body over 20000 characters → 400 invalid_body (code points)', async () => {
+  const full = '😀'.repeat(MEMO_MAX);
+  const made = await post({ type: 'text', title: '긴 글', body: full, planet_id: planet.id });
+  expect(made.body).toBe(full);
+  for (const body of ['가'.repeat(MEMO_MAX + 1), `${full}a`]) {
+    const res = await call('POST', '/api/stars', { planet_id: planet.id, body });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: 'invalid_body' });
+  }
+  expect(app.db.prepare('SELECT COUNT(*) AS c FROM stars').get().c).toBe(1);
 });
 
 test('patch planet_id moves star', async () => {

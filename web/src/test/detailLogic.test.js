@@ -14,6 +14,7 @@ import {
   flushDirty,
   focusKeyOf,
   kindLabel,
+  memoCount,
   openFailToast,
   groupAttachments,
   safeHttpUrl,
@@ -225,15 +226,37 @@ describe('createMemoLedger', () => {
     ledger.record('s1', '새 메모');
     ledger.synced();
     const stars = [
-      { id: 's1', memo: '옛 메모' },
-      { id: 's2', memo: '그대로' },
+      { id: 's1', body: '옛 메모' },
+      { id: 's2', body: '그대로' },
     ];
     expect(ledger.apply(stars)).toBe(true);
     expect(stars).toEqual([
-      { id: 's1', memo: '새 메모' },
-      { id: 's2', memo: '그대로' },
+      { id: 's1', body: '새 메모' },
+      { id: 's2', body: '그대로' },
     ]);
     expect(ledger.apply(stars)).toBe(false);
+  });
+  test('apply: a cleared text and a null body are the same (nothing to patch)', () => {
+    const ledger = createMemoLedger();
+    ledger.record('s1', '');
+    const stars = [{ id: 's1', body: null }];
+    expect(ledger.apply(stars)).toBe(false);
+    expect(stars[0].body).toBeNull();
+  });
+});
+
+describe('memoCount', () => {
+  test('nothing below 18,000 characters', () => {
+    expect(memoCount('')).toBeNull();
+    expect(memoCount(undefined)).toBeNull();
+    expect(memoCount('가'.repeat(17999))).toBeNull();
+    expect(memoCount('😀'.repeat(17999))).toBeNull(); // UTF-16으로는 35,998단위
+  });
+  test('from 18,000: "n / 20,000", over only past the limit (code points)', () => {
+    expect(memoCount('가'.repeat(18000))).toEqual({ text: '18,000 / 20,000', over: false });
+    expect(memoCount('가'.repeat(18200))).toEqual({ text: '18,200 / 20,000', over: false });
+    expect(memoCount('😀'.repeat(20000))).toEqual({ text: '20,000 / 20,000', over: false });
+    expect(memoCount('😀'.repeat(20001))).toEqual({ text: '20,001 / 20,000', over: true });
   });
 });
 
@@ -711,6 +734,16 @@ describe('createMemoSaver', () => {
     await tick();
     expect(s.state()).toBe('toolong');
     expect(MEMO_STATUS[s.state()]).toBe('메모가 너무 길어요');
+  });
+
+  test('server says invalid_body (the memo field now saves the body) → toolong too', async () => {
+    const { save, calls } = manual();
+    const s = createMemoSaver({ save });
+    s.input('x');
+    await vi.advanceTimersByTimeAsync(600);
+    calls[0].reject({ status: 400, code: 'invalid_body' });
+    await tick();
+    expect(s.state()).toBe('toolong');
   });
 
   test('flushDirty: after the connection returns every unsaved saver is sent again, open or not', async () => {

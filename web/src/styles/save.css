@@ -25,11 +25,15 @@
 #save :is(input,textarea)[readonly],#save select:disabled{background:var(--panel-2);color:var(--mute)}
 #save :focus-visible{outline:var(--line) solid var(--sky);outline-offset:2px}
 
-/* 글 칸: 6줄에서 시작해 쓰는 만큼 늘어난다(saveModal.js가 높이를 맞춘다). 끝까지 늘면 칸 안에서 스크롤 */
-#save #svText{font-weight:500;font-size:15px;line-height:1.6;resize:none;display:block;min-height:calc(6 * 1.6em + 20px);max-height:44vh;overflow-y:auto;flex:none}
+/* 메모 칸(별의 본문): 3줄에서 시작해 쓰는 만큼 늘어난다(saveModal.js가 높이를 맞춘다). 화면의 40%까지 늘면 칸 안에서 스크롤.
+   상세 패널의 메모 칸(detail.css #memo)과 같은 크기 규칙이다 */
+#save #svText{font-weight:500;font-size:15px;line-height:1.6;resize:none;display:block;min-height:calc(3 * 1.6em + 20px);max-height:40vh;overflow-y:auto;flex:none}
+/* 1만 8천 자부터 보이는 글자 수. 2만 자를 넘으면 빨갛게 */
+#save .mcnt{align-self:flex-end;font:500 11.5px var(--f-mono);color:var(--mute);font-variant-numeric:tabular-nums}
+#save .mcnt.bad{color:var(--danger-text);font-weight:700}
 
 /* 도구 줄: 파일 첨부 · 링크 붙이기 */
-#save .tools{display:flex;align-items:center;gap:var(--gap-2);flex-wrap:wrap;margin-top:-4px}
+#save .tools{display:flex;align-items:center;gap:var(--gap-2);flex-wrap:wrap}
 #save .tools .btn{display:inline-flex;align-items:center;gap:6px;min-height:36px;box-shadow:0 3px 0 var(--ink)}
 #save .tools .btn:active{box-shadow:0 1px 0 var(--ink)}
 #save .tools .btn[aria-expanded="true"]{background:var(--ink);color:var(--yellow)}

@@ -1,4 +1,5 @@
-// 기록하기 창 "별 띄우기"(#save, 스펙 6-9). 글 + 첨부 파일 + 링크를 저장하면 별 하나가 된다.
+// 기록하기 창 "별 띄우기"(#save, 스펙 6-9). 메모 + 첨부 파일 + 링크를 저장하면 별 하나가 된다.
+// 메모 칸(#svText)의 글은 별의 본문(body)으로 저장되고, 별 상세의 메모 칸에서 그대로 고친다.
 // 여는 곳: "기록하기"(#hLog · #wLog · 빈 우주 카드 → 'openSave' 이벤트, main.js), 끌어다 놓기 · 붙여넣기(dropzone.js).
 // Esc는 escape.js의 60번 자리(행성 꾸미기 창 다음, 전환 건너뛰기 앞). 열려 있는 동안 비행 키를 받지 않는다.
 import { api } from '../api.js';
@@ -7,6 +8,7 @@ import { playerPosition, setInputBlocked } from '../three/controls.js';
 import { flyStarIn } from '../three/planets.js';
 import { PLANET_COLORS, esc, fileSize, ico } from '../util.js';
 import { ask, closeAsk } from './confirm.js';
+import { memoCount } from './detailLogic.js';
 import { registerEscape } from './escape.js';
 import { flashStars } from './panel.js';
 import { trapTab, wireBackdrop } from './planetForm.js';
@@ -42,7 +44,7 @@ const FLY_DROP = 6; // 캐릭터 아래 이만큼에서 솟는다
 const THUMB_TYPE = /^image\/(png|jpe?g|gif|webp|bmp|avif)$/i;
 const THUMB_MAX = 30 * 1024 * 1024; // 이보다 큰 이미지는 칩 미리보기를 만들지 않는다
 const SLOW_MS = 15000; // 파일 없는 저장이 이보다 오래 걸리면 취소를 다시 열어 준다
-const TITLE_EMPTY = '비워 두면 글의 첫 줄을 써요';
+const TITLE_EMPTY = '비워 두면 메모 첫 줄을 써요';
 const aborted = () => Object.assign(new Error('aborted'), { code: 'aborted' });
 const LATE_FAIL = '저장하지 못했어요. 기록하기를 다시 누르면 쓰던 내용이 돌아와요';
 
@@ -247,6 +249,7 @@ function changed() {
   showError('');
   renderChips();
   paintTitleHint();
+  paintMemoCount();
   paintSubmit();
 }
 
@@ -293,11 +296,23 @@ function paintCancel() {
   $('svNo').textContent = finishing ? '마무리하는 중…' : stoppable ? '올리기 멈추기' : '취소';
 }
 
-// 글 칸은 쓰는 만큼 늘어난다(최대 높이는 CSS, 그 뒤로는 칸 안에서 스크롤)
+// 메모 칸은 쓰는 만큼 늘어난다(최소 3줄 · 최대 높이는 CSS, 그 뒤로는 칸 안에서 스크롤). 창의 스크롤 자리는 지킨다
 function growText() {
   const el = $('svText');
+  const wrap = $('svBodyWrap');
+  const top = wrap.scrollTop;
   el.style.height = 'auto';
   el.style.height = `${el.scrollHeight + 6}px`;
+  wrap.scrollTop = top;
+}
+
+// 메모 글자 수: 1만 8천 자부터 "18,200 / 20,000", 2만 자를 넘으면 빨갛게(그동안 "별 띄우기"는 canSubmit이 막는다)
+function paintMemoCount() {
+  const el = $('svMemoCnt');
+  const count = memoCount($('svText').value);
+  el.hidden = !count;
+  el.textContent = count ? count.text : '';
+  el.classList.toggle('bad', Boolean(count?.over));
 }
 
 // 저장하는 중이거나 쓰던 것이 있으면 탭을 닫거나 새로 고칠 때 브라우저가 한 번 묻게 한다.
@@ -358,6 +373,8 @@ function clearFields() {
   $('svText').style.height = '';
   $('svChips').textContent = '';
   $('svCount').textContent = '';
+  $('svMemoCnt').hidden = true;
+  $('svMemoCnt').textContent = '';
 }
 
 function close() {
@@ -644,6 +661,7 @@ function onTextInput() {
   growText();
   showError('');
   paintTitleHint();
+  paintMemoCount();
   paintSubmit();
 }
 
@@ -844,6 +862,7 @@ export function openSave({ text, url, files, hints } = {}) {
   if (hasUrl) addLink(url);
   renderChips();
   paintTitleHint();
+  paintMemoCount();
   paintSubmit();
 
   $('save').hidden = false;
