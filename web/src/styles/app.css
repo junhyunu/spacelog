@@ -251,6 +251,13 @@ body{word-break:keep-all}
 #help.big #helpToggle .i{transform:rotate(180deg)}
 #help .keys{display:none;grid-template-columns:repeat(2,auto);justify-content:start;gap:7px 16px;padding:4px 8px 6px}
 #help.big .keys{display:grid}
+/* 터치 화면(마우스처럼 올려 둘 수 없고 손가락으로 누르는 기기)에서는 WASD · Space · Enter를 누를 수 없다.
+   키 안내 칸을 숨기고 한 줄 안내만 보인다. 화면 폭이 아니라 입력 장치로 가른다(좁은 창의 PC에는 그대로 키 안내) */
+#touchHint{display:none;flex:none;margin:8px 0 0;padding:10px 16px 4px;border-top:2.5px dashed #b7b0e0;font-size:12.5px;line-height:1.5;color:var(--mute)}
+@media (hover:none) and (pointer:coarse){
+  #help{display:none}
+  #touchHint{display:block}
+}
 #sideOpen{display:flex;align-items:center;gap:var(--gap-2);min-height:44px;padding:6px 10px 6px 14px;color:var(--ink);cursor:pointer;box-sizing:border-box}
 #sideOpen .logo{font-family:var(--f-display);font-size:20px;line-height:1}
 #sideOpen:hover{background:var(--panel-2)}
