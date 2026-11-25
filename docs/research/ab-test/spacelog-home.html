@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>spaceLog · 홈 목록 (비교 테스트용)</title>
+<link rel="icon" href="data:,">
+<!-- 비교 테스트용 정적 화면. 서버 없이 이 파일 하나로 돈다. 데이터는 아래 스크립트의 가짜 기록 11개 · 행성 7개.
+     색 · 서체 · 모양은 앱의 web/src/styles/tokens.css와 같은 값을 쓴다. 새로고침하면 처음 상태로 돌아간다. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable.min.css">
+<style>
+:root{
+  --ink:#1a1430; --space:#15103a; --panel:#f4f2ff; --panel-2:#e6e2ff; --mute:#5b5480; --white:#fff;
+  --yellow:#ffd23f; --pink:#ff5d8f; --violet:#7a6cff; --sky:#5ec8ff; --danger-text:#c2185b; --hair:#d6d1f2;
+  --f-display:"Black Han Sans","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-body:"Pretendard Variable",Pretendard,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --line:3px; --line-thin:2.5px; --r-card:16px;
+  --top-h:76px;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+*{box-sizing:border-box}
+html{scroll-padding-top:calc(var(--top-h) + 12px)}
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse 90% 620px at 50% 180px,#2c2070 0%,var(--space) 70%) var(--space);color:var(--panel);font-family:var(--f-body)}
+.stars{position:absolute;inset:0 0 auto 0;height:100%;pointer-events:none;overflow:hidden}
+.stars i{position:absolute;border-radius:50%;opacity:.85}
+.card{background:var(--panel);color:var(--ink);border:var(--line) solid var(--ink);border-radius:var(--r-card);box-shadow:0 5px 0 var(--ink)}
+.btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--f-display);font-size:15px;letter-spacing:.02em;border:var(--line) solid var(--ink);border-radius:12px;background:var(--yellow);color:var(--ink);padding:8px 14px;min-height:44px;box-shadow:0 4px 0 var(--ink);cursor:pointer;white-space:nowrap;transition:transform .08s,box-shadow .08s}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
+.btn.ghost{background:var(--panel-2)}
+.btn.violet{background:var(--violet);color:var(--white)}
+.btn.pink{background:var(--pink);color:var(--white)}
+.btn.sm{font-size:13px;padding:6px 10px;min-height:38px;gap:6px}
+.btn.sq{width:46px;height:46px;padding:0}
+:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+svg.i{flex:none}
+
+/* ---------- 고정 상단 바 ---------- */
+#top{position:sticky;top:0;z-index:20;transition:background .15s,box-shadow .15s}
+#top.stuck{background:rgba(21,16,58,.94);box-shadow:0 3px 0 var(--ink)}
+#top .in{max-width:1240px;margin:0 auto;padding:14px 16px;display:flex;align-items:center;gap:12px}
+.logo{font-family:var(--f-display);font-size:24px;line-height:1;padding:8px 14px}
+.logo span{color:var(--violet)}
+#top .acts{margin-left:auto;display:flex;align-items:center;gap:12px}
+
+/* ---------- 블랙홀(로그인 후에는 작게: 목록이 첫 화면에 걸친다) ---------- */
+.wrap{position:relative;max-width:1240px;margin:0 auto;padding:0 16px 48px}
+.hero{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding-bottom:22px}
+.hero h1{margin:0;font-family:var(--f-display);font-weight:400;font-size:clamp(24px,3.4vw,34px);line-height:1.15;text-shadow:0 3px 0 var(--ink);text-wrap:balance}
+.hero h1 em{font-style:normal;color:var(--yellow)}
+.hstats{display:flex;gap:8px;align-items:center;font-weight:700;font-size:13px}
+.hstats b{background:var(--ink);color:var(--yellow);border-radius:999px;padding:2px 9px;border:2px solid #3a2f6a;font-variant-numeric:tabular-nums}
+.bh{position:relative;width:210px;height:210px;display:grid;place-items:center;margin:-4px 0}
+.bh canvas{position:absolute;inset:0;width:100%;height:100%}
+.bh .btn{font-size:16px;box-shadow:0 5px 0 var(--ink)}
+.hero .hint{margin:0;font-size:13px;color:#b9b3e6}
+
+/* ---------- 본문: 왼쪽 패널 + 별 목록 ---------- */
+.lay{display:grid;grid-template-columns:280px minmax(0,1fr);gap:18px;align-items:start}
+.lay.collapsed{grid-template-columns:minmax(0,1fr)}
+#side{position:sticky;top:calc(var(--top-h) + 12px);max-height:calc(100vh - var(--top-h) - 28px);display:flex;flex-direction:column;overflow:hidden}
+#side .sd-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 12px 6px 16px}
+#side h2{margin:0;font-family:var(--f-display);font-weight:400;font-size:26px;line-height:1}
+#side h2 span{color:var(--violet)}
+.xbtn{width:34px;height:34px;min-height:0;padding:0;box-shadow:0 3px 0 var(--ink)}
+#side .stats{padding:6px 16px 14px;font-size:12.5px;font-weight:700;line-height:1.8}
+#side .stats b{display:inline-block;margin:0 2px 0 4px;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px;font-family:var(--f-display);font-weight:400;font-size:12px;line-height:1.35;font-variant-numeric:tabular-nums}
+#side .sd-planets{min-height:0;display:flex;flex-direction:column;gap:8px;padding:12px 16px 16px;border-top:var(--line) solid var(--ink)}
+.label{font-family:var(--f-display);font-size:12px;color:var(--violet);letter-spacing:.06em}
+.dock{display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0;padding:2px 2px 6px;margin:0 -2px}
+.dock button,#newPlanet{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;font:600 14px var(--f-body);color:var(--ink);background:var(--panel);border:var(--line) solid var(--ink);border-radius:14px;padding:7px 12px 7px 8px;box-shadow:0 4px 0 var(--ink);cursor:pointer;text-align:left;white-space:nowrap}
+.dock button .dot,#newPlanet .dot{width:22px;height:22px;border-radius:50%;border:var(--line) solid var(--ink);flex:none;display:grid;place-items:center}
+.dock button .t{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.dock button .n{margin-left:auto;font-family:var(--f-display);font-size:13px;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px;font-variant-numeric:tabular-nums}
+.dock button[aria-pressed="true"]{background:var(--yellow)}
+.dock button.zero .t{color:var(--mute)}
+#newPlanet{flex:none;background:color-mix(in srgb,var(--panel-2) 60%,var(--white));border:var(--line-thin) dashed var(--ink);box-shadow:none}
+#newPlanet .dot{border:0}
+#sideOpen{margin-bottom:12px}
+
+/* 기간 바 · 보기 방식: 앱의 #period .pbar · .seg와 같은 값 */
+.pbar{padding:5px;display:flex;gap:6px;row-gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;max-width:100%}
+#period{margin-left:auto}
+.seg{display:flex;gap:4px}
+.seg button{position:relative;font:700 13px var(--f-body);border:0;border-radius:999px;padding:6px 12px;background:transparent;color:var(--ink);cursor:pointer;white-space:nowrap}
+.seg button::after{content:"";position:absolute;left:50%;top:50%;width:max(100%,44px);height:max(100%,44px);transform:translate(-50%,-50%)}
+.seg button:hover{background:var(--panel-2)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--yellow)}
+.seg button:focus-visible{outline-offset:1px}
+.range{display:flex;gap:4px;align-items:center;font-size:12px;padding-right:4px;color:var(--ink)}
+.range input{font:500 12px var(--f-mono);height:44px;margin:-9px 0;border:solid transparent;border-width:9px 0;border-radius:8px/17px;background:var(--white) padding-box;box-shadow:inset 0 0 0 2px var(--ink);padding:3px 7px;color:var(--ink);color-scheme:light}
+
+/* 행성별로 묶기 스위치 */
+.gsw{display:flex;align-items:center;gap:8px;min-height:44px;padding:5px 14px 5px 8px;font:700 13px var(--f-body);cursor:pointer;white-space:nowrap}
+.gsw .track{width:40px;height:24px;border-radius:999px;border:var(--line-thin) solid var(--ink);background:var(--panel-2);display:flex;align-items:center;padding:2px;transition:background .12s}
+.gsw .knob{width:15px;height:15px;border-radius:50%;background:var(--ink);transition:transform .12s}
+.gsw[aria-checked="true"] .track{background:var(--yellow)}
+.gsw[aria-checked="true"] .knob{transform:translateX(16px)}
+
+/* 목록 머리 */
+.lhead{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px}
+.lhead h2{margin:0;font-family:var(--f-display);font-weight:400;font-size:22px;text-shadow:0 2px 0 var(--ink)}
+
+/* 별 목록: 바깥 카드만 굵은 테두리, 행 사이는 얇은 선 */
+#table{padding:4px 16px 8px;overflow:hidden}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 200px 132px 76px 62px;align-items:center;gap:12px;padding:10px 4px;border-top:1.5px solid var(--hair);min-height:64px}
+.row.th{min-height:0;padding:12px 4px 10px;border-top:0;font-size:12px;font-weight:700;color:var(--mute)}
+.ttl{display:flex;align-items:center;gap:12px;min-width:0;border:0;background:transparent;padding:4px;margin:-4px;border-radius:10px;color:var(--ink);cursor:pointer;text-align:left;font-family:var(--f-body)}
+.ttl:hover .n{text-decoration:underline;text-underline-offset:3px}
+.ttl .ic{width:38px;height:38px;border-radius:10px;border:var(--line-thin) solid var(--ink);background:var(--white);display:grid;place-items:center;flex:none}
+.ttl .tx{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ttl .n{font-weight:700;font-size:15.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ttl .k{font-size:12.5px;font-weight:500;color:var(--mute)}
+.pl{display:flex;align-items:center;gap:6px;min-width:0;font-size:13.5px;font-weight:600}
+.pl .dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--ink);flex:none}
+.pl .t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fav{flex:none;width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:#a9a3cc;cursor:pointer;display:grid;place-items:center}
+.fav:hover{background:var(--panel-2)}
+.fav[aria-pressed="true"]{color:var(--ink)}
+.fav[aria-pressed="true"] svg{fill:var(--yellow)}
+.why{justify-self:start;max-width:100%;min-height:30px;padding:0 10px;border:1.5px dashed #a9a3cc;border-radius:999px;background:transparent;font:600 12.5px var(--f-body);color:#8a84b0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.why.has{border:1.5px solid var(--ink);background:var(--white);color:var(--ink)}
+.why:hover{background:var(--panel-2)}
+.dt{font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ago{font-size:13px;color:var(--mute);white-space:nowrap}
+.grp{display:flex;align-items:center;gap:8px;padding:16px 4px 8px;font-family:var(--f-display);font-size:15px}
+.grp .dot{width:16px;height:16px;border-radius:50%;border:var(--line-thin) solid var(--ink)}
+.grp .n{font-size:12px;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px}
+.grp + .row{border-top:var(--line-thin) solid var(--ink)}
+.empty{padding:40px 16px;text-align:center}
+.empty b{display:block;font-family:var(--f-display);font-weight:400;font-size:18px;margin-bottom:6px}
+.empty p{margin:0 0 14px;font-size:13.5px;line-height:1.6;color:var(--mute)}
+
+/* ---------- 별 상세(오른쪽에서 열린다) ---------- */
+#detail{position:fixed;z-index:30;top:calc(var(--top-h) + 12px);right:14px;bottom:16px;width:min(380px,calc(100vw - 28px));display:flex;flex-direction:column;overflow:hidden;animation:pop .2s cubic-bezier(.3,1.4,.6,1)}
+@keyframes pop{from{transform:scale(.96);opacity:0}}
+#detail header{display:flex;gap:12px;align-items:flex-start;padding:16px 16px 12px;border-bottom:var(--line) solid var(--ink)}
+#detail h3{margin:0;font-size:18px;line-height:1.35;overflow-wrap:anywhere}
+#detail .body{flex:1;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+#detail dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13.5px}
+#detail dt{color:var(--mute);font-weight:700}
+#detail dd{margin:0}
+.fld{display:flex;flex-direction:column;gap:6px;min-width:0}
+.fld .lbl{font-size:13px;font-weight:700}
+.fld :is(input,textarea,select){font:500 14px/1.55 var(--f-body);border:var(--line-thin) solid var(--ink);border-radius:10px;padding:8px 10px;min-height:44px;background:var(--white);color:var(--ink);width:100%;color-scheme:light}
+.fld textarea{resize:vertical}
+.fld small{font-size:12px;color:var(--mute)}
+.linkdel{align-self:flex-end;min-height:44px;border:0;background:transparent;color:var(--danger-text);font:700 13px var(--f-body);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+
+/* ---------- 창 · 토스트 ---------- */
+#modal{position:fixed;inset:0;z-index:40;background:rgba(10,6,30,.6);display:grid;place-items:center;padding:16px}
+#modal form{width:min(420px,100%);max-height:100%;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
+#modal h3{margin:0;font-family:var(--f-display);font-weight:400;font-size:20px;line-height:1.3}
+#modal p{margin:0;font-size:14px;line-height:1.6;color:var(--mute)}
+#modal .rowb{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
+.sws{display:flex;flex-wrap:wrap;gap:4px}
+.sws label{width:44px;height:44px;display:grid;place-items:center;cursor:pointer;border-radius:50%}
+.sws input{position:absolute;opacity:0}
+.sws span{width:28px;height:28px;border-radius:50%;border:2px solid var(--ink)}
+.sws input:checked + span{border-width:3px;box-shadow:0 0 0 3px var(--panel),0 0 0 6px var(--sky)}
+.sws input:focus-visible + span{outline:3px solid var(--sky);outline-offset:6px}
+#toast{position:fixed;z-index:50;left:50%;bottom:22px;transform:translateX(-50%);padding:9px 16px;background:var(--yellow);font-weight:700;font-size:14px;line-height:1.45;text-align:center;width:max-content;max-width:min(560px,92vw);pointer-events:none}
+
+@media (max-width:900px){
+  .row{grid-template-columns:minmax(0,1fr) 170px 76px}
+  .row > .c-why,.row > .c-ago{display:none}
+}
+@media (max-width:760px){
+  :root{--top-h:64px}
+  #top .in{padding:10px;gap:6px}
+  #top .acts{gap:6px;min-width:0}
+  .logo{font-size:18px;padding:7px 9px}
+  #top .btn{padding:6px 8px;font-size:13px}
+  #top .btn.sq{width:40px;height:40px}
+  #top .btn .i.opt,#topEnter .lt{display:none}
+  .bh{width:180px;height:180px}
+  .lay,.lay.collapsed{grid-template-columns:minmax(0,1fr)}
+  /* 좁은 화면: 왼쪽 패널은 목록 위의 가로 칩 줄 */
+  #side{position:static;max-height:none}
+  #side .sd-head,#sideOpen{display:none}
+  #side .stats{padding:12px 14px 8px}
+  #side .sd-planets{border-top:0;padding:0 14px 12px}
+  #side .label{display:none}
+  .dock{flex-direction:row;overflow-x:auto;overflow-y:hidden;padding-bottom:8px}
+  .dock button{width:auto;flex:none}
+  #newPlanet{width:auto;align-self:flex-start}
+  #period{margin-left:0;width:100%;justify-content:stretch}
+  #period .seg{flex:1 1 100%}
+  #period .seg button{flex:1;text-align:center;padding:6px 7px}
+  #period .range{flex:1 1 100%;padding:0 4px}
+  #period .range input{flex:1;min-width:0}
+  #table{padding:2px 10px 6px}
+  .row{grid-template-columns:minmax(0,1fr) 40px;gap:8px}
+  .row > .c-dt{display:none}
+  .pl .dot,.pl .t{display:none}
+  .row.th .c-pl{visibility:hidden}
+  #detail{top:auto;left:10px;right:10px;bottom:10px;width:auto;height:min(72dvh,560px)}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="stars" id="stars" aria-hidden="true"></div>
+
+<header id="top">
+  <div class="in">
+    <div class="logo card">space<span>Log</span></div>
+    <div class="acts">
+      <!-- 블랙홀이 화면 밖으로 나가면 나타난다 -->
+      <button type="button" class="btn violet" id="topEnter" data-act="enter" hidden><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M3 12c0-3 4-5 9-5s9 2 9 5-4 5-9 5-9-2-9-5Z"/></svg><span class="lt">우주로 들어가기</span></button>
+      <button type="button" class="btn" data-act="log"><svg class="i opt" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>기록하기</button>
+      <button type="button" class="btn ghost" data-act="logout">로그아웃</button>
+      <button type="button" class="btn ghost sq" data-act="me" aria-label="계정 설정" title="계정 설정"><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg></button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="hero" aria-label="내 우주">
+    <h1 id="greet"></h1>
+    <div class="hstats" id="hstats"></div>
+    <div class="bh"><canvas id="bhCanvas" aria-hidden="true"></canvas><button type="button" class="btn violet" id="enterBtn" data-act="enter">우주로 들어가기</button></div>
+    <p class="hint">버튼을 누르면 블랙홀을 지나 내 우주로 들어가요</p>
+  </section>
+
+  <main class="lay" id="lay">
+    <!-- 우주 안 왼쪽 패널과 같은 모양. 홈에서는 행성을 누르면 날아가는 대신 오른쪽 목록이 그 행성의 별만 보여 준다 -->
+    <aside id="side" class="card" aria-label="행성 고르기">
+      <div class="sd-head">
+        <h2>space<span>Log</span></h2>
+        <button type="button" class="btn ghost xbtn" id="sideClose" aria-label="왼쪽 패널 접기"><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></svg></button>
+      </div>
+      <div class="stats"><span id="sLabel"></span><b id="sRec">0</b>개 · 행성<b id="sPlanet">0</b>개</div>
+      <div class="sd-planets">
+        <div class="label" id="dockLabel">행성 고르기</div>
+        <button type="button" id="newPlanet" data-act="newPlanet"><span class="dot" aria-hidden="true"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></span>새 행성</button>
+        <div class="dock" id="dock" role="group" aria-labelledby="dockLabel"></div>
+      </div>
+    </aside>
+
+    <section aria-label="별 목록">
+      <div class="lhead">
+        <button type="button" class="btn ghost sm" id="sideOpen" hidden>행성 목록 펼치기</button>
+        <h2 id="count"></h2>
+        <!-- 왼쪽에서 "전체 보기"를 골랐을 때만 보인다. 행성 하나를 고르면 묶을 것이 없어 숨는다(켜 둔 상태는 기억한다) -->
+        <button type="button" class="gsw card" id="groupSw" role="switch" aria-checked="false"><span class="track" aria-hidden="true"><span class="knob"></span></span>행성별로 묶기</button>
+        <!-- 기간 바: 우주 안 오른쪽 위의 기간 바(#period .pbar)와 같은 모양 · 같은 순서 -->
+        <div class="pbar card" id="period">
+          <div class="seg" id="pSeg" role="group" aria-label="기간 선택"><button type="button" data-p="all">전체</button><button type="button" data-p="today">오늘</button><button type="button" data-p="week">이번 주</button><button type="button" data-p="custom">직접 지정</button></div>
+          <div class="range" id="range" hidden><input type="date" id="rFrom" aria-label="시작 날짜"><span>~</span><input type="date" id="rTo" aria-label="끝 날짜"></div>
+        </div>
+      </div>
+
+      <div id="table" class="card"></div>
+    </section>
+  </main>
+</div>
+
+<aside id="detail" class="card" aria-label="별 상세" hidden></aside>
+<div id="modal" hidden></div>
+<div id="toast" class="card" role="status" aria-live="polite" hidden></div>
+
+<script>
+/* ================= 가짜 데이터(비교 대상 시안과 같은 기록 11개 · 그룹 7개) ================= */
+const NOW = new Date();
+const at = (h, m) => new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate(), h, m);
+const COLORS = ['#6aa8ff', '#ff9d4d', '#a98bff', '#ff5d8f', '#4fd39a', '#5ec8ff', '#b9b3e6', '#ffd23f', '#ff7a6b'];
+let planets = [
+  { id: 'p1', name: '제품 기획', color: COLORS[0] },
+  { id: 'p2', name: '읽은 것들', color: COLORS[1] },
+  { id: 'p3', name: '생각 조각', color: COLORS[2] },
+  { id: 'p4', name: '디자인 레퍼런스', color: COLORS[3] },
+  { id: 'p5', name: '회의록', color: COLORS[4] },
+  { id: 'p6', name: 'CSV 데이터', color: COLORS[5] },
+  { id: 'p7', name: '분류 안 된 기록', color: COLORS[6] },
+];
+let stars = [
+  { id: 's1', title: 'workouts.csv', kind: 'csv', size: '30행', planet: 'p6', fav: false, why: '', at: at(9, 5) },
+  { id: 's2', title: '탐사선 아이콘 아이디어', kind: 'text', size: '90자', planet: 'p3', fav: false, why: '', at: at(9, 2) },
+  { id: 's3', title: 'songs.csv', kind: 'csv', size: '20행', planet: 'p6', fav: false, why: '', at: at(8, 58) },
+  { id: 's4', title: 'movies.csv', kind: 'csv', size: '24행', planet: 'p6', fav: false, why: '', at: at(8, 51) },
+  { id: 's5', title: 'PRD 2차 의견', kind: 'text', size: '520자', planet: 'p1', fav: false, why: '', at: at(8, 44) },
+  { id: 's6', title: 'classes.csv', kind: 'csv', size: '60행', planet: 'p6', fav: false, why: '', at: at(8, 40) },
+  { id: 's7', title: 'cafes.csv', kind: 'csv', size: '24행', planet: 'p6', fav: true, why: '', at: at(8, 33) },
+  { id: 's8', title: '알림 정책 초안', kind: 'text', size: '230자', planet: 'p1', fav: true, why: '', at: at(8, 21) },
+  { id: 's9', title: 'books.csv', kind: 'csv', size: '24행', planet: 'p6', fav: true, why: '', at: at(8, 12) },
+  { id: 's10', title: '지하철에서 떠오른 생각', kind: 'text', size: '38자', planet: 'p7', fav: false, why: '', at: at(7, 48) },
+  { id: 's11', title: '「AI와 일하는 법」 밑줄', kind: 'text', size: '150자', planet: 'p2', fav: false, why: '', at: at(7, 30) },
+].map((s) => ({ memo: '', ...s }));
+
+/* ================= 상태 ================= */
+const S = { planet: 'all', group: false, period: 'today', from: '', to: '', detail: null };
+let seq = 100;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const P = (id) => planets.find((p) => p.id === id);
+const IC = {
+  csv: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  text: '<polyline points="4 7 4 4 20 4 20 7"/><line x1="9" x2="15" y1="20" y2="20"/><line x1="12" x2="12" y1="4" y2="20"/>',
+  star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  layers: '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="m2 12 8.58 3.91a2 2 0 0 0 1.66 0L21 12"/><path d="m2 17 8.58 3.91a2 2 0 0 0 1.66 0L21 17"/>',
+};
+const ico = (n, z = 18) => `<svg class="i" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
+
+/* ================= 날짜 · 기간 ================= */
+const day0 = (d, add = 0) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + add);
+const md = (d) => `${d.getMonth() + 1}월 ${d.getDate()}일`;
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const parse = (s) => { const m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(s || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; };
+
+/** 지금 기간의 범위 { from, to(미포함), text }. 전체는 from · to가 null. */
+function range() {
+  const t = day0(NOW);
+  if (S.period === 'today') return { from: t, to: day0(t, 1) };
+  if (S.period === 'week') return { from: day0(t, -6), to: day0(t, 1) }; // 오늘 포함 최근 7일(앱과 같다)
+  if (S.period === 'custom') {
+    let f = parse(S.from) || t, l = parse(S.to) || f;
+    if (l < f) [f, l] = [l, f];
+    return { from: f, to: day0(l, 1) };
+  }
+  return { from: null, to: null };
+}
+const PERIOD_LABEL = { today: '오늘 별', week: '이번 주 별', all: '전체 별', custom: '이 기간 별' };
+const inPeriod = () => { const r = range(); return stars.filter((s) => !r.from || (s.at >= r.from && s.at < r.to)); };
+const visible = () => inPeriod().filter((s) => S.planet === 'all' || s.planet === S.planet);
+function ago(d) {
+  const n = Math.round((day0(NOW) - day0(d)) / 864e5);
+  return n <= 0 ? '오늘' : n === 1 ? '어제' : `${n}일 전`;
+}
+
+/* ================= 그리기 ================= */
+function render() {
+  const per = inPeriod();
+  const list = visible().sort((a, b) => b.at - a.at);
+
+  // 인사말(오늘 기준)
+  const t0 = day0(NOW), todayN = stars.filter((s) => s.at >= t0).length;
+  $('greet').innerHTML = stars.length === 0 ? '우주선장님, 나만의 우주를 시작해 보세요' : todayN ? `오늘 별 <em>${todayN}개</em>를 띄웠어요` : '오늘은 아직 별이 없어요';
+  $('hstats').innerHTML = `<b>${stars.length}</b>개의 별 <b>${planets.length}</b>개의 행성`;
+
+  // 왼쪽 패널
+  $('sLabel').textContent = PERIOD_LABEL[S.period];
+  $('sRec').textContent = per.length;
+  $('sPlanet').textContent = planets.length;
+  const item = (id, name, n, dot) =>
+    `<button type="button" data-planet="${esc(id)}" aria-pressed="${S.planet === id}" class="${n ? '' : 'zero'}">${dot}<span class="t">${esc(name)}</span><span class="n">${n}</span></button>`;
+  $('dock').innerHTML =
+    item('all', '전체 보기', per.length, `<span class="dot" style="background:var(--white)">${ico('layers', 12)}</span>`) +
+    planets.map((p) => item(p.id, p.name, per.filter((s) => s.planet === p.id).length, `<span class="dot" style="background:${p.color}"></span>`)).join('');
+
+  // 기간 바
+  for (const b of $('pSeg').children) b.setAttribute('aria-pressed', String(b.dataset.p === S.period));
+  $('range').hidden = S.period !== 'custom';
+  $('groupSw').hidden = S.planet !== 'all';
+  $('groupSw').setAttribute('aria-checked', String(S.group));
+
+  // 목록 머리
+  const where = S.planet === 'all' ? '' : `${P(S.planet)?.name ?? ''} · `;
+  $('count').textContent = `${where}별 ${list.length}개`;
+  // 목록
+  const head =
+    '<div class="row th"><span>제목 · 종류</span><span class="c-pl">행성 · 자주 찾음</span><span class="c-why">저장 이유</span><span class="c-dt">넣은 날</span><span class="c-ago">지난 날</span></div>';
+  const row = (s) => {
+    const p = P(s.planet);
+    const kind = s.kind === 'csv' ? 'CSV' : '텍스트';
+    return (
+      `<div class="row" data-id="${s.id}">` +
+      `<button type="button" class="ttl" data-a="open"><span class="ic">${ico(s.kind, 18)}</span><span class="tx"><span class="n">${esc(s.title)}</span><span class="k">${kind} · ${esc(s.size)}</span></span></button>` +
+      `<span class="pl c-pl"><span class="dot" style="background:${p?.color}"></span><span class="t">${esc(p?.name)}</span>` +
+      `<button type="button" class="fav" data-a="fav" aria-pressed="${s.fav}" aria-label="자주 찾음" title="자주 찾음">${ico('star', 18)}</button></span>` +
+      `<span class="c-why"><button type="button" class="why${s.why ? ' has' : ''}" data-a="why" title="저장 이유 적기">${esc(s.why || '이유 없음')}</button></span>` +
+      `<span class="dt c-dt">${md(s.at)}</span><span class="ago c-ago">${ago(s.at)}</span></div>`
+    );
+  };
+  let body;
+  if (!list.length) {
+    body =
+      '<div class="empty"><b>이 기간에는 별이 없어요</b><p>기간을 넓히거나 다른 행성을 골라 보세요.</p>' +
+      '<button type="button" class="btn ghost sm" data-act="resetFilter">전체 기간 · 전체 보기로</button></div>';
+  } else if (S.group && S.planet === 'all') {
+    body = planets
+      .map((p) => [p, list.filter((s) => s.planet === p.id)])
+      .filter(([, l]) => l.length)
+      .map(([p, l]) => `<div class="grp"><span class="dot" style="background:${p.color}"></span>${esc(p.name)}<span class="n">${l.length}</span></div>` + l.map(row).join(''))
+      .join('');
+  } else body = list.map(row).join('');
+  $('table').innerHTML = (list.length ? head : '') + body;
+
+  renderDetail();
+}
+
+function renderDetail() {
+  const el = $('detail');
+  const s = stars.find((x) => x.id === S.detail);
+  if (!s) { el.hidden = true; S.detail = null; return; }
+  if (!el.hidden && el.dataset.id === s.id && el.contains(document.activeElement) && document.activeElement.matches('textarea,input')) return; // 쓰는 중이면 다시 그리지 않는다
+  const p = P(s.planet);
+  el.dataset.id = s.id;
+  el.innerHTML =
+    `<header><div style="flex:1;min-width:0"><div class="pl" style="margin-bottom:4px"><span class="dot" style="background:${p?.color}"></span><span class="t">${esc(p?.name)}</span></div><h3>${esc(s.title)}</h3></div>` +
+    `<button type="button" class="btn ghost xbtn" data-d="close" aria-label="닫기">${ico('x')}</button></header>` +
+    '<div class="body">' +
+    `<dl><dt>종류</dt><dd>${s.kind === 'csv' ? 'CSV' : '텍스트'} · ${esc(s.size)}</dd><dt>넣은 날짜</dt><dd>${md(s.at)} (${ago(s.at)})</dd></dl>` +
+    `<label class="fld"><span class="lbl">저장 이유</span><input type="text" data-d="why" maxlength="40" value="${esc(s.why)}" placeholder="왜 남겨 뒀는지 한 줄로"></label>` +
+    `<label class="fld"><span class="lbl">메모</span><textarea rows="4" data-d="memo" placeholder="이 별에 남길 말">${esc(s.memo)}</textarea><small>입력을 멈추면 저장돼요</small></label>` +
+    `<label class="fld"><span class="lbl">행성 옮기기</span><select data-d="move">${planets.map((q) => `<option value="${q.id}"${q.id === s.planet ? ' selected' : ''}>${esc(q.name)}</option>`).join('')}</select></label>` +
+    '<button type="button" class="linkdel" data-d="del">이 별 지우기</button></div>';
+  el.hidden = false;
+}
+
+/* ================= 창 · 토스트 ================= */
+let toastT = 0;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2600);
+}
+let modalBack = null;
+/** 작은 창. fields는 폼 안쪽 HTML, onOk(form)이 false를 돌려주면 닫지 않는다. */
+function modal({ title, desc = '', fields = '', ok = '확인', kind = '', onOk }) {
+  modalBack = document.activeElement;
+  const m = $('modal');
+  m.innerHTML =
+    `<form class="card" role="dialog" aria-modal="true" aria-label="${esc(title)}" novalidate><h3>${esc(title)}</h3>${desc ? `<p>${esc(desc)}</p>` : ''}${fields}` +
+    `<div class="rowb"><button type="button" class="btn ghost" data-m="no">취소</button><button type="submit" class="btn ${kind}">${esc(ok)}</button></div></form>`;
+  m.hidden = false;
+  const form = m.firstChild;
+  (form.querySelector('input:not([type=radio]),textarea,select') ?? form.querySelector('[data-m=no]')).focus();
+  form.addEventListener('submit', (e) => { e.preventDefault(); if (onOk(form) !== false) closeModal(); });
+}
+function closeModal() {
+  $('modal').hidden = true; $('modal').textContent = '';
+  if (modalBack?.isConnected) modalBack.focus();
+}
+$('modal').addEventListener('click', (e) => { if (e.target === e.currentTarget || e.target.closest('[data-m=no]')) closeModal(); });
+$('modal').addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab') return; // 초점이 창 밖으로 나가지 않게
+  const f = [...$('modal').querySelectorAll('input,textarea,select,button')].filter((x) => !x.disabled);
+  const first = f[0], last = f[f.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
+addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!$('modal').hidden) closeModal();
+  else if (S.detail) { S.detail = null; render(); }
+});
+
+const planetOptions = (cur) => planets.map((p) => `<option value="${p.id}"${p.id === cur ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
+function openLog() {
+  modal({
+    title: '별 띄우기', ok: '별 띄우기',
+    fields:
+      '<label class="fld"><span class="lbl">제목</span><input type="text" name="title" maxlength="60" autocomplete="off" placeholder="비워 두면 메모 첫 줄을 써요"></label>' +
+      '<label class="fld"><span class="lbl">메모</span><textarea name="memo" rows="3" placeholder="이 별에 남길 말"></textarea></label>' +
+      `<label class="fld"><span class="lbl">행성</span><select name="planet">${planetOptions(S.planet === 'all' ? 'p7' : S.planet)}</select></label>`,
+    onOk(f) {
+      const memo = f.memo.value.trim();
+      const title = f.title.value.trim() || memo.split('\n')[0].slice(0, 40);
+      if (!title) { toast('제목이나 메모를 적어 주세요'); return false; }
+      stars.push({ id: `s${++seq}`, title, kind: 'text', size: `${[...memo].length}자`, planet: f.planet.value, fav: false, why: '', memo, at: new Date() });
+      render(); toast('별을 띄웠어요');
+    },
+  });
+}
+function openNewPlanet() {
+  modal({
+    title: '새 행성 만들기', ok: '만들기',
+    fields:
+      '<label class="fld"><span class="lbl">이름</span><input type="text" name="name" maxlength="20" autocomplete="off" placeholder="예: 운동 기록"></label>' +
+      `<div class="fld"><span class="lbl">색</span><div class="sws">${COLORS.map((c, i) => `<label><input type="radio" name="color" value="${c}"${i === planets.length % COLORS.length ? ' checked' : ''}><span style="background:${c}"></span></label>`).join('')}</div></div>`,
+    onOk(f) {
+      const name = f.name.value.trim();
+      if (!name) { toast('행성 이름을 적어 주세요'); return false; }
+      if (planets.some((p) => p.name === name)) { toast('같은 이름의 행성이 있어요'); return false; }
+      planets.push({ id: `p${++seq}`, name, color: f.color.value });
+      render(); toast(`${name} 행성을 만들었어요`);
+    },
+  });
+}
+function openWhy(s) {
+  modal({
+    title: '저장 이유', desc: `「${s.title}」을 왜 남겨 뒀는지 한 줄로 적어요.`, ok: '저장하기',
+    fields: `<label class="fld"><span class="lbl">이유</span><input type="text" name="why" maxlength="40" autocomplete="off" value="${esc(s.why)}" placeholder="비워 두면 이유 없음"></label>`,
+    onOk(f) { s.why = f.why.value.trim(); render(); },
+  });
+}
+function askDelete(ids) {
+  const one = ids.length === 1 ? stars.find((s) => s.id === ids[0]) : null;
+  modal({
+    title: one ? '이 별을 지울까요?' : `별 ${ids.length}개를 지울까요?`,
+    desc: one ? `「${one.title}」이 지워지고 되돌릴 수 없어요.` : '고른 별이 모두 지워지고 되돌릴 수 없어요.',
+    ok: '지우기', kind: 'pink',
+    onOk() {
+      stars = stars.filter((s) => !ids.includes(s.id));
+      if (ids.includes(S.detail)) S.detail = null;
+      render(); toast(one ? '별을 지웠어요' : `별 ${ids.length}개를 지웠어요`);
+    },
+  });
+}
+
+/* ================= 누르기 ================= */
+document.addEventListener('click', (e) => {
+  const el = e.target instanceof Element ? e.target.closest('[data-act]') : null;
+  if (!el) return;
+  const a = el.dataset.act;
+  if (a === 'enter') toast('테스트용 화면이라 3D 우주는 열리지 않아요');
+  else if (a === 'log') openLog();
+  else if (a === 'newPlanet') openNewPlanet();
+  else if (a === 'logout') toast('테스트용 화면이라 로그아웃은 되지 않아요');
+  else if (a === 'me') toast('테스트용 화면이라 계정 설정은 열리지 않아요');
+  else if (a === 'resetFilter') { Object.assign(S, { planet: 'all', period: 'all' }); render(); }
+});
+$('dock').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-planet]');
+  if (!b) return;
+  S.planet = b.dataset.planet; render();
+  $('dock').querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true });
+});
+$('pSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-p]');
+  if (!b) return;
+  S.period = b.dataset.p;
+  if (S.period === 'custom' && !S.from) { S.from = S.to = iso(day0(NOW)); $('rFrom').value = S.from; $('rTo').value = S.to; }
+  render();
+});
+$('groupSw').addEventListener('click', () => { S.group = !S.group; render(); });
+for (const id of ['rFrom', 'rTo']) $(id).addEventListener('change', () => { S.from = $('rFrom').value; S.to = $('rTo').value; render(); });
+
+$('table').addEventListener('click', (e) => {
+  const a = e.target.closest('[data-a]');
+  const s = stars.find((x) => x.id === e.target.closest('.row')?.dataset.id);
+  if (!a || !s) return;
+  if (a.dataset.a === 'open') { S.detail = s.id; $('detail').dataset.id = ''; render(); $('detail').querySelector('[data-d=close]').focus(); }
+  else if (a.dataset.a === 'fav') { s.fav = !s.fav; render(); $('table').querySelector(`[data-id="${s.id}"] .fav`)?.focus(); }
+  else if (a.dataset.a === 'why') openWhy(s);
+});
+$('detail').addEventListener('click', (e) => {
+  const d = e.target.closest('[data-d]')?.dataset.d;
+  if (d === 'close') { const id = S.detail; S.detail = null; render(); $('table').querySelector(`[data-id="${id}"] .ttl`)?.focus(); }
+  else if (d === 'del') askDelete([S.detail]);
+});
+$('detail').addEventListener('input', (e) => {
+  const s = stars.find((x) => x.id === S.detail), d = e.target.dataset.d;
+  if (!s || (d !== 'memo' && d !== 'why')) return;
+  s[d] = e.target.value.trim(); render();
+});
+$('detail').addEventListener('change', (e) => {
+  const s = stars.find((x) => x.id === S.detail);
+  if (!s || e.target.dataset.d !== 'move') return;
+  s.planet = e.target.value; $('detail').dataset.id = ''; render(); toast(`${P(s.planet).name}(으)로 옮겼어요`);
+});
+
+// 왼쪽 패널 접기 · 펼치기
+function setSide(collapsed) {
+  $('side').hidden = collapsed; $('sideOpen').hidden = !collapsed; $('lay').classList.toggle('collapsed', collapsed);
+  (collapsed ? $('sideOpen') : $('sideClose')).focus({ preventScroll: true });
+}
+$('sideClose').addEventListener('click', () => setSide(true));
+$('sideOpen').addEventListener('click', () => setSide(false));
+
+/* ================= 상단 바: 스크롤하면 배경이 생기고, 블랙홀이 사라지면 "우주로 들어가기"가 나타난다 ================= */
+const topBar = $('top');
+const syncTop = () => {
+  topBar.classList.toggle('stuck', scrollY > 8);
+  document.documentElement.style.setProperty('--top-h', `${topBar.offsetHeight}px`);
+};
+addEventListener('scroll', syncTop, { passive: true });
+addEventListener('resize', syncTop);
+new IntersectionObserver(([en]) => { $('topEnter').hidden = en.isIntersecting; syncTop(); }, { rootMargin: '-70px 0px 0px 0px' }).observe($('enterBtn'));
+
+/* ================= 블랙홀 엠블럼(앱의 home.js drawBH와 같은 그림) · 배경 별 ================= */
+const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+let rot = 0, last = 0;
+function drawBH(now) {
+  const c = $('bhCanvas'), w = c.clientWidth;
+  const dt = last ? Math.min((now - last) / 1000, 0.05) : 0;
+  last = now; rot += dt * 0.22 * (reduce.matches ? 0.15 : 1);
+  if (w > 0 && !document.hidden) {
+    const dpr = Math.min(devicePixelRatio, 2), px = Math.round(w * dpr);
+    if (c.width !== px) c.width = c.height = px;
+    const g = c.getContext('2d'), m = w / 2, k = w / 300;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, w);
+    const glow = g.createRadialGradient(m, m, 40 * k, m, m, 150 * k);
+    glow.addColorStop(0, 'rgba(122,108,255,.55)'); glow.addColorStop(1, 'rgba(122,108,255,0)');
+    g.fillStyle = glow; g.fillRect(0, 0, w, w); g.lineCap = 'round';
+    [[128, '#7a6cff', 0.7, 2.2], [108, '#ff5d8f', 1, 1.7], [88, '#ffd23f', 1.5, 2.6]].forEach(([r, col, sp, len], i) => {
+      for (let j = 0; j < 2; j++) {
+        const a = rot * sp + i * 1.3 + j * Math.PI;
+        g.beginPath(); g.arc(m, m, r * k, a, a + len); g.strokeStyle = '#1a1430'; g.lineWidth = 17 * k; g.stroke();
+        g.beginPath(); g.arc(m, m, r * k, a, a + len); g.strokeStyle = col; g.lineWidth = 10 * k; g.stroke();
+      }
+    });
+    g.beginPath(); g.arc(m, m, 66 * k, 0, 6.3); g.fillStyle = '#0c0820'; g.fill(); g.lineWidth = 5 * k; g.strokeStyle = '#1a1430'; g.stroke();
+  }
+  requestAnimationFrame(drawBH);
+}
+requestAnimationFrame(drawBH);
+(() => {
+  const box = $('stars'), cols = ['#fff', '#ffe9a8', '#bfe3ff', '#ffc2dc'], r = (a, b) => a + Math.random() * (b - a);
+  for (let i = 0; i < 110; i++) {
+    const d = document.createElement('i'), s = r(1.5, 3.5);
+    d.style.cssText = `left:${r(0, 100)}%;top:${r(0, 100)}%;width:${s}px;height:${s}px;background:${cols[i % 4]}`;
+    box.appendChild(d);
+  }
+})();
+
+render();
+syncTop();
+</script>
+</body>
+</html>
