@@ -59,6 +59,13 @@ export function canSubmitPlanet({ name, description } = {}) {
   return n >= 1 && n <= TEXT_MAX && textLength(description) <= TEXT_MAX;
 }
 
+/**
+ * 이름 칸 아래의 흐린 안내: 이름이 비어 있을 때만(만들기 · 저장하기가 잠긴 까닭). 적었으면 ''.
+ * 빨간 오류가 아니다: 창을 열자마자 보이므로 혼내는 말투를 쓰지 않는다.
+ */
+export const planetNameHint = (name, editing = false) =>
+  textLength(name) === 0 ? `이름을 적으면 ${editing ? '저장할' : '만들'} 수 있어요` : '';
+
 /** 쓰는 중에 보일 글자 수 안내. 넘지 않았으면 ''. */
 export function planetFieldError({ name, description } = {}) {
   if (textLength(name) > TEXT_MAX) return '이름은 20자까지 쓸 수 있어요';

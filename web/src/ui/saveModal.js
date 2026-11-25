@@ -32,6 +32,7 @@ import {
   pendingLink,
   planAdd,
   resultToast,
+  saveBlockHint,
   saveError,
   skipNote,
   submitTitle,
@@ -276,13 +277,18 @@ function paintSubmit() {
   const yes = $('svYes');
   // 주소 칸에 쳐 두고 아직 더하지 않은 링크도 내용으로 센다(저장할 때 칩으로 더하거나, 틀렸으면 알린다)
   const typed = $('svUrl').value.trim() !== '' ? 1 : 0;
-  const ready = canSubmit({
+  const fields = {
     text: $('svText').value,
     count: Math.min(ATTACH_MAX, S.items.length + typed),
     planetId: S.planet,
     newPlanetName: $('svNewName').value,
-  });
+  };
+  const ready = canSubmit(fields);
   yes.disabled = S.busy || !ready;
+  // 잠긴 까닭(흐린 안내, 버튼 바로 위). 띄우는 중에는 숨긴다
+  const hint = S.busy || ready ? '' : saveBlockHint(fields);
+  $('svBlockHint').textContent = hint;
+  $('svBlockHint').hidden = !hint;
   yes.textContent = !S.busy ? '별 띄우기' : S.pct === null ? '띄우는 중…' : `띄우는 중… ${S.pct}%`;
   yes.setAttribute('aria-busy', String(S.busy));
   syncUnload();

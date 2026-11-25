@@ -123,6 +123,19 @@ export function planetNameLength(name) {
   return [...cleanPlanetName(name)].length;
 }
 
+/**
+ * "별 띄우기"가 잠긴 까닭을 알려 주는 흐린 안내(버튼 바로 위). 누를 수 있거나, 까닭이 한도 초과(그쪽은 빨간 글이 따로 알린다)면 ''.
+ * 내용이 없는 것을 먼저 알린다: 새 행성 이름까지 비어 있어도 한 번에 하나만.
+ */
+export function saveBlockHint({ text, count = 0, planetId, newPlanetName } = {}) {
+  const memo = str(text);
+  if (memo.length > MEMO_MAX && [...memo].length > MEMO_MAX) return '';
+  if ((Number(count) || 0) > ATTACH_MAX) return '';
+  if (memo.trim() === '' && !(Number(count) > 0)) return '메모를 쓰거나 파일·링크를 넣으면 띄울 수 있어요';
+  if (planetId === 'new' && planetNameLength(newPlanetName) < 1) return '새 행성 이름을 적으면 띄울 수 있어요';
+  return '';
+}
+
 /** "별 띄우기"를 누를 수 있는지: 메모나 첨부(count개, 50개까지)가 있고 행성이 정해졌을 때. 메모는 2만 자(코드 포인트)까지. */
 export function canSubmit({ text, count = 0, planetId, newPlanetName } = {}) {
   if (planetId === null || planetId === undefined || planetId === '') return false;

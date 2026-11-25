@@ -7,7 +7,7 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 #stage canvas:active{cursor:grabbing}
 .card{background:var(--panel);color:var(--ink);border:3px solid var(--ink);border-radius:16px;box-shadow:0 5px 0 var(--ink)}
 .btn{font-family:var(--f-display);font-size:15px;letter-spacing:.02em;border:3px solid var(--ink);border-radius:12px;background:var(--yellow);color:var(--ink);padding:8px 14px;box-shadow:0 4px 0 var(--ink);cursor:pointer;transition:transform .08s,box-shadow .08s}
-.btn:hover{transform:translateY(-1px)}
+@media (hover:hover){.btn:hover{transform:translateY(-1px)}}
 .btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
 .btn:focus-visible,.dock button:focus-visible,.rec:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
 .btn.pink{background:var(--pink);color:var(--white)}
@@ -130,8 +130,10 @@ body.world-entering :is(#left,#period,#wLog,#wHint,#worldMsg,#near){opacity:0;po
 body:has(#side:not([hidden])) #period{--left-w:280px}
 #period .pbar{padding:5px;display:flex;gap:6px;row-gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;max-width:100%;box-sizing:border-box}
 .seg{display:flex;gap:4px}
-.seg button{font:700 13px var(--f-body);border:0;border-radius:999px;padding:6px 12px;background:transparent;color:var(--ink);cursor:pointer}
-.seg button:hover{background:var(--panel-2)}
+/* 기간 버튼: 모서리는 바깥 카드에 맞춘 8px(카드 16 - 테두리 3 - 바 안쪽 여백 5). 알약이면 둥근 사각형 카드 안에서 곡선이 어긋난다.
+   높이는 글자대로(약 28px): 바(.pbar) 안쪽 여백이 위아래 · 좌우 5px로 고르고, 바 높이가 옆의 찾기 버튼과 맞는다 */
+.seg button{font:700 13px var(--f-body);border:0;border-radius:8px;padding:6px 12px;background:transparent;color:var(--ink);cursor:pointer}
+@media (hover:hover){.seg button:hover{background:var(--panel-2)}}
 .seg button.on{background:var(--ink);color:var(--yellow)}
 .seg button:focus-visible{outline:3px solid var(--sky);outline-offset:1px}
 .range{display:flex;gap:4px;align-items:center;font-size:12px;padding-right:4px}
@@ -153,12 +155,12 @@ body:has(#side:not([hidden])) #period{--left-w:280px}
 #panel .x{margin-left:0;flex:none}
 #panel h2.h2s{font-size:19px;line-height:1.25;overflow-wrap:anywhere}
 .ic{border:0;background:transparent;font-size:15px;cursor:pointer;color:var(--mute);padding:2px 5px;border-radius:6px;vertical-align:3px}
-.ic:hover{background:var(--panel-2);color:var(--ink)}
+@media (hover:hover){.ic:hover{background:var(--panel-2);color:var(--ink)}}
 .ic:focus-visible{outline:3px solid var(--sky)}
 .menu{display:flex;flex-direction:column;border-bottom:3px solid var(--ink);background:var(--panel-2)}
 .menu button{font:600 14px var(--f-body);text-align:left;padding:10px 16px;border:0;border-top:1.5px dashed #b7b0e0;background:transparent;color:var(--ink);cursor:pointer}
 .menu button:first-child{border-top:0}
-.menu button:hover:not(:disabled){background:var(--yellow)}
+@media (hover:hover){.menu button:hover:not(:disabled){background:var(--yellow)}}
 .menu button:disabled{color:#9a94bd;cursor:not-allowed}
 .lbl{font-family:var(--f-display);font-size:12px;color:var(--violet);letter-spacing:.06em}
 .th{width:34px;height:34px;flex:none;border:2.5px solid var(--ink);border-radius:8px;background:var(--panel-2);display:grid;place-items:center;font:700 9.5px var(--f-mono);color:var(--ink);overflow:hidden;box-sizing:border-box}
@@ -210,6 +212,8 @@ body{word-break:keep-all}
 #confirm .row{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
 #confirm input,#confirm select{font:600 14px var(--f-body);border:2.5px solid var(--ink);border-radius:10px;padding:8px 10px;background:var(--white);color:var(--ink);width:100%;min-height:44px;box-sizing:border-box}
 .btn.yellow{background:var(--yellow);color:var(--ink)}
+/* 누를 수 없을 때는 노랑이 아니라 회색(.btn:disabled와 같은 모양). 처리 중(aria-busy)에는 노랑 그대로 "…하는 중"을 보여 준다 */
+.btn.yellow:disabled:not([aria-busy="true"]){background:var(--panel-2);color:var(--mute);box-shadow:none;cursor:not-allowed;transform:none}
 
 /* W-01 조작 UI (hud.js) */
 /* 띠 배너: 기간 바 바로 아래에 붙는다 */
@@ -239,7 +243,8 @@ body{word-break:keep-all}
    목록에 스크롤 막대가 생기면 항목이 그만큼 좁아진다: hud.js가 --dock-sbw로 알려 준다 */
 #wNewPlanet{flex:none;display:flex;align-items:center;gap:10px;width:calc(100% - var(--dock-sbw,0px));min-width:0;min-height:44px;box-sizing:border-box;font:600 14px var(--f-body);color:var(--ink);background:color-mix(in srgb,var(--panel-2) 60%,var(--white));border:var(--line-thin) dashed var(--ink);border-radius:14px;padding:7px 12px 7px 8px;cursor:pointer;text-align:left;white-space:nowrap}
 #wNewPlanet .dot{width:28px;height:28px;flex:none;display:grid;place-items:center}
-#wNewPlanet:hover,#wNewPlanet:focus-visible{background:var(--panel-2)}
+#wNewPlanet:focus-visible{background:var(--panel-2)}
+@media (hover:hover){#wNewPlanet:hover{background:var(--panel-2)}}
 #wNewPlanet:active{transform:translateY(2px)}
 #wNewPlanet:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
 /* 행성 목록만 스크롤한다. 안쪽 여백은 그림자 · 포커스 링이 잘리지 않게 */
@@ -250,7 +255,7 @@ body{word-break:keep-all}
 /* 조작 안내: 접히는 줄. 처음엔 펼쳐져 있고 이동 키를 누르면 접힌다 */
 #help{flex:none;margin-top:8px;padding:4px 8px 8px;border-top:2.5px dashed #b7b0e0;font-size:12.5px}
 #helpToggle{width:100%;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:var(--gap-2);border:0;border-radius:10px;background:transparent;color:var(--ink);padding:0 8px;cursor:pointer;text-align:left}
-#helpToggle:hover{background:var(--panel-2)}
+@media (hover:hover){#helpToggle:hover{background:var(--panel-2)}}
 #helpToggle .ht{font-family:var(--f-display);font-weight:400;font-size:14px}
 #helpToggle .i{transition:transform .2s}
 #help.big #helpToggle .i{transform:rotate(180deg)}
@@ -265,7 +270,7 @@ body{word-break:keep-all}
 }
 #sideOpen{display:flex;align-items:center;gap:var(--gap-2);min-height:44px;padding:6px 10px 6px 14px;color:var(--ink);cursor:pointer;box-sizing:border-box}
 #sideOpen .logo{font-family:var(--f-display);font-size:20px;line-height:1}
-#sideOpen:hover{background:var(--panel-2)}
+@media (hover:hover){#sideOpen:hover{background:var(--panel-2)}}
 :is(#sideOpen,#helpToggle):focus-visible{outline:3px solid var(--sky);outline-offset:2px}
 #sideScrim{position:fixed;inset:0;background:rgba(10,6,30,.55)}
 
@@ -357,14 +362,14 @@ body:has(#panel:not([hidden])) #wHint{visibility:hidden}
 #wQ::placeholder{color:var(--mute);font-weight:500}
 #wQ::-webkit-search-cancel-button{display:none}
 #wSearch .qx{flex:none;width:36px;height:36px;border:0;border-radius:50%;background:var(--panel-2);color:var(--ink);display:grid;place-items:center;cursor:pointer}
-#wSearch .qx:hover{background:var(--hair,#d6d1f2)}
+@media (hover:hover){#wSearch .qx:hover{background:var(--hair,#d6d1f2)}}
 #wQClose{display:none}
 body:has(#wResults:not([hidden])) #period{z-index:8}
 #wResults{position:absolute;top:calc(100% + 10px);left:-3px;right:-3px;max-height:min(420px,calc(100dvh - var(--tr-bottom,64px) - 110px));overflow-y:auto;overscroll-behavior:contain;padding:6px;box-sizing:border-box}
 #wResults ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 #wResults li + li{border-top:1.5px solid var(--hair,#d6d1f2)}
 .wsr{display:flex;align-items:flex-start;gap:10px;width:100%;min-height:44px;padding:9px 8px;border:0;border-radius:10px;background:transparent;color:var(--ink);text-align:left;cursor:pointer;font-family:var(--f-body)}
-.wsr:hover{background:var(--panel-2)}
+@media (hover:hover){.wsr:hover{background:var(--panel-2)}}
 .wsr:focus-visible{outline-offset:-3px}
 .wsr .pdot{width:12px;height:12px;border-width:2px;margin-top:4px}
 .wsr .tx{display:flex;flex-direction:column;gap:2px;min-width:0}
@@ -383,7 +388,7 @@ body:has(#wResults:not([hidden])) #period{z-index:8}
 #wSearchBtn{border-radius:50%;width:43px;height:43px}
 #wPeriodBtn{display:none}
 body.wsearch-open #wSearch{display:flex}
-.tbtn:hover{background:var(--panel-2)}
+@media (hover:hover){.tbtn:hover{background:var(--panel-2)}}
 .tbtn[aria-expanded="true"]{background:var(--yellow)}
 @media (max-width:760px){
   /* 로고 옆 한 줄에 아이콘 두 개만. #period 상자가 화면 폭을 다 써도 빈 곳은 누르기를 받지 않는다(로고 버튼을 가리지 않게) */

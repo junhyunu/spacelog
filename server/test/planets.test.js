@@ -66,10 +66,11 @@ test('first planet gets color 1, town, no ring, slot 0', async () => {
   });
 });
 
-test('second planet has a ring', async () => {
+test('new planets get no ring by default (second and third too)', async () => {
   await create();
   const p = await create();
-  expect(p.ring).toBe(true);
+  expect(p.ring).toBe(false);
+  expect((await create()).ring).toBe(false);
   expect(p.deco).toBe('crystal');
   expect(p.color_index).toBe(2);
   expect(p.slot).toBe(1);
@@ -127,7 +128,7 @@ test('POST with explicit look uses it', async () => {
   const q = await create({ name: '반만', deco: 'ice' });
   expect(q.deco).toBe('ice');
   expect(q.color_index).toBe(2);
-  expect(q.ring).toBe(true);
+  expect(q.ring).toBe(false); // 고리는 자동으로 두르지 않는다
 });
 
 test('invalid look → 400 invalid_look', async () => {

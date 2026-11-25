@@ -13,6 +13,7 @@ import './styles/save.css';
 import './styles/chat.css';
 import './styles/account.css';
 import './styles/select.css'; // 선택 상자 화살표: 각 창의 선택 상자 규칙 뒤에 와야 한다
+import './styles/press.css'; // 누르는 순간의 반응: 모든 부품 규칙 뒤에 와야 한다
 
 import { api } from './api.js';
 import { store } from './store.js';
@@ -35,6 +36,9 @@ import { toast } from './ui/toast.js';
 import { enterWorld, isTransitioning, leaveWorld } from './ui/transition.js';
 
 const $ = (id) => document.getElementById(id);
+
+// iOS Safari는 터치 리스너가 하나도 없으면 :active(누르는 순간의 반응, press.css)를 보여 주지 않는다
+addEventListener('touchstart', () => {}, { passive: true });
 
 const OFFLINE_CARD =
   '<span class="eyebrow">연결 끊김</span>' +

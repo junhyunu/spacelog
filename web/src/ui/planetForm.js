@@ -13,6 +13,7 @@ import {
   moveIndex,
   planetFieldError,
   planetGone,
+  planetNameHint,
   planetSaveError,
   planetSavedToast,
   textLength,
@@ -24,7 +25,7 @@ const COLOR_IDS = Object.keys(PLANET_COLORS).map(Number);
 const DECO_IDS = Object.keys(DECO_NAMES);
 const COLOR_COLS = 8;
 const TEXT_MAX = 20;
-const FIELDS = ['pfName', 'pfDesc']; // 글자 수를 세는 칸. 세는 글은 그 칸 바로 뒤의 .cnt
+const FIELDS = ['pfName', 'pfDesc']; // 글자 수를 세는 칸. 세는 글은 그 칸 바로 아래 줄(.under)의 .cnt
 
 let current = null; // { finish(value), planet, look, touched, autoLook, busy }
 let wired = false;
@@ -108,11 +109,21 @@ function buildChoices() {
   for (const id of FIELDS) {
     const input = $(id);
     input.removeAttribute('maxlength');
+    // 칸 아래 한 줄: 왼쪽은 안내(이름 칸만), 오른쪽은 글자 수
+    const under = document.createElement('span');
+    under.className = 'under';
     const cnt = document.createElement('span');
     cnt.className = 'cnt';
     cnt.setAttribute('aria-hidden', 'true'); // 넘으면 #pfErr(role="alert")가 알린다
-    input.after(cnt);
+    under.append(cnt);
+    input.after(under);
   }
+  // 이름이 비어 있을 때의 흐린 안내(만들기가 잠긴 까닭). 화면 읽기 프로그램은 이름 칸의 설명으로 읽는다
+  const hint = document.createElement('span');
+  hint.className = 'hint';
+  hint.id = 'pfNameHint';
+  $('pfName').nextElementSibling.prepend(hint);
+  $('pfName').setAttribute('aria-describedby', 'pfNameHint');
   $('pfColors').innerHTML = COLOR_IDS.map(
     (i) =>
       `<button type="button" class="sw" role="radio" aria-checked="false" tabindex="-1" data-color="${i}" aria-label="${esc(PLANET_COLORS[i].name)}" title="${esc(PLANET_COLORS[i].name)}"><span style="background:${PLANET_COLORS[i].face}"></span></button>`,
@@ -149,7 +160,7 @@ function paintCounts() {
   for (const id of FIELDS) {
     const input = $(id);
     const over = textLength(input.value) > TEXT_MAX;
-    const cnt = input.nextElementSibling;
+    const cnt = input.nextElementSibling.querySelector('.cnt');
     cnt.textContent = counterText(input.value, TEXT_MAX);
     cnt.classList.toggle('over', over);
     if (over) input.setAttribute('aria-invalid', 'true');
@@ -159,6 +170,7 @@ function paintCounts() {
 
 function onTyped() {
   paintCounts();
+  $('pfNameHint').textContent = current ? planetNameHint($('pfName').value, Boolean(current.planet)) : '';
   showError(planetFieldError(values()));
   paintSubmit();
 }

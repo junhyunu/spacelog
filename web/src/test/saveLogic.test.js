@@ -8,6 +8,7 @@ import {
   autoTitle,
   badLinks,
   canSubmit,
+  saveBlockHint,
   clampPlanetName,
   classifyDrop,
   classifyPaste,
@@ -187,6 +188,21 @@ test('urlError · httpUrl', () => {
   expect(httpUrl(' https://a.com/x ')).toBe('https://a.com/x');
   expect(httpUrl('naver.com')).toBeNull();
   expect(httpUrl(null)).toBeNull();
+});
+
+describe('saveBlockHint', () => {
+  test('says why 별 띄우기 is locked, one reason at a time', () => {
+    expect(saveBlockHint({ text: '  \n', count: 0, planetId: '1' })).toBe('메모를 쓰거나 파일·링크를 넣으면 띄울 수 있어요');
+    expect(saveBlockHint({ text: '', count: 0, planetId: 'new', newPlanetName: '' })).toBe('메모를 쓰거나 파일·링크를 넣으면 띄울 수 있어요');
+    expect(saveBlockHint({ text: '글', planetId: 'new', newPlanetName: '  ' })).toBe('새 행성 이름을 적으면 띄울 수 있어요');
+    expect(saveBlockHint({ text: '', count: 1, planetId: 'new', newPlanetName: '' })).toBe('새 행성 이름을 적으면 띄울 수 있어요');
+  });
+  test('empty when it can be sent, or when an over-limit error already explains it', () => {
+    expect(saveBlockHint({ text: '글', planetId: '1' })).toBe('');
+    expect(saveBlockHint({ text: '', count: 2, planetId: 'new', newPlanetName: '운동' })).toBe('');
+    expect(saveBlockHint({ text: '', count: 51, planetId: '1' })).toBe('');
+    expect(saveBlockHint({ text: '가'.repeat(20001), planetId: '1' })).toBe('');
+  });
 });
 
 describe('canSubmit', () => {

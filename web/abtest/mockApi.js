@@ -137,7 +137,7 @@ export const api = {
   },
   nextLook: () => {
     const n = state().planets.length;
-    return later({ color_index: (n % COLOR_COUNT) + 1, deco: DECOS[n % DECOS.length], ring: n % 3 === 1 });
+    return later({ color_index: (n % COLOR_COUNT) + 1, deco: DECOS[n % DECOS.length], ring: false }); // 고리는 자동으로 두르지 않는다(서버와 같다)
   },
   createPlanet: ({ name, description, color_index, deco, ring } = {}) => {
     const st = state();

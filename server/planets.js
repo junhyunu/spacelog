@@ -60,9 +60,9 @@ function getSeq(db) {
   return Number.isInteger(n) && n >= 0 ? n : 0;
 }
 
-// n 번째(0부터)로 만드는 행성의 자동 배정 모습.
+// n 번째(0부터)로 만드는 행성의 자동 배정 모습. 고리는 자동으로 두르지 않는다(사용자가 "고리 두르기"로 고른다).
 function lookFor(n) {
-  return { color_index: (n % COLOR_COUNT) + 1, deco: DECOS[n % DECOS.length], ring: n % 3 === 1 };
+  return { color_index: (n % COLOR_COUNT) + 1, deco: DECOS[n % DECOS.length], ring: false };
 }
 
 function lowestFreeSlot(db) {

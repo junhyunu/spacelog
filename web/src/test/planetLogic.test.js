@@ -11,6 +11,7 @@ import {
   mergeFailure,
   planetFieldError,
   planetGone,
+  planetNameHint,
   textLength,
   deleteMode,
   deleteRequest,
@@ -121,6 +122,13 @@ describe('planet form', () => {
     expect(planetFieldError({ name: '', description: '' })).toBe('');
     expect(planetFieldError({ name: '가'.repeat(21) })).toBe('이름은 20자까지 쓸 수 있어요');
     expect(planetFieldError({ name: '공부', description: '가'.repeat(21) })).toBe('설명은 20자까지 쓸 수 있어요');
+  });
+  test('planetNameHint: only while the name is empty', () => {
+    expect(planetNameHint('')).toBe('이름을 적으면 만들 수 있어요');
+    expect(planetNameHint(' ​ ')).toBe('이름을 적으면 만들 수 있어요'); // 공백 · 보이지 않는 글자만이면 빈 것
+    expect(planetNameHint('', true)).toBe('이름을 적으면 저장할 수 있어요');
+    expect(planetNameHint('공부')).toBe('');
+    expect(planetNameHint('가'.repeat(21))).toBe(''); // 넘친 것은 빨간 오류(planetFieldError)가 맡는다
   });
   test('planetSaveError', () => {
     expect(planetSaveError({ status: 400, code: 'invalid_name' })).toBe('이름은 1~20자로 써 주세요');
