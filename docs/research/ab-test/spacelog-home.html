@@ -97,7 +97,14 @@ svg.i{flex:none}
 .range input{font:500 12px var(--f-mono);height:44px;margin:-9px 0;border:solid transparent;border-width:9px 0;border-radius:8px/17px;background:var(--white) padding-box;box-shadow:inset 0 0 0 2px var(--ink);padding:3px 7px;color:var(--ink);color-scheme:light}
 
 /* 행성별로 묶기 스위치 */
-.gsw{display:flex;align-items:center;gap:8px;min-height:44px;padding:5px 14px 5px 8px;font:700 13px var(--f-body);cursor:pointer;white-space:nowrap}
+#swBox{display:flex;align-items:center;padding:0 4px}
+.gsw{display:flex;align-items:center;gap:8px;min-height:44px;padding:5px 10px 5px 6px;border:0;background:transparent;color:var(--ink);font:700 13px var(--f-body);cursor:pointer;white-space:nowrap;border-radius:12px}
+.gsw:hover{background:var(--panel-2)}
+.gsw .star{flex:none;margin-right:-3px}
+.gsw[aria-checked="true"] .star{fill:var(--yellow)}
+/* 두 스위치가 다 보일 때만 사이에 세로 줄 */
+#groupSw:not([hidden]) + #favSw{position:relative;margin-left:9px}
+#groupSw:not([hidden]) + #favSw::before{content:"";position:absolute;left:-6px;top:10px;bottom:10px;border-left:1.5px solid var(--hair)}
 .gsw .track{width:40px;height:24px;border-radius:999px;border:var(--line-thin) solid var(--ink);background:var(--panel-2);display:flex;align-items:center;padding:2px;transition:background .12s}
 .gsw .knob{width:15px;height:15px;border-radius:50%;background:var(--ink);transition:transform .12s}
 .gsw[aria-checked="true"] .track{background:var(--yellow)}
@@ -105,11 +112,14 @@ svg.i{flex:none}
 
 /* 목록 머리 */
 .lhead{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px}
-.lhead h2{margin:0;font-family:var(--f-display);font-weight:400;font-size:22px;text-shadow:0 2px 0 var(--ink)}
+/* 스위치 덩어리 · 기간 바: 같은 높이(50px = 44px 줄 + 테두리 3px × 2) */
+#swBox,#period{min-height:50px}
+/* 목록 카드 맨 위 개수 */
+.tcount{margin:0;padding:14px 4px 2px;font-family:var(--f-display);font-weight:400;font-size:19px;line-height:1.2;color:var(--ink)}
 
 /* 별 목록: 바깥 카드만 굵은 테두리, 행 사이는 얇은 선 */
 #table{padding:4px 16px 8px;overflow:hidden}
-.row{display:grid;grid-template-columns:minmax(0,1fr) 200px 132px 76px 62px;align-items:center;gap:12px;padding:10px 4px;border-top:1.5px solid var(--hair);min-height:64px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 190px minmax(0,.75fr) 84px;align-items:center;gap:12px;padding:10px 4px;border-top:1.5px solid var(--hair);min-height:64px}
 .row.th{min-height:0;padding:12px 4px 10px;border-top:0;font-size:12px;font-weight:700;color:var(--mute)}
 .ttl{display:flex;align-items:center;gap:12px;min-width:0;border:0;background:transparent;padding:4px;margin:-4px;border-radius:10px;color:var(--ink);cursor:pointer;text-align:left;font-family:var(--f-body)}
 .ttl:hover .n{text-decoration:underline;text-underline-offset:3px}
@@ -124,11 +134,13 @@ svg.i{flex:none}
 .fav:hover{background:var(--panel-2)}
 .fav[aria-pressed="true"]{color:var(--ink)}
 .fav[aria-pressed="true"] svg{fill:var(--yellow)}
-.why{justify-self:start;max-width:100%;min-height:30px;padding:0 10px;border:1.5px dashed #a9a3cc;border-radius:999px;background:transparent;font:600 12.5px var(--f-body);color:#8a84b0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.why.has{border:1.5px solid var(--ink);background:var(--white);color:var(--ink)}
-.why:hover{background:var(--panel-2)}
 .dt{font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
-.ago{font-size:13px;color:var(--mute);white-space:nowrap}
+/* 메모 열: 메모 첫 줄만 흐리게. 메모가 없으면 비워 둔다 */
+/* 자주 찾음만 보는 중에 별표를 끈 행: 바로 빼지 않고 흐리게 남긴다(잘못 눌렀으면 다시 켜면 된다) */
+.row.dim > :not(.c-pl){opacity:.45}
+.row.dim .pl > :not(.fav){opacity:.45}
+.memo{min-width:0;font-size:13px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row > .c-dt{text-align:right}
 .grp{display:flex;align-items:center;gap:8px;padding:16px 4px 8px;font-family:var(--f-display);font-size:15px}
 .grp .dot{width:16px;height:16px;border-radius:50%;border:var(--line-thin) solid var(--ink)}
 .grp .n{font-size:12px;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px}
@@ -138,14 +150,34 @@ svg.i{flex:none}
 .empty p{margin:0 0 14px;font-size:13.5px;line-height:1.6;color:var(--mute)}
 
 /* ---------- 별 상세(오른쪽에서 열린다) ---------- */
-#detail{position:fixed;z-index:30;top:calc(var(--top-h) + 12px);right:14px;bottom:16px;width:min(380px,calc(100vw - 28px));display:flex;flex-direction:column;overflow:hidden;animation:pop .2s cubic-bezier(.3,1.4,.6,1)}
-@keyframes pop{from{transform:scale(.96);opacity:0}}
-#detail header{display:flex;gap:12px;align-items:flex-start;padding:16px 16px 12px;border-bottom:var(--line) solid var(--ink)}
-#detail h3{margin:0;font-size:18px;line-height:1.35;overflow-wrap:anywhere}
-#detail .body{flex:1;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
-#detail dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13.5px}
-#detail dt{color:var(--mute);font-weight:700}
-#detail dd{margin:0}
+/* ---------- 별 상세: 목록 자리에 펼쳐진다(저쪽 시안과 같은 구조) ---------- */
+#detail{padding:14px 18px 18px;display:flex;flex-direction:column;gap:14px}
+.dtop{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pager{display:flex;align-items:center;gap:6px;font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+.pager .btn{width:40px;height:40px;min-height:0;padding:0}
+.pager .btn:disabled{opacity:.35;cursor:default;transform:none;box-shadow:0 4px 0 var(--ink)}
+.pager span{min-width:52px;text-align:center}
+.pvw{display:flex;flex-direction:column;align-items:center;gap:6px;padding:28px 16px;border-radius:12px;background:var(--panel-2);border:var(--line-thin) solid var(--ink);text-align:center}
+.pvw .ic{width:60px;height:60px;border-radius:14px;border:var(--line) solid var(--ink);background:var(--white);display:grid;place-items:center;margin-bottom:4px}
+.pvw b{font-size:16px;overflow-wrap:anywhere}
+.pvw small{font-size:13px;color:var(--mute)}
+#detail h3{margin:2px 0 0;font-family:var(--f-display);font-weight:400;font-size:24px;line-height:1.25;overflow-wrap:anywhere}
+.dmeta{margin:-8px 0 0;font-size:13.5px;color:var(--mute)}
+.dacts{display:flex;flex-wrap:wrap;gap:10px}
+.fld .lblrow{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.fld .lblrow small{font-size:12px;color:var(--mute)}
+.notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.notes li{background:var(--white);border:1.5px solid var(--hair);border-radius:10px;padding:8px 10px;font-size:14px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
+.notes time{display:block;margin-top:2px;font-size:11.5px;color:var(--mute)}
+.nsave{align-self:flex-end}
+.nsave:disabled{opacity:.45;cursor:default;transform:none;box-shadow:0 4px 0 var(--ink)}
+.pmove{position:relative;align-self:flex-start;display:flex;align-items:center;gap:8px;min-height:46px;padding:0 14px;border:var(--line-thin) solid var(--ink);border-radius:999px;background:var(--white);font-size:14.5px;max-width:100%}
+.pmove .dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--ink);flex:none}
+.pmove b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pmove .mv{font-size:12.5px;color:var(--mute);font-weight:600}
+.pmove select{position:absolute;inset:0;width:100%;opacity:0;cursor:pointer}
+.pmove:has(select:focus-visible){outline:3px solid var(--sky);outline-offset:2px}
+.dhint{margin:-6px 0 0;font-size:12.5px;color:var(--mute)}
 .fld{display:flex;flex-direction:column;gap:6px;min-width:0}
 .fld .lbl{font-size:13px;font-weight:700}
 .fld :is(input,textarea,select){font:500 14px/1.55 var(--f-body);border:var(--line-thin) solid var(--ink);border-radius:10px;padding:8px 10px;min-height:44px;background:var(--white);color:var(--ink);width:100%;color-scheme:light}
@@ -168,8 +200,8 @@ svg.i{flex:none}
 #toast{position:fixed;z-index:50;left:50%;bottom:22px;transform:translateX(-50%);padding:9px 16px;background:var(--yellow);font-weight:700;font-size:14px;line-height:1.45;text-align:center;width:max-content;max-width:min(560px,92vw);pointer-events:none}
 
 @media (max-width:900px){
-  .row{grid-template-columns:minmax(0,1fr) 170px 76px}
-  .row > .c-why,.row > .c-ago{display:none}
+  .row{grid-template-columns:minmax(0,1fr) 170px 84px}
+  .row > .c-memo{display:none}
 }
 @media (max-width:760px){
   :root{--top-h:64px}
@@ -200,7 +232,8 @@ svg.i{flex:none}
   .row > .c-dt{display:none}
   .pl .dot,.pl .t{display:none}
   .row.th .c-pl{visibility:hidden}
-  #detail{top:auto;left:10px;right:10px;bottom:10px;width:auto;height:min(72dvh,560px)}
+  #detail{padding:12px 12px 16px}
+  .pvw{padding:20px 12px}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
@@ -213,7 +246,7 @@ svg.i{flex:none}
     <div class="logo card">space<span>Log</span></div>
     <div class="acts">
       <!-- 블랙홀이 화면 밖으로 나가면 나타난다 -->
-      <button type="button" class="btn violet" id="topEnter" data-act="enter" hidden><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M3 12c0-3 4-5 9-5s9 2 9 5-4 5-9 5-9-2-9-5Z"/></svg><span class="lt">우주로 들어가기</span></button>
+      <button type="button" class="btn violet" id="topEnter" data-act="enter" hidden><!-- 토성: 노란 공 + 기울어진 고리(뒤쪽 고리는 공에 가려지고 앞쪽 고리만 공 위로 지나간다) --><svg class="i" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(-20 12 12)"><ellipse cx="12" cy="12" rx="10.5" ry="3.6"/><circle cx="12" cy="12" r="6.3" fill="#ffd23f"/><path d="M1.5 12a10.5 3.6 0 0 0 21 0"/></g></svg><span class="lt">우주로 들어가기</span></button>
       <button type="button" class="btn" data-act="log"><svg class="i opt" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>기록하기</button>
       <button type="button" class="btn ghost" data-act="logout">로그아웃</button>
       <button type="button" class="btn ghost sq" data-act="me" aria-label="계정 설정" title="계정 설정"><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg></button>
@@ -247,9 +280,12 @@ svg.i{flex:none}
     <section aria-label="별 목록">
       <div class="lhead">
         <button type="button" class="btn ghost sm" id="sideOpen" hidden>행성 목록 펼치기</button>
-        <h2 id="count"></h2>
         <!-- 왼쪽에서 "전체 보기"를 골랐을 때만 보인다. 행성 하나를 고르면 묶을 것이 없어 숨는다(켜 둔 상태는 기억한다) -->
-        <button type="button" class="gsw card" id="groupSw" role="switch" aria-checked="false"><span class="track" aria-hidden="true"><span class="knob"></span></span>행성별로 묶기</button>
+        <div class="card" id="swBox">
+          <button type="button" class="gsw" id="groupSw" role="switch" aria-checked="false"><span class="track" aria-hidden="true"><span class="knob"></span></span>행성별로 묶기</button>
+          <!-- 자주 찾음만: 행성을 골라도 남는다. 묶기 스위치가 숨으면 이 덩어리가 그만큼 줄어든다 -->
+          <button type="button" class="gsw" id="favSw" role="switch" aria-checked="false"><span class="track" aria-hidden="true"><span class="knob"></span></span><svg class="i star" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>자주 찾음만</button>
+        </div>
         <!-- 기간 바: 우주 안 오른쪽 위의 기간 바(#period .pbar)와 같은 모양 · 같은 순서 -->
         <div class="pbar card" id="period">
           <div class="seg" id="pSeg" role="group" aria-label="기간 선택"><button type="button" data-p="all">전체</button><button type="button" data-p="today">오늘</button><button type="button" data-p="week">이번 주</button><button type="button" data-p="custom">직접 지정</button></div>
@@ -258,11 +294,12 @@ svg.i{flex:none}
       </div>
 
       <div id="table" class="card"></div>
+      <!-- 별 상세: 목록을 누르면 목록 자리에 펼쳐진다. 왼쪽 패널 · 기간 바는 그대로 -->
+      <section id="detail" class="card" aria-label="별 상세" hidden></section>
     </section>
   </main>
 </div>
 
-<aside id="detail" class="card" aria-label="별 상세" hidden></aside>
 <div id="modal" hidden></div>
 <div id="toast" class="card" role="status" aria-live="polite" hidden></div>
 
@@ -281,22 +318,24 @@ let planets = [
   { id: 'p7', name: '분류 안 된 기록', color: COLORS[6] },
 ];
 let stars = [
-  { id: 's1', title: 'workouts.csv', kind: 'csv', size: '30행', planet: 'p6', fav: false, why: '', at: at(9, 5) },
-  { id: 's2', title: '탐사선 아이콘 아이디어', kind: 'text', size: '90자', planet: 'p3', fav: false, why: '', at: at(9, 2) },
-  { id: 's3', title: 'songs.csv', kind: 'csv', size: '20행', planet: 'p6', fav: false, why: '', at: at(8, 58) },
-  { id: 's4', title: 'movies.csv', kind: 'csv', size: '24행', planet: 'p6', fav: false, why: '', at: at(8, 51) },
-  { id: 's5', title: 'PRD 2차 의견', kind: 'text', size: '520자', planet: 'p1', fav: false, why: '', at: at(8, 44) },
-  { id: 's6', title: 'classes.csv', kind: 'csv', size: '60행', planet: 'p6', fav: false, why: '', at: at(8, 40) },
-  { id: 's7', title: 'cafes.csv', kind: 'csv', size: '24행', planet: 'p6', fav: true, why: '', at: at(8, 33) },
-  { id: 's8', title: '알림 정책 초안', kind: 'text', size: '230자', planet: 'p1', fav: true, why: '', at: at(8, 21) },
-  { id: 's9', title: 'books.csv', kind: 'csv', size: '24행', planet: 'p6', fav: true, why: '', at: at(8, 12) },
-  { id: 's10', title: '지하철에서 떠오른 생각', kind: 'text', size: '38자', planet: 'p7', fav: false, why: '', at: at(7, 48) },
-  { id: 's11', title: '「AI와 일하는 법」 밑줄', kind: 'text', size: '150자', planet: 'p2', fav: false, why: '', at: at(7, 30) },
-].map((s) => ({ memo: '', ...s }));
+  { id: 's1', title: 'workouts.csv', kind: 'csv', size: '30행', planet: 'p6', fav: false, at: at(9, 5) },
+  { id: 's2', title: '탐사선 아이콘 아이디어', kind: 'text', size: '90자', planet: 'p3', fav: false, at: at(9, 2) },
+  { id: 's3', title: 'songs.csv', kind: 'csv', size: '20행', planet: 'p6', fav: false, at: at(8, 58) },
+  { id: 's4', title: 'movies.csv', kind: 'csv', size: '24행', planet: 'p6', fav: false, at: at(8, 51) },
+  { id: 's5', title: 'PRD 2차 의견', kind: 'text', size: '520자', planet: 'p1', fav: false, at: at(8, 44) },
+  { id: 's6', title: 'classes.csv', kind: 'csv', size: '60행', planet: 'p6', fav: false, at: at(8, 40) },
+  { id: 's7', title: 'cafes.csv', kind: 'csv', size: '24행', planet: 'p6', fav: true, at: at(8, 33) },
+  { id: 's8', title: '알림 정책 초안', kind: 'text', size: '230자', planet: 'p1', fav: true, at: at(8, 21) },
+  { id: 's9', title: 'books.csv', kind: 'csv', size: '24행', planet: 'p6', fav: true, at: at(8, 12) },
+  { id: 's10', title: '지하철에서 떠오른 생각', kind: 'text', size: '38자', planet: 'p7', fav: false, at: at(7, 48) },
+  { id: 's11', title: '「AI와 일하는 법」 밑줄', kind: 'text', size: '150자', planet: 'p2', fav: false, at: at(7, 30) },
+].map((s) => ({ memo: '', notes: [], ...s }));
 
 /* ================= 상태 ================= */
-const S = { planet: 'all', group: false, period: 'today', from: '', to: '', detail: null };
+const S = { planet: 'all', group: false, fav: false, period: 'today', from: '', to: '', detail: null };
+const keep = new Set(); // 자주 찾음만 보는 중에 별표를 끈 별: 다음에 거르기가 바뀔 때까지 흐리게 남긴다
 let seq = 100;
+let backY = 0; // 상세를 열기 전 스크롤 위치(목록으로 돌아올 때 되돌린다)
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -307,6 +346,10 @@ const IC = {
   star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  left: '<path d="m15 18-6-6 6-6"/>',
+  right: '<path d="m9 18 6-6-6-6"/>',
+  back: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  chev: '<path d="m6 9 6 6 6-6"/>',
   layers: '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="m2 12 8.58 3.91a2 2 0 0 0 1.66 0L21 12"/><path d="m2 17 8.58 3.91a2 2 0 0 0 1.66 0L21 17"/>',
 };
 const ico = (n, z = 18) => `<svg class="i" width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
@@ -331,16 +374,27 @@ function range() {
 }
 const PERIOD_LABEL = { today: '오늘 별', week: '이번 주 별', all: '전체 별', custom: '이 기간 별' };
 const inPeriod = () => { const r = range(); return stars.filter((s) => !r.from || (s.at >= r.from && s.at < r.to)); };
-const visible = () => inPeriod().filter((s) => S.planet === 'all' || s.planet === S.planet);
+const visible = () =>
+  inPeriod().filter((s) => (S.planet === 'all' || s.planet === S.planet) && (!S.fav || s.fav || keep.has(s.id)));
+/** 거르기(행성 · 기간 · 묶기 · 자주 찾음)가 바뀔 때: 흐리게 남겨 둔 별을 이제 뺀다. */
+const refilter = () => { keep.clear(); render(); };
 function ago(d) {
   const n = Math.round((day0(NOW) - day0(d)) / 864e5);
   return n <= 0 ? '오늘' : n === 1 ? '어제' : `${n}일 전`;
 }
 
 /* ================= 그리기 ================= */
+/** 목록에 보이는 순서 그대로(행성별로 묶으면 행성 순서 → 최신순). 상세의 1 / N도 이 순서를 쓴다. */
+function ordered() {
+  const list = visible().sort((a, b) => b.at - a.at);
+  if (!(S.group && S.planet === 'all')) return list;
+  return planets.flatMap((p) => list.filter((s) => s.planet === p.id));
+}
+
 function render() {
   const per = inPeriod();
-  const list = visible().sort((a, b) => b.at - a.at);
+  const list = ordered();
+  if (S.detail && !list.some((s) => s.id === S.detail)) S.detail = null; // 보던 별이 목록에서 빠지면 목록으로
 
   // 인사말(오늘 기준)
   const t0 = day0(NOW), todayN = stars.filter((s) => s.at >= t0).length;
@@ -361,28 +415,35 @@ function render() {
   for (const b of $('pSeg').children) b.setAttribute('aria-pressed', String(b.dataset.p === S.period));
   $('range').hidden = S.period !== 'custom';
   $('groupSw').hidden = S.planet !== 'all';
+  $('swBox').hidden = Boolean(S.detail);
+  $('table').hidden = Boolean(S.detail);
   $('groupSw').setAttribute('aria-checked', String(S.group));
+  $('favSw').setAttribute('aria-checked', String(S.fav));
 
   // 목록 머리
   const where = S.planet === 'all' ? '' : `${P(S.planet)?.name ?? ''} · `;
-  $('count').textContent = `${where}별 ${list.length}개`;
+  const countHtml = `<h2 class="tcount" aria-live="polite">${esc(where)}별 ${list.filter((s) => !S.fav || s.fav).length}개</h2>`;
   // 목록
   const head =
-    '<div class="row th"><span>제목 · 종류</span><span class="c-pl">행성 · 자주 찾음</span><span class="c-why">저장 이유</span><span class="c-dt">넣은 날</span><span class="c-ago">지난 날</span></div>';
+    '<div class="row th"><span>제목 · 종류</span><span class="c-pl">행성 · 자주 찾음</span><span class="c-memo">메모</span><span class="c-dt">넣은 날</span></div>';
   const row = (s) => {
     const p = P(s.planet);
     const kind = s.kind === 'csv' ? 'CSV' : '텍스트';
     return (
-      `<div class="row" data-id="${s.id}">` +
+      `<div class="row${S.fav && !s.fav ? ' dim' : ''}" data-id="${s.id}">` +
       `<button type="button" class="ttl" data-a="open"><span class="ic">${ico(s.kind, 18)}</span><span class="tx"><span class="n">${esc(s.title)}</span><span class="k">${kind} · ${esc(s.size)}</span></span></button>` +
       `<span class="pl c-pl"><span class="dot" style="background:${p?.color}"></span><span class="t">${esc(p?.name)}</span>` +
       `<button type="button" class="fav" data-a="fav" aria-pressed="${s.fav}" aria-label="자주 찾음" title="자주 찾음">${ico('star', 18)}</button></span>` +
-      `<span class="c-why"><button type="button" class="why${s.why ? ' has' : ''}" data-a="why" title="저장 이유 적기">${esc(s.why || '이유 없음')}</button></span>` +
-      `<span class="dt c-dt">${md(s.at)}</span><span class="ago c-ago">${ago(s.at)}</span></div>`
+      `<span class="memo c-memo"${s.memo.trim() ? ` title="${esc(s.memo.trim())}"` : ''}>${esc(s.memo.trim().split('\n')[0])}</span>` +
+      `<span class="dt c-dt">${md(s.at)}</span></div>`
     );
   };
   let body;
-  if (!list.length) {
+  if (!list.length && S.fav) {
+    body =
+      '<div class="empty"><b>자주 찾음으로 표시한 별이 없어요</b><p>목록의 ☆을 눌러 표시해 보세요.</p>' +
+      '<button type="button" class="btn ghost sm" data-act="favOff">자주 찾음만 끄기</button></div>';
+  } else if (!list.length) {
     body =
       '<div class="empty"><b>이 기간에는 별이 없어요</b><p>기간을 넓히거나 다른 행성을 골라 보세요.</p>' +
       '<button type="button" class="btn ghost sm" data-act="resetFilter">전체 기간 · 전체 보기로</button></div>';
@@ -393,7 +454,7 @@ function render() {
       .map(([p, l]) => `<div class="grp"><span class="dot" style="background:${p.color}"></span>${esc(p.name)}<span class="n">${l.length}</span></div>` + l.map(row).join(''))
       .join('');
   } else body = list.map(row).join('');
-  $('table').innerHTML = (list.length ? head : '') + body;
+  $('table').innerHTML = countHtml + (list.length ? head : '') + body;
 
   renderDetail();
 }
@@ -401,20 +462,56 @@ function render() {
 function renderDetail() {
   const el = $('detail');
   const s = stars.find((x) => x.id === S.detail);
-  if (!s) { el.hidden = true; S.detail = null; return; }
-  if (!el.hidden && el.dataset.id === s.id && el.contains(document.activeElement) && document.activeElement.matches('textarea,input')) return; // 쓰는 중이면 다시 그리지 않는다
-  const p = P(s.planet);
-  el.dataset.id = s.id;
+  if (!s) { el.hidden = true; el.textContent = ''; return; }
+  const list = ordered(), i = list.findIndex((x) => x.id === s.id);
+  const p = P(s.planet), file = s.kind === 'csv';
+  const kind = file ? 'CSV' : '텍스트';
+  const hm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   el.innerHTML =
-    `<header><div style="flex:1;min-width:0"><div class="pl" style="margin-bottom:4px"><span class="dot" style="background:${p?.color}"></span><span class="t">${esc(p?.name)}</span></div><h3>${esc(s.title)}</h3></div>` +
-    `<button type="button" class="btn ghost xbtn" data-d="close" aria-label="닫기">${ico('x')}</button></header>` +
-    '<div class="body">' +
-    `<dl><dt>종류</dt><dd>${s.kind === 'csv' ? 'CSV' : '텍스트'} · ${esc(s.size)}</dd><dt>넣은 날짜</dt><dd>${md(s.at)} (${ago(s.at)})</dd></dl>` +
-    `<label class="fld"><span class="lbl">저장 이유</span><input type="text" data-d="why" maxlength="40" value="${esc(s.why)}" placeholder="왜 남겨 뒀는지 한 줄로"></label>` +
-    `<label class="fld"><span class="lbl">메모</span><textarea rows="4" data-d="memo" placeholder="이 별에 남길 말">${esc(s.memo)}</textarea><small>입력을 멈추면 저장돼요</small></label>` +
-    `<label class="fld"><span class="lbl">행성 옮기기</span><select data-d="move">${planets.map((q) => `<option value="${q.id}"${q.id === s.planet ? ' selected' : ''}>${esc(q.name)}</option>`).join('')}</select></label>` +
-    '<button type="button" class="linkdel" data-d="del">이 별 지우기</button></div>';
+    '<div class="dtop">' +
+    `<button type="button" class="btn ghost sm" data-d="back">${ico('back', 16)}목록으로</button>` +
+    `<div class="pager"><button type="button" class="btn ghost" data-d="prev" aria-label="이전 기록"${i <= 0 ? ' disabled' : ''}>${ico('left')}</button>` +
+    `<span aria-live="polite">${i + 1} / ${list.length}</span>` +
+    `<button type="button" class="btn ghost" data-d="next" aria-label="다음 기록"${i >= list.length - 1 ? ' disabled' : ''}>${ico('right')}</button></div></div>` +
+    `<div class="pvw"><span class="ic">${ico(s.kind, 30)}</span><b>${esc(s.title)}</b>` +
+    `<small>${kind} · ${esc(s.size)} · ${file ? '원본은 내 PC 보관함에 있어요' : '글은 이 기록 안에 있어요'}</small></div>` +
+    `<h3>${esc(s.title)}</h3>` +
+    `<p class="dmeta">${file ? '파일' : '글'} · ${kind} · ${esc(s.size)} · ${md(s.at)} 넣음</p>` +
+    (file ? '<div class="dacts"><button type="button" class="btn ghost" data-d="openFile">원본 열기</button><button type="button" class="btn ghost" data-d="folder">폴더에서 보기</button></div>' : '') +
+    `<label class="fld"><span class="lblrow"><span class="lbl">메모</span><small>자동 저장</small></span><textarea rows="4" data-d="memo" placeholder="이 기록에 대한 메모를 남겨 보세요">${esc(s.memo)}</textarea></label>` +
+    '<div class="fld"><span class="lbl" id="noteLbl">덧붙인 기록</span>' +
+    (s.notes.length ? `<ul class="notes">${s.notes.map((n) => `<li>${esc(n.text)}<time>${md(n.at)} ${hm(n.at)}</time></li>`).join('')}</ul>` : '') +
+    '<textarea rows="3" data-d="note" aria-labelledby="noteLbl" placeholder="이 기록에 생각을 덧붙여 보세요 · Enter로 저장, Shift+Enter 줄바꿈"></textarea>' +
+    '<button type="button" class="btn nsave" data-d="noteSave" disabled>저장하기</button></div>' +
+    '<div class="fld"><span class="lbl">행성</span>' +
+    `<span class="pmove"><span class="dot" style="background:${p?.color}"></span><b>${esc(p?.name)}</b><span class="mv">옮기기</span>${ico('chev', 16)}` +
+    `<select data-d="move" aria-label="행성 옮기기">${planetOptions(s.planet)}</select></span></div>` +
+    '<p class="dhint">옮기면 우주에서도 기록이 그 행성으로 이동해요.</p>' +
+    '<button type="button" class="linkdel" data-d="del">이 별 지우기</button>';
   el.hidden = false;
+}
+
+/** 상세 위쪽(기간 바가 있는 줄)이 고정 상단 바 바로 아래에 오게 스크롤한다. */
+function scrollToDetail() {
+  const y = document.querySelector('.lhead').getBoundingClientRect().top + scrollY - $('top').offsetHeight - 8;
+  scrollTo({ top: Math.max(0, y) });
+}
+function openDetail(id) {
+  if (!S.detail) backY = scrollY;
+  S.detail = id; render(); scrollToDetail();
+}
+function closeDetail() {
+  const id = S.detail;
+  S.detail = null; render();
+  scrollTo({ top: backY });
+  $('table').querySelector(`[data-id="${id}"] .ttl`)?.focus({ preventScroll: true });
+}
+function stepDetail(d) {
+  const list = ordered(), i = list.findIndex((x) => x.id === S.detail), n = list[i + d];
+  if (!n) return;
+  S.detail = n.id; render(); scrollToDetail();
+  const b = $('detail').querySelector(d < 0 ? '[data-d=prev]' : '[data-d=next]');
+  (b && !b.disabled ? b : $('detail').querySelector('[data-d=back]')).focus({ preventScroll: true });
 }
 
 /* ================= 창 · 토스트 ================= */
@@ -450,9 +547,12 @@ $('modal').addEventListener('keydown', (e) => {
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 });
 addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  if (!$('modal').hidden) closeModal();
-  else if (S.detail) { S.detail = null; render(); }
+  if (!$('modal').hidden) { if (e.key === 'Escape') closeModal(); return; }
+  if (!S.detail) return;
+  if (e.key === 'Escape') closeDetail();
+  else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.target.closest?.('input,textarea,select')) {
+    e.preventDefault(); stepDetail(e.key === 'ArrowLeft' ? -1 : 1);
+  }
 });
 
 const planetOptions = (cur) => planets.map((p) => `<option value="${p.id}"${p.id === cur ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
@@ -467,7 +567,7 @@ function openLog() {
       const memo = f.memo.value.trim();
       const title = f.title.value.trim() || memo.split('\n')[0].slice(0, 40);
       if (!title) { toast('제목이나 메모를 적어 주세요'); return false; }
-      stars.push({ id: `s${++seq}`, title, kind: 'text', size: `${[...memo].length}자`, planet: f.planet.value, fav: false, why: '', memo, at: new Date() });
+      stars.push({ id: `s${++seq}`, title, kind: 'text', size: `${[...memo].length}자`, planet: f.planet.value, fav: false, memo, notes: [], at: new Date() });
       render(); toast('별을 띄웠어요');
     },
   });
@@ -487,13 +587,6 @@ function openNewPlanet() {
     },
   });
 }
-function openWhy(s) {
-  modal({
-    title: '저장 이유', desc: `「${s.title}」을 왜 남겨 뒀는지 한 줄로 적어요.`, ok: '저장하기',
-    fields: `<label class="fld"><span class="lbl">이유</span><input type="text" name="why" maxlength="40" autocomplete="off" value="${esc(s.why)}" placeholder="비워 두면 이유 없음"></label>`,
-    onOk(f) { s.why = f.why.value.trim(); render(); },
-  });
-}
 function askDelete(ids) {
   const one = ids.length === 1 ? stars.find((s) => s.id === ids[0]) : null;
   modal({
@@ -502,8 +595,9 @@ function askDelete(ids) {
     ok: '지우기', kind: 'pink',
     onOk() {
       stars = stars.filter((s) => !ids.includes(s.id));
-      if (ids.includes(S.detail)) S.detail = null;
-      render(); toast(one ? '별을 지웠어요' : `별 ${ids.length}개를 지웠어요`);
+      const wasOpen = ids.includes(S.detail);
+      if (wasOpen) S.detail = null;
+      render(); if (wasOpen) scrollTo({ top: backY }); toast(one ? '별을 지웠어요' : `별 ${ids.length}개를 지웠어요`);
     },
   });
 }
@@ -518,12 +612,13 @@ document.addEventListener('click', (e) => {
   else if (a === 'newPlanet') openNewPlanet();
   else if (a === 'logout') toast('테스트용 화면이라 로그아웃은 되지 않아요');
   else if (a === 'me') toast('테스트용 화면이라 계정 설정은 열리지 않아요');
-  else if (a === 'resetFilter') { Object.assign(S, { planet: 'all', period: 'all' }); render(); }
+  else if (a === 'resetFilter') { Object.assign(S, { planet: 'all', period: 'all' }); refilter(); }
+  else if (a === 'favOff') { S.fav = false; refilter(); $('favSw').focus(); }
 });
 $('dock').addEventListener('click', (e) => {
   const b = e.target.closest('[data-planet]');
   if (!b) return;
-  S.planet = b.dataset.planet; render();
+  S.planet = b.dataset.planet; refilter();
   $('dock').querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true });
 });
 $('pSeg').addEventListener('click', (e) => {
@@ -531,33 +626,58 @@ $('pSeg').addEventListener('click', (e) => {
   if (!b) return;
   S.period = b.dataset.p;
   if (S.period === 'custom' && !S.from) { S.from = S.to = iso(day0(NOW)); $('rFrom').value = S.from; $('rTo').value = S.to; }
-  render();
+  refilter();
 });
-$('groupSw').addEventListener('click', () => { S.group = !S.group; render(); });
-for (const id of ['rFrom', 'rTo']) $(id).addEventListener('change', () => { S.from = $('rFrom').value; S.to = $('rTo').value; render(); });
+$('groupSw').addEventListener('click', () => { S.group = !S.group; refilter(); });
+$('favSw').addEventListener('click', () => { S.fav = !S.fav; refilter(); });
+for (const id of ['rFrom', 'rTo']) $(id).addEventListener('change', () => { S.from = $('rFrom').value; S.to = $('rTo').value; refilter(); });
 
 $('table').addEventListener('click', (e) => {
   const a = e.target.closest('[data-a]');
   const s = stars.find((x) => x.id === e.target.closest('.row')?.dataset.id);
   if (!a || !s) return;
-  if (a.dataset.a === 'open') { S.detail = s.id; $('detail').dataset.id = ''; render(); $('detail').querySelector('[data-d=close]').focus(); }
-  else if (a.dataset.a === 'fav') { s.fav = !s.fav; render(); $('table').querySelector(`[data-id="${s.id}"] .fav`)?.focus(); }
-  else if (a.dataset.a === 'why') openWhy(s);
+  if (a.dataset.a === 'open') { openDetail(s.id); $('detail').querySelector('[data-d=back]').focus({ preventScroll: true }); }
+  else if (a.dataset.a === 'fav') {
+    s.fav = !s.fav;
+    if (S.fav && !s.fav) keep.add(s.id); else keep.delete(s.id);
+    render(); $('table').querySelector(`[data-id="${s.id}"] .fav`)?.focus();
+  }
 });
 $('detail').addEventListener('click', (e) => {
   const d = e.target.closest('[data-d]')?.dataset.d;
-  if (d === 'close') { const id = S.detail; S.detail = null; render(); $('table').querySelector(`[data-id="${id}"] .ttl`)?.focus(); }
+  if (d === 'back') closeDetail();
+  else if (d === 'prev' || d === 'next') stepDetail(d === 'prev' ? -1 : 1);
+  else if (d === 'openFile') toast('테스트용 화면이라 원본은 열리지 않아요');
+  else if (d === 'folder') toast('테스트용 화면이라 폴더는 열리지 않아요');
+  else if (d === 'noteSave') saveNote();
   else if (d === 'del') askDelete([S.detail]);
 });
+function saveNote() {
+  const s = stars.find((x) => x.id === S.detail), box = $('detail').querySelector('[data-d=note]');
+  const text = box?.value.trim();
+  if (!s || !text) return;
+  s.notes.push({ text, at: new Date() });
+  renderDetail(); toast('덧붙였어요');
+  $('detail').querySelector('[data-d=note]').focus();
+}
 $('detail').addEventListener('input', (e) => {
   const s = stars.find((x) => x.id === S.detail), d = e.target.dataset.d;
-  if (!s || (d !== 'memo' && d !== 'why')) return;
-  s[d] = e.target.value.trim(); render();
+  if (!s) return;
+  if (d === 'memo') s.memo = e.target.value; // 자동 저장: 다시 그리지 않는다(쓰던 자리가 그대로)
+  else if (d === 'note') $('detail').querySelector('[data-d=noteSave]').disabled = !e.target.value.trim();
+});
+$('detail').addEventListener('keydown', (e) => {
+  if (e.target.dataset.d !== 'note' || e.key !== 'Enter' || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+  e.preventDefault(); saveNote(); // Enter = 저장, Shift+Enter = 줄바꿈
 });
 $('detail').addEventListener('change', (e) => {
   const s = stars.find((x) => x.id === S.detail);
   if (!s || e.target.dataset.d !== 'move') return;
-  s.planet = e.target.value; $('detail').dataset.id = ''; render(); toast(`${P(s.planet).name}(으)로 옮겼어요`);
+  s.planet = e.target.value;
+  const name = P(s.planet).name;
+  render();
+  if (!S.detail) { scrollTo({ top: backY }); toast(`${name}(으)로 옮겼어요. 지금 보는 목록에서는 빠졌어요`); }
+  else { toast(`${name}(으)로 옮겼어요`); $('detail').querySelector('[data-d=move]').focus(); }
 });
 
 // 왼쪽 패널 접기 · 펼치기
