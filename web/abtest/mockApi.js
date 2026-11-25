@@ -73,10 +73,11 @@ function toStar(s) {
   return {
     id: s.id,
     type: atts.length ? atts[0].kind : 'text',
-    // 파일 기록의 본문(CSV 앞 몇 줄)은 미리보기라 글 칸에는 넣지 않는다. 글 기록은 본문 그대로
+    // 메모는 하나다(상세의 "메모" 칸 = 별의 본문). 글 기록은 본문 그대로.
+    // 파일 기록의 body(CSV 앞 몇 줄)는 챗봇 답에 쓰는 미리보기라 글 칸에 넣지 않고, 메모는 memo 칸에 둔다(테스트 홈과 같은 규칙)
     title: s.title,
-    body: s.kind === 'csv' ? null : s.body || null,
-    memo: s.memo || '',
+    body: s.kind === 'csv' ? s.memo || null : s.body || null,
+    memo: s.kind === 'csv' ? '' : s.memo || '',
     planet_id: s.planet,
     created_at: s.at,
     has_thumb: false,
@@ -200,7 +201,10 @@ export const api = {
     const s = findStar(st, starId);
     if (!s) return notFound();
     if (patch.title !== undefined) s.title = patch.title;
-    if (patch.body !== undefined && s.kind !== 'csv') s.body = patch.body ?? '';
+    if (patch.body !== undefined) {
+      if (s.kind === 'csv') s.memo = patch.body ?? '';
+      else s.body = patch.body ?? '';
+    }
     if (patch.memo !== undefined) s.memo = patch.memo ?? '';
     if (patch.planet_id !== undefined) s.planet = patch.planet_id;
     commit(st);
