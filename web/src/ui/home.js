@@ -4,13 +4,18 @@
 // store로 알리는 것:
 //   'openSave'                  "기록하기"(상단 줄 · 빈 우주 카드)
 //   'newPlanet'                   "+ 새 행성"(#hNewPlanet)
-//   'openCharacter'               "캐릭터"(#hCharacter, 상단 줄 기록하기 왼쪽)
+//   'openLogin'                   "로그인"(#hLogin · 로그인 안내 말풍선)
+//   'signOut'                     "로그아웃"(#hLogout)
+//   'openAccount'                 사람 아이콘(#hMe) → 계정 설정 창
+// 캐릭터 꾸미기는 우주 안에서만 연다(hud.js의 사람 아이콘 메뉴).
+// 로그인 전에 "우주로 들어가기"를 누르면 전환 대신 로그인 안내 말풍선(#hLoginHint)을 띄운다.
 // store에서 듣는 것:
 //   'data'      우주 밖에 있을 때만 홈을 다시 그린다(처음 연결 · 다시 연결 · 저장 뒤).
 // 연결 실패 상태는 main.js(showOffline)가 그린다. 여기서는 그 카드를 건드리지 않는다.
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { PLANET_COLORS, esc, ico, periodRange, shortDate } from '../util.js';
+import { accountName, isSignedIn } from './account.js';
 import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
@@ -40,8 +45,10 @@ function paint({ summary, planets, recent }) {
   const empty = total === 0; // 전체 0개: 별이 하나도 없다(빈 행성은 있을 수 있다)
   const byId = new Map(planets.map((p) => [String(p.id), p]));
 
-  $('hGreet').innerHTML = empty
+  $('hGreet').innerHTML = !isSignedIn()
     ? '나만의 우주를 시작해 보세요'
+    : empty
+    ? `${esc(accountName())}님, 나만의 우주를 시작해 보세요`
     : todayN
       ? `오늘 별 <em>${num(todayN)}개</em>를 띄웠어요`
       : '오늘은 아직 별이 없어요';
@@ -67,7 +74,6 @@ function paint({ summary, planets, recent }) {
   grid.dataset.n = String(shown);
   home.querySelector('.hero').hidden = false;
   $('hLog').hidden = false;
-  $('hCharacter').hidden = false;
 
   // 빈 우주 카드
   const st = $('hState');
@@ -215,12 +221,28 @@ function scatterStars() {
   }
 }
 
+// 로그인 전 "우주로 들어가기": 말풍선을 띄우고 그 안의 로그인 버튼에 초점을 둔다. 이미 떠 있으면 한 번 흔든다
+function showLoginHint() {
+  const hint = $('hLoginHint');
+  if (!hint.hidden) {
+    hint.classList.remove('nudge');
+    void hint.offsetWidth; // 애니메이션을 처음부터 다시
+    hint.classList.add('nudge');
+  }
+  hint.hidden = false;
+  hint.querySelector('button').focus({ preventScroll: true });
+}
+
 function onClick(e) {
   const el = e.target instanceof Element ? e.target.closest('button') : null;
   if (!el || !home.contains(el)) return;
-  if (el.id === 'enterBtn') onEnter({});
+  if (el.id === 'enterBtn') {
+    if (isSignedIn()) onEnter({});
+    else showLoginHint();
+  } else if (el.id === 'hLogin' || el.dataset.act === 'login') store.emit('openLogin');
+  else if (el.id === 'hLogout') store.emit('signOut');
+  else if (el.id === 'hMe') store.emit('openAccount');
   else if (el.id === 'hLog' || el.dataset.act === 'log') store.emit('openSave');
-  else if (el.id === 'hCharacter') store.emit('openCharacter');
   else if (el.dataset.act === 'newPlanet') store.emit('newPlanet');
   else if (el.dataset.planet) onEnter({ planetId: el.dataset.planet, starId: el.dataset.star || undefined });
 }

@@ -4,6 +4,7 @@
 // 붙여넣기는 글 칸 밖에서만 받는다. 다만 글 없이 파일(그림)만 붙여넣으면 기록하기 창의 글 칸에서도 칩으로 받는다.
 // 밖에서 끌어온 링크는 브라우저가 그 주소로 떠나 버리지 않게 늘 여기서 막는다(글 칸에 놓는 것만 브라우저에 맡긴다).
 // 이 화면 안에서 시작한 끌기(미리보기 그림 · 링크 · 고른 글)는 받지 않는다.
+import { isAccountOpen, isSignedIn } from './account.js';
 import { isCharacterFormOpen } from './characterForm.js';
 import { isAskOpen } from './confirm.js';
 import { isPlanetDeleteOpen } from './planetDelete.js';
@@ -24,9 +25,10 @@ let internal = false; // 이 화면 안에서 시작한 끌기인지(dragstart ~
 
 const veil = () => document.getElementById('dropveil');
 
-// 확인 창 · 행성 꾸미기 창 · 캐릭터 꾸미기 창 · 행성 삭제 창이 떠 있거나, 전환 중이거나, 저장하는 중이면 받지 않는다
+// 로그인 전이거나, 확인 창 · 행성 꾸미기 창 · 캐릭터 꾸미기 창 · 행성 삭제 창 · 로그인 · 계정 설정 창이 떠 있거나,
+// 전환 중이거나, 저장하는 중이면 받지 않는다
 const otherBlocked = () =>
-  isAskOpen() || isPlanetFormOpen() || isCharacterFormOpen() || isPlanetDeleteOpen() || isTransitioning();
+  !isSignedIn() || isAskOpen() || isPlanetFormOpen() || isCharacterFormOpen() || isPlanetDeleteOpen() || isAccountOpen() || isTransitioning();
 const blocked = () => otherBlocked() || isSaveBusy();
 // 저장하는 중에 놓거나 붙여넣은 것은 받지 않고 알린다(다른 창이 막고 있으면 조용히 둔다)
 const busyOnly = () => isSaveBusy() && !otherBlocked();

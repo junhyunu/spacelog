@@ -1,5 +1,5 @@
 // 캐릭터 꾸미기 창(#charForm, 스펙 6-10). 행성 꾸미기 창(planetForm.js)과 같은 모양 · 같은 키보드 규칙이다.
-// 여는 곳: W-01 왼쪽 패널의 "캐릭터 꾸미기"(#wCharacter), W-00 상단의 "캐릭터"(#hCharacter) → 'openCharacter'(main.js).
+// 여는 곳: W-01 왼쪽 패널의 사람 아이콘 메뉴 → "캐릭터 꾸미기"(hud.js) → 'openCharacter'(main.js). 홈에서는 열지 않는다.
 // 저장: api.saveCharacter → store.state.character → setCharacterLook(우주의 캐릭터가 그 자리에서 바뀐다) → 토스트.
 // 미리보기는 이 창만의 작은 렌더러에 그린다. 본 장면을 아직 만들지 않았어도(홈에서 열었을 때) 동작하고,
 // 창을 닫으면 렌더러와 WebGL 컨텍스트를 돌려준다(여닫기를 되풀이해도 컨텍스트가 쌓이지 않는다).

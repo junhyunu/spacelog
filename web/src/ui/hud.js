@@ -8,7 +8,9 @@
 //   'openStar'   { planetId, starId }   별로 날아가기(챗봇 출처 카드)로 그 별의 행성에 도착했을 때
 //   'openSave'                          "기록하기"(#wLog · 빈 우주 카드)
 //   'newPlanet'                         "+ 새 행성"(#wNewPlanet, 왼쪽 패널 목록 맨 위)
-//   'openCharacter'                     "캐릭터 꾸미기"(#wCharacter, 왼쪽 패널 요약 둘째 줄, 홈 옆)
+//   'openCharacter'                     사람 아이콘(#wMe) 메뉴의 "캐릭터 꾸미기"(왼쪽 패널 요약 둘째 줄, 홈 옆)
+//   'openAccount'                       같은 메뉴의 "계정 설정"
+//   'signOut'                           같은 메뉴의 "로그아웃"(main.js가 홈으로 나간다)
 // store에서 듣는 것:
 //   'data'             우주 안에 있을 때 전부 다시 그리고 3D를 맞춘다
 //   'near'             planetId | null  목록의 노랑 표시
@@ -355,6 +357,7 @@ function setSide(collapsed, { remember = false, focus = false } = {}) {
   const side = $('side');
   if (sideCollapsed && side.contains(document.activeElement)) focus = true; // 숨는 패널에 있던 초점은 펼치기 버튼으로
   side.hidden = sideCollapsed;
+  if (sideCollapsed) setMeMenu(false); // 패널이 접히면 그 버튼의 메뉴도 접는다
   $('sideOpen').hidden = !sideCollapsed;
   $('sideOpen').setAttribute('aria-expanded', String(!sideCollapsed));
   $('sideClose').setAttribute('aria-expanded', String(!sideCollapsed));
@@ -399,6 +402,44 @@ function updateLayoutVars() {
   if (!hint.hidden && hint.offsetHeight) root.setProperty('--hint-lift', `${innerHeight - hint.offsetTop}px`);
 }
 
+/* ---------- 사람 아이콘 메뉴 ---------- */
+// 메뉴는 패널(#side) 밖, #left 안에 있다(패널이 overflow:hidden이라 안에 두면 잘린다).
+// #left는 화면에 붙어 있으므로 버튼 위치를 #left 기준으로 바꿔 버튼 바로 아래 · 왼쪽 끝을 버튼 왼쪽 끝에 맞춘다
+function placeMeMenu() {
+  const menu = $('wMeMenu');
+  if (menu.hidden) return;
+  const b = $('wMe').getBoundingClientRect();
+  const box = $('left').getBoundingClientRect();
+  const w = menu.offsetWidth;
+  const left = Math.max(8, Math.min(b.left, innerWidth - w - 8)); // 화면 밖으로 나가지 않게
+  menu.style.left = `${left - box.left}px`;
+  menu.style.top = `${b.bottom + 8 - box.top}px`;
+}
+
+function setMeMenu(on, { focus = false } = {}) {
+  const menu = $('wMeMenu');
+  if (menu.hidden === !on) return;
+  menu.hidden = !on;
+  $('wMe').setAttribute('aria-expanded', String(on));
+  if (on) {
+    placeMeMenu();
+    menu.querySelector('[role="menuitem"]').focus({ preventScroll: true });
+  } else if (focus) $('wMe').focus({ preventScroll: true });
+}
+
+function onMeMenuClick(e) {
+  const el = e.target instanceof Element ? e.target.closest('[data-me]') : null;
+  if (!el) return;
+  setMeMenu(false);
+  const act = el.dataset.me;
+  if (act === 'logout') {
+    store.emit('signOut');
+    return;
+  }
+  closeDrawer(); // 좁은 화면: 초점이 펼치기 버튼으로 간다 → 창을 닫으면 거기로 돌아온다
+  store.emit(act === 'character' ? 'openCharacter' : 'openAccount');
+}
+
 /* ---------- 시작 ---------- */
 /** 조작 UI를 준비한다(한 번만). 그리기는 store의 'data'가 올 때마다(우주 안에서만) 한다. */
 export function initHud() {
@@ -413,10 +454,21 @@ export function initHud() {
     closeDrawer();
     store.emit('newPlanet');
   });
-  $('wCharacter').addEventListener('click', () => {
-    closeDrawer(); // 좁은 화면: 초점이 펼치기 버튼으로 간다 → 창을 닫으면 거기로 돌아온다
-    store.emit('openCharacter');
+  // 사람 아이콘 메뉴: 패널 안에서 아래로 펼쳐진다. 바깥을 누르거나 Esc면 접힌다
+  $('wMe').addEventListener('click', () => setMeMenu($('wMeMenu').hidden));
+  $('wMeMenu').addEventListener('click', onMeMenuClick);
+  addEventListener('pointerdown', (e) => {
+    if ($('wMeMenu').hidden || !(e.target instanceof Node)) return;
+    if (!$('wMeMenu').contains(e.target) && !$('wMe').contains(e.target)) setMeMenu(false);
   });
+  // 초점이 메뉴 밖으로 나가면(Tab) 접는다. 패널 스크롤 · 화면 크기가 바뀌면 자리를 다시 맞춘다
+  $('wMeMenu').addEventListener('focusout', (e) => {
+    const to = e.relatedTarget;
+    if (to instanceof Node && ($('wMeMenu').contains(to) || $('wMe').contains(to))) return;
+    if (to) setMeMenu(false);
+  });
+  $('side').addEventListener('scroll', placeMeMenu, true);
+  addEventListener('resize', placeMeMenu);
   $('wLog').addEventListener('click', () => store.emit('openSave'));
   $('wHintX').addEventListener('click', dismissHint);
   paintPeriod();
@@ -435,6 +487,13 @@ export function initHud() {
   $('side').addEventListener('keydown', (e) => {
     if (isDrawerOpen()) trapTab($('side'), e);
   });
+  // Esc: 사람 아이콘 메뉴가 펼쳐져 있으면 그것부터 접는다(서랍보다 먼저)
+  registerEscape(36, () => {
+    if ($('wMeMenu').hidden) return false;
+    setMeMenu(false, { focus: true });
+    return true;
+  });
+  store.on('leavingWorld', () => setMeMenu(false));
   // Esc: 좁은 화면의 서랍은 아래 시트 위에 덮이는 맨 위 층이라 상세 → 목록(30)보다 먼저 닫는다(escape.js)
   registerEscape(35, () => {
     if (!store.state.inWorld || !narrowMq.matches || sideCollapsed) return false;

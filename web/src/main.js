@@ -10,18 +10,20 @@ import './styles/character.css';
 import './styles/detail.css';
 import './styles/save.css';
 import './styles/chat.css';
+import './styles/account.css';
 import './styles/select.css'; // 선택 상자 화살표: 각 창의 선택 상자 규칙 뒤에 와야 한다
 
 import { api } from './api.js';
 import { store } from './store.js';
 import { setCharacterLook } from './three/character.js';
+import { initAccount, isSignedIn } from './ui/account.js';
 import { closeCharacterForm, openCharacterForm } from './ui/characterForm.js';
 import { normalizeLook } from './ui/characterLogic.js';
 import { isAskOpen } from './ui/confirm.js';
 import { initChat } from './ui/chatPanel.js';
 import { initDropzone } from './ui/dropzone.js';
 import { setEscapeGuards } from './ui/escape.js';
-import { initHome } from './ui/home.js';
+import { initHome, renderHome } from './ui/home.js';
 import { initHud } from './ui/hud.js';
 import { initPanel } from './ui/panel.js';
 import { closePlanetDelete } from './ui/planetDelete.js';
@@ -50,7 +52,6 @@ export function showOffline() {
     document.querySelector('#home .hero').hidden = true;
     document.querySelector('#home .home-grid').hidden = true;
     $('hLog').hidden = true;
-    $('hCharacter').hidden = true;
   }
   if (other.querySelector('[data-retry]')) other.hidden = true;
   if (!card.querySelector('[data-retry]')) {
@@ -71,7 +72,6 @@ function hideOffline() {
   document.querySelector('#home .hero').hidden = false;
   document.querySelector('#home .home-grid').hidden = false;
   $('hLog').hidden = false;
-  $('hCharacter').hidden = false;
 }
 
 /**
@@ -113,6 +113,14 @@ store.on('reachable', () => {
   if (store.state.offline) checkConnection();
 });
 
+// 로그인(시연용, account.js). 로그인 전에는 body.signed-out으로 기록과 관련된 것을 숨긴다.
+// 로그인 · 로그아웃이 바뀌면: 우주 안이면 홈으로 나가고(로그아웃), 홈이면 다시 그린다.
+initAccount();
+store.on('authChange', ({ signedIn }) => {
+  if (!signedIn && store.state.inWorld) leaveWorld();
+  else if (!store.state.inWorld) renderHome();
+});
+
 // W-00 메인 홈과 블랙홀 전환. 홈은 'data'가 올 때마다(우주 밖일 때) 다시 그려진다.
 initHome({ enter: enterWorld });
 $('goHome').addEventListener('click', () => leaveWorld());
@@ -129,10 +137,13 @@ initPanel();
 // "+ 새 행성"(#hNewPlanet · #wNewPlanet): 행성 꾸미기 창을 만들기로 연다.
 // 저장하면 store.reload() → 'data' → 우주 안이면 3D · 목록, 밖이면 홈의 행성 목록이 다시 그려진다.
 store.on('newPlanet', () => openPlanetForm({}));
-// "캐릭터"(#hCharacter) · "캐릭터 꾸미기"(#wCharacter): 캐릭터 꾸미기 창을 연다(스펙 6-10).
+// 우주 안 사람 아이콘 메뉴의 "캐릭터 꾸미기"(hud.js): 캐릭터 꾸미기 창을 연다(스펙 6-10).
 store.on('openCharacter', () => openCharacterForm());
 // "기록하기"(#hLog · #wLog): 기록하기 창을 연다. 버튼은 home.js · hud.js가 듣고 'openSave'로 알린다.
-store.on('openSave', (o) => openSave(o ?? {}));
+store.on('openSave', (o) => {
+  if (!isSignedIn()) return toast('로그인하면 기록할 수 있어요');
+  openSave(o ?? {});
+});
 // 끌어다 놓기 · 붙여넣기(W-00 · W-01 어디서나)
 initDropzone();
 // 챗봇(2차 스펙 7장): 오른쪽 아래 버튼 · 창 · 읽지 않음 확인. W-00 · W-01 어디서나

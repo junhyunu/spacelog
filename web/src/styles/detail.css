@@ -26,7 +26,7 @@
 #panel .mv select{min-height:44px}
 #panel .mv select:disabled{background:var(--panel-2);color:var(--mute);cursor:progress}
 
-#panel .linkdel{flex:none;min-height:44px;color:var(--danger-text)}
+#panel .linkdel{flex:none;align-self:flex-end;min-height:44px;color:var(--danger-text)} /* 오른쪽 끝 */
 
 /* 첨부 목록(스펙 6-9): 이미지 축소본 격자 · 파일 줄 · 링크 줄 · 크게 보기 */
 #panel .atts{display:flex;flex-direction:column;gap:var(--gap-2);flex:none;min-width:0}

@@ -1,0 +1,72 @@
+/* 로그인 · 계정 설정(시연용, account.js). 값은 tokens.css의 토큰만 쓴다.
+   창 모양은 행성 꾸미기 창(planet.css)과 같은 규칙이다. */
+
+/* ---------- 로그인 전 · 후로 보이고 숨기 ---------- */
+/* 로그인 전(body.signed-out): 기록과 관련된 것을 모두 숨긴다. 연결 실패 카드(#hState 안의 [data-retry])는 남긴다 */
+body.signed-out :is(.auth-in,#hStats,#home .home-grid,#chatBtn,#chatHint,#chatPanel),
+body.signed-out #hState:not(:has([data-retry])){display:none!important}
+body:not(.signed-out) .auth-out{display:none!important}
+
+/* ---------- W-00 상단 줄: 사람 아이콘 버튼 ---------- */
+.me-btn{display:grid;place-items:center;width:44px;height:44px;padding:0;box-sizing:border-box;flex:none}
+.home-acts .me-btn{display:grid;place-items:center;width:46px;height:46px;padding:0}
+@media (max-width:480px){
+  .home-acts .me-btn .i{display:block} /* 좁은 화면은 버튼 아이콘을 숨기지만, 이 버튼은 아이콘이 전부다 */
+  .home-acts .me-btn{width:40px;height:40px}
+}
+
+/* ---------- W-00 로그인 안내 말풍선: "우주로 들어가기" 아래, 꼬리가 위로 버튼을 가리킨다 ---------- */
+#hLoginHint{position:relative;margin-top:14px;display:flex;align-items:center;gap:var(--gap-3);padding:12px 12px 12px 16px;max-width:calc(100vw - 32px);box-sizing:border-box;text-align:left;animation:pop .22s cubic-bezier(.3,1.5,.6,1)}
+#hLoginHint b{font-size:15px;line-height:1.4;text-wrap:balance}
+#hLoginHint .btn{flex:none;font-size:14px;padding:7px 14px}
+#hLoginHint::before,#hLoginHint::after{content:"";position:absolute;left:50%;width:0;height:0;border-style:solid;border-color:transparent;pointer-events:none;transform:translateX(-50%)}
+#hLoginHint::before{top:-21px;border-width:0 14px 18px;border-bottom-color:var(--ink)}
+#hLoginHint::after{top:-11px;border-width:0 9px 12px;border-bottom-color:var(--panel)}
+#hLoginHint.nudge{animation:nudge .36s ease-in-out}
+@keyframes nudge{20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+@media (prefers-reduced-motion:reduce){#hLoginHint,#hLoginHint.nudge{animation:none}}
+@media (max-width:480px){
+  #hLoginHint{flex-direction:column;align-items:stretch;text-align:center}
+}
+
+/* ---------- W-01 왼쪽 패널: 홈 · 사람 아이콘. 아이콘을 누르면 패널 위에 메뉴가 뜬다(아래를 밀지 않는다) ---------- */
+#side .sd-acts{grid-template-columns:minmax(0,1fr) auto}
+#wMe[aria-expanded="true"]{background:var(--yellow)}
+/* 자리(top · left)는 hud.js가 버튼 바로 아래로 맞춘다. 서랍(#side z-index:1) 위에 뜬다 */
+.me-menu{position:absolute;z-index:2;width:248px;max-width:calc(100vw - 16px);box-sizing:border-box;padding:6px;display:flex;flex-direction:column;box-shadow:0 5px 0 var(--ink),0 14px 28px rgba(10,6,30,.35);transform-origin:top left;animation:menuIn .14s ease-out}
+@keyframes menuIn{from{opacity:0;transform:translateY(-4px) scale(.97)}}
+.me-menu .me-head{display:flex;flex-direction:column;gap:2px;padding:8px 10px 6px;min-width:0}
+.me-menu .me-email{font-size:12.5px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.me-menu .me-name{font-size:15px;font-weight:700;overflow-wrap:anywhere}
+.me-menu hr{margin:6px 4px;border:0;border-top:1.5px solid #d6d1f2}
+.me-menu button{display:flex;align-items:center;gap:10px;font:600 14px var(--f-body);text-align:left;min-height:44px;padding:0 10px;border:0;border-radius:10px;background:transparent;color:var(--ink);cursor:pointer}
+.me-menu button .i{flex:none;color:var(--mute)}
+.me-menu button:hover{background:var(--panel-2)}
+.me-menu button:focus-visible{outline:var(--line) solid var(--sky);outline-offset:-3px}
+@media (prefers-reduced-motion:reduce){.me-menu{animation:none}}
+
+/* ---------- 로그인 · 계정 설정 창 ---------- */
+.authdlg{position:fixed;inset:0;z-index:var(--z-planet-form);background:rgba(10,6,30,.6);display:grid;place-items:center;padding:16px;box-sizing:border-box}
+.authdlg .card{width:min(400px,100%);padding:18px;gap:var(--gap-3);box-sizing:border-box;display:flex;flex-direction:column;max-height:100%;overflow-y:auto}
+.authdlg header{display:flex;align-items:center;gap:var(--gap-3)}
+.authdlg h3{flex:1;min-width:0;margin:0;font-family:var(--f-display);font-weight:400;font-size:20px;line-height:1.2}
+.authdlg header .x{width:34px;height:34px;padding:0;flex:none;display:grid;place-items:center}
+.authdlg .fld{display:flex;flex-direction:column;gap:var(--gap-1);min-width:0;margin:0;padding:0;border:0}
+.authdlg .lbl{font-size:13px;font-weight:700;padding:0}
+.authdlg input{font:600 14px var(--f-body);border:var(--line-thin) solid var(--ink);border-radius:10px;padding:8px 10px;background:var(--white);color:var(--ink);width:100%;min-height:44px;box-sizing:border-box}
+.authdlg input::placeholder{color:#9a94bd;font-weight:500}
+.authdlg :focus-visible{outline:var(--line) solid var(--sky);outline-offset:2px}
+.authdlg .demo{margin:-4px 0 0;font-size:12.5px;line-height:1.5;color:var(--mute);background:var(--notice);border:2px dashed var(--ink);border-radius:10px;padding:7px 10px}
+.authdlg .acct{margin:0;font:500 14px var(--f-mono);color:var(--mute);background:var(--panel-2);border-radius:10px;padding:10px;overflow-wrap:anywhere}
+.authdlg .pw{gap:var(--gap-2);padding-top:var(--gap-3);border-top:1.5px dashed #b7b0e0}
+.authdlg .pw legend{float:left;width:100%;margin-bottom:var(--gap-1)} /* legend를 다른 라벨처럼 칸 안에 둔다 */
+.authdlg .pw label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-weight:600;color:var(--mute)}
+.authdlg .pw small{font-size:12px;color:var(--mute)}
+.authdlg .err{margin:0;font-size:13px;font-weight:700;line-height:1.5;color:var(--danger-text)}
+.authdlg .row{display:flex;gap:var(--gap-2);justify-content:flex-end;margin-top:4px}
+/* 회원 탈퇴: 맨 아래 작은 글자 링크 */
+.authdlg .leave{align-self:center;margin-top:2px;min-height:44px;padding:0 10px;border:0;background:transparent;font:600 13px var(--f-body);color:var(--danger-text);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+@media (max-width:760px){
+  .authdlg{padding:8px}
+  .authdlg .card{padding:14px}
+}
