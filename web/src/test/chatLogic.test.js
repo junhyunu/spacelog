@@ -6,6 +6,8 @@ import {
   askMeta,
   canSend,
   chatButtonLabel,
+  chatButtonText,
+  chatHintVisible,
   contextFor,
   counterText,
   errorMessage,
@@ -260,6 +262,33 @@ describe('chatButtonLabel', () => {
   test('open in front / behind the planet panel', () => {
     expect(chatButtonLabel({ open: true, unread: true })).toBe('챗봇 닫기');
     expect(chatButtonLabel({ open: true, behind: true })).toBe('챗봇 앞으로 가져오기');
+  });
+});
+
+describe('chatButtonText (the word on the button)', () => {
+  test('closed: 물어보기, open: 닫기, open behind the planet panel: 물어보기', () => {
+    expect(chatButtonText({ open: false })).toBe('물어보기');
+    expect(chatButtonText({ open: true })).toBe('닫기');
+    expect(chatButtonText({ open: true, behind: true })).toBe('물어보기');
+    expect(chatButtonText()).toBe('물어보기');
+  });
+});
+
+describe('chatHintVisible (first-time bubble over the button)', () => {
+  const base = { inWorld: true, total: 3, open: false, dismissed: false, offline: false };
+  test('in the world with at least one star, until dismissed', () => {
+    expect(chatHintVisible(base)).toBe(true);
+    expect(chatHintVisible({ ...base, dismissed: true })).toBe(false);
+  });
+  test('not on the home screen, not while the chat window is open, not while offline', () => {
+    expect(chatHintVisible({ ...base, inWorld: false })).toBe(false);
+    expect(chatHintVisible({ ...base, open: true })).toBe(false);
+    expect(chatHintVisible({ ...base, offline: true })).toBe(false);
+  });
+  test('an empty universe shows the 기록하기 bubble instead', () => {
+    expect(chatHintVisible({ ...base, total: 0 })).toBe(false);
+    expect(chatHintVisible({ ...base, total: undefined })).toBe(false);
+    expect(chatHintVisible()).toBe(false);
   });
 });
 

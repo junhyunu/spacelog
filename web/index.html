@@ -182,7 +182,9 @@
   </div>
 </div>
 
-<!-- 챗봇 버튼: 오른쪽 아래 맨 구석(W-00 · W-01 모두). 원자 그림은 chatButton.js가 채운다 -->
+<!-- 챗봇 버튼: 오른쪽 아래 맨 구석(W-00 · W-01 모두). 원자 그림과 "물어보기" 글자는 chatButton.js가 채운다 -->
+<!-- 처음 한 번 말풍선: 버튼 바로 위(우주 안에서만). ✕로 끄거나 챗봇을 한 번 열면 다시 뜨지 않는다 -->
+<div id="chatHint" class="card" role="note" aria-labelledby="chatHintTitle" hidden><p><b id="chatHintTitle">기록에게 물어보세요</b><span>모아 둔 별에서 답을 찾아 드려요</span></p><button type="button" class="btn ghost x" id="chatHintX" aria-label="안내 닫기"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div>
 <button type="button" id="chatBtn" aria-label="챗봇 열기" aria-expanded="false" aria-controls="chatPanel"></button>
 
 <div id="toast" class="card" role="status" aria-live="polite" hidden></div>

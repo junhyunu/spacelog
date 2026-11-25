@@ -179,6 +179,20 @@ export function chatButtonLabel({ open, behind, unread } = {}) {
   return unread ? '챗봇 열기, 읽지 않은 답 있음' : '챗봇 열기';
 }
 
+/** 버튼에 보이는 글자. 닫을 수 있을 때(열려 있고 앞에 있을 때)만 "닫기". */
+export function chatButtonText({ open, behind } = {}) {
+  return open && !behind ? '닫기' : '물어보기';
+}
+
+/**
+ * 버튼 위의 처음 한 번 말풍선("기록에게 물어보세요")을 보일지.
+ * 우주 안에서, 별이 하나라도 있고(빈 우주에는 기록하기 말풍선이 뜬다), 챗봇 창이 닫혀 있고,
+ * 아직 ✕로 끄거나 챗봇을 열어 본 적이 없을 때(dismissed)만.
+ */
+export function chatHintVisible({ inWorld, total, open, dismissed, offline } = {}) {
+  return Boolean(inWorld) && Number(total) > 0 && !open && !dismissed && !offline;
+}
+
 export const ANNOUNCE_MAX = 200;
 /** 답이 끝났을 때 화면 읽기 프로그램에 한 번 읽어 줄 문구. m = { status, content, error } */
 export function answerAnnouncement(m = {}) {
