@@ -107,11 +107,13 @@ function build(t) {
     '<p class="sr ct-say" role="status"></p>' +
     '<div class="ct-block" role="status" hidden><span class="ct-block-t"></span>' +
     '<button type="button" class="btn ghost sm" data-act="settings" hidden>설정 열기</button></div>' +
-    '<form class="ct-form" novalidate>' +
+    // 입력창 하나: 묻기(↑) · 멈추기(■) 버튼은 칸 안 오른쪽 아래, 글자 수는 칸 안 오른쪽 위(한도에 가까울 때만).
+    // 키 안내 줄은 두지 않는다(대화를 덜 가리게). 버튼에 마우스를 올리면 Enter · Shift+Enter를 알려 준다
+    '<form class="ct-form" novalidate><div class="ct-box">' +
     '<textarea class="ct-ta" rows="1" aria-label="질문" placeholder="기록에 대해 물어보세요"></textarea>' +
-    '<div class="ct-row"><span class="ct-hint">Enter 묻기 · Shift+Enter 줄바꿈</span><span class="ct-count" aria-live="polite"></span>' +
-    '<button type="submit" class="btn ct-go"></button></div>' +
-    '</form></div>';
+    '<span class="ct-count" aria-live="polite"></span>' +
+    '<button type="submit" class="ct-go"></button>' +
+    '</div></form></div>';
   t.list = t.root.querySelector('.ct-msgs');
   t.block = t.root.querySelector('.ct-block');
   t.blockText = t.root.querySelector('.ct-block-t');
@@ -148,7 +150,7 @@ function build(t) {
   grow(t.ta);
 }
 
-const TA_MAX = 150;
+const TA_MAX = 112; // 4줄(14px × 1.5 × 4 + 위아래 여백 · 테두리). 그 뒤로는 칸 안에서 스크롤
 function grow(ta) {
   ta.style.height = 'auto';
   const h = ta.scrollHeight + 5; // 테두리 2.5px × 2
@@ -211,29 +213,31 @@ function paintSources(li, m) {
   li.querySelector('.srcs')?.remove();
   li.querySelector('.bacts')?.remove();
   const sources = Array.isArray(m.sources) ? m.sources : [];
+  // 출처: 본문보다 조용하게. 점선 아래 "근거 N개"와 한 줄 텍스트 버튼(색 점 · 밑줄 제목 · 날짜).
+  // 파일 이름은 줄에서 빼고 마우스를 올리면 보이게 한다(title)
   if (sources.length) {
-    const ul = document.createElement('ul');
-    ul.className = 'srcs';
-    ul.setAttribute('aria-label', '출처');
-    ul.innerHTML = sources
+    const box = document.createElement('div');
+    box.className = 'srcs';
+    const items = sources
       .map((s, i) => {
         const v = sourceCardModel(s, store.state.planets);
+        const tip = [v.date, v.file].filter(Boolean).join(' · ');
         const inner =
           `<span class="pdot" style="background:${esc(v.color)}" aria-hidden="true"></span>` +
-          `<span class="st"><b>${esc(v.title)}</b>` +
-          (v.date || v.file ? `<small>${esc([v.date, v.file].filter(Boolean).join(' · '))}</small>` : '') +
-          '</span>';
+          `<span class="t">${esc(v.title)}</span>` +
+          (v.date ? `<small>${esc(v.date)}</small>` : '');
         return v.gone
           ? `<li><div class="src gone" aria-disabled="true">${inner}</div></li>`
-          : `<li><button type="button" class="src" data-src="${i}" aria-label="${esc(`별 '${v.title}'(으)로 날아가기`)}">${inner}</button></li>`;
+          : `<li><button type="button" class="src" data-src="${i}" title="${esc(tip)}" aria-label="${esc(`별 '${v.title}'(으)로 날아가기${tip ? `, ${tip}` : ''}`)}">${inner}</button></li>`;
       })
       .join('');
-    li.appendChild(ul);
+    box.innerHTML = `<p class="srclbl">근거 ${sources.length}개</p><ul aria-label="출처">${items}</ul>`;
+    li.appendChild(box);
   }
   if (m.status !== 'running' && m.status !== 'failed' && !m.not_found && !isNotFound(m.content)) {
     const acts = document.createElement('div');
     acts.className = 'bacts';
-    acts.innerHTML = `<button type="button" class="btn ghost sm" data-save>${ico('star', 16)} 별로 저장</button>`;
+    acts.innerHTML = `<button type="button" class="btn ghost sm" data-save>${ico('star', 14)} 별로 저장</button>`;
     li.appendChild(acts);
   }
 }
@@ -265,13 +269,18 @@ function paintInput(t) {
   t.blockGo.hidden = !block || !t.hooks.isOff?.();
   t.ta.disabled = Boolean(block);
   t.count.textContent = counterText(t.ta.value);
+  // 아이콘만 있는 버튼이라 이름(aria-label)과 마우스를 올렸을 때의 안내(title)를 함께 둔다
   if (t.running) {
-    t.go.innerHTML = `${ico('square', 16)} 멈추기`;
-    t.go.className = 'btn ghost ct-go';
+    t.go.innerHTML = ico('square', 14);
+    t.go.className = 'ct-go stop';
+    t.go.setAttribute('aria-label', '답 멈추기');
+    t.go.title = '답 멈추기';
     t.go.disabled = false;
   } else {
-    t.go.innerHTML = `${ico('arrow-up', 16)} 묻기`;
-    t.go.className = 'btn ct-go';
+    t.go.innerHTML = ico('arrow-up', 18);
+    t.go.className = 'ct-go';
+    t.go.setAttribute('aria-label', '묻기');
+    t.go.title = '묻기 (Enter) · 줄바꿈은 Shift+Enter';
     t.go.disabled = !canSend({ text: t.ta.value, composing: t.composing, busy: t.busy, enabled: !block });
   }
 }
