@@ -164,7 +164,9 @@ function renderChips() {
   const items = ordered();
   list.hidden = items.length === 0;
   list.innerHTML = items.map(chipHtml).join('');
-  $('svCount').textContent = items.length ? `첨부 ${items.length}/${ATTACH_MAX}` : '';
+  // 개수는 "첨부" 라벨 오른쪽에. 비어 있을 때는 개수 대신 버튼 옆에 끌어다 놓기 안내를 보인다
+  $('svCount').textContent = items.length ? `${items.length}/${ATTACH_MAX}` : '';
+  $('svAttHint').hidden = items.length > 0;
   for (const btn of list.querySelectorAll('[data-rm]')) btn.disabled = S.busy;
 }
 
@@ -261,10 +263,11 @@ function titleParts() {
   };
 }
 
-// 제목 칸의 placeholder: 비워 두면 쓰일 제목
+// 제목 칸의 placeholder: 비워 두면 쓰일 제목. 입력한 값처럼 보이지 않게 "비워 두면"을 앞에 붙인다
 function paintTitleHint() {
   if (!S) return;
-  $('svTitle').placeholder = autoTitle(titleParts()) || TITLE_EMPTY;
+  const auto = autoTitle(titleParts());
+  $('svTitle').placeholder = auto ? `비워 두면 “${auto}”` : TITLE_EMPTY;
 }
 
 function paintSubmit() {
@@ -373,6 +376,7 @@ function clearFields() {
   $('svText').style.height = '';
   $('svChips').textContent = '';
   $('svCount').textContent = '';
+  $('svAttHint').hidden = false;
   $('svMemoCnt').hidden = true;
   $('svMemoCnt').textContent = '';
 }
