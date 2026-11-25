@@ -57,6 +57,7 @@
       <div class="stats"><span id="sRecLabel">이 기간 별</span><b id="sRec">0</b>개 · 행성<b id="sPlanet">0</b>개</div>
       <div class="sd-acts">
         <button type="button" class="btn ghost" id="goHome"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg> 홈</button>
+        <button type="button" class="btn ghost" id="wCharacter" aria-label="캐릭터 꾸미기" title="캐릭터 꾸미기"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg> 캐릭터</button>
         <button type="button" class="btn ghost me-btn" id="wMe" aria-label="내 메뉴" title="내 메뉴" aria-haspopup="menu" aria-expanded="false" aria-controls="wMeMenu"><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg></button>
       </div>
     </div>
@@ -73,22 +74,35 @@
     <p id="touchHint">행성을 누르면 날아가요 · 끌어서 둘러보기</p>
   </aside>
   <!-- 사람 아이콘(#wMe) 메뉴: 패널 위에 떠서 열린다(아래 목록을 밀지 않는다). 위치는 hud.js가 버튼 바로 아래로 맞춘다.
-       계정(이메일 · 이름) | 캐릭터 꾸미기 · 계정 설정 | 로그아웃 -->
+       계정(이메일 · 이름) | 계정 설정 | 로그아웃. 캐릭터 꾸미기는 패널의 "캐릭터" 버튼 -->
   <div id="wMeMenu" class="me-menu card" role="menu" aria-labelledby="wMe" hidden>
     <div class="me-head"><span class="me-email" id="wMeEmail"></span><b class="me-name" id="wMeName"></b></div>
     <hr>
-    <button type="button" role="menuitem" data-me="character"><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg>캐릭터 꾸미기</button>
     <button type="button" role="menuitem" data-me="account"><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>계정 설정</button>
     <hr>
     <button type="button" role="menuitem" data-me="logout"><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>로그아웃</button>
   </div>
 </div>
 
-<!-- 기간 바(오른쪽 위) + 별 상한 띠 배너(바로 아래) -->
+<!-- 오른쪽 위: 별 찾기 🔍 + 기간 바 + (좁은 화면) 기간 🕐, 그 아래 검색 줄 · 별 상한 띠 배너.
+     넓은 화면: [🔍 동그란 버튼][기간 바] 한 줄. 🔍를 누르면 그 아래에 검색 줄(#wSearch)이 펼쳐진다.
+     좁은 화면(760px 이하): [🔍][🕐 지금 기간] 한 줄. 🕐를 누르면 기간 바가 아래 줄에 펼쳐지고, 🔍는 전체 화면 검색을 연다(search.js · hud.js · app.css) -->
 <div id="period" hidden>
-  <div class="pbar card">
-    <div class="seg" role="group" aria-label="기간 선택"><button type="button" data-p="all">전체</button><button type="button" data-p="today">오늘</button><button type="button" data-p="week">이번 주</button><button type="button" data-p="custom">직접 지정</button></div>
-    <div class="range" id="range" hidden><input type="date" id="rFrom" aria-label="시작 날짜"><span>~</span><input type="date" id="rTo" aria-label="끝 날짜"></div>
+  <div id="pTools">
+    <button type="button" id="wSearchBtn" class="card tbtn" aria-label="별 찾기" aria-expanded="false" aria-controls="wSearch"><svg class="i" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></button>
+    <div class="pbar card">
+      <div class="seg" role="group" aria-label="기간 선택"><button type="button" data-p="all">전체</button><button type="button" data-p="today">오늘</button><button type="button" data-p="week">이번 주</button><button type="button" data-p="custom">직접 지정</button></div>
+      <div class="range" id="range" hidden><input type="date" id="rFrom" aria-label="시작 날짜"><span>~</span><input type="date" id="rTo" aria-label="끝 날짜"></div>
+    </div>
+    <button type="button" id="wPeriodBtn" class="card tbtn" aria-expanded="false" aria-controls="range"><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span id="wPeriodName" aria-hidden="true"></span></button>
+  </div>
+  <!-- 별 찾기: 모든 기간의 별에서 제목 · 내용 · 메모를 찾는다. 결과를 누르면 그 별로 날아간다(기간 밖이면 손님 별) -->
+  <div id="wSearch" class="card" role="search">
+    <svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input type="search" id="wQ" autocomplete="off" enterkeyhint="search" placeholder="제목·내용·메모에서 찾기" aria-label="별 찾기: 제목, 내용, 메모에서" aria-controls="wResults" aria-expanded="false">
+    <button type="button" class="qx" id="wQClear" aria-label="검색어 지우기" hidden><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    <button type="button" class="btn ghost x" id="wQClose" aria-label="검색 닫기"><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+    <div id="wResults" class="card" hidden></div>
   </div>
   <div id="wBanner" class="banner" role="status" hidden></div>
 </div>

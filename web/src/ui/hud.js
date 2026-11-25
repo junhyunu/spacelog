@@ -8,8 +8,8 @@
 //   'openStar'   { planetId, starId }   별로 날아가기(챗봇 출처 카드)로 그 별의 행성에 도착했을 때
 //   'openSave'                          "기록하기"(#wLog · 빈 우주 카드)
 //   'newPlanet'                         "+ 새 행성"(#wNewPlanet, 왼쪽 패널 목록 맨 위)
-//   'openCharacter'                     사람 아이콘(#wMe) 메뉴의 "캐릭터 꾸미기"(왼쪽 패널 요약 둘째 줄, 홈 옆)
-//   'openAccount'                       같은 메뉴의 "계정 설정"
+//   'openCharacter'                     "캐릭터"(#wCharacter, 왼쪽 패널 요약 둘째 줄, 홈과 사람 아이콘 사이)
+//   'openAccount'                       사람 아이콘(#wMe) 메뉴의 "계정 설정"
 //   'signOut'                           같은 메뉴의 "로그아웃"(main.js가 홈으로 나간다)
 // store에서 듣는 것:
 //   'data'             우주 안에 있을 때 전부 다시 그리고 3D를 맞춘다
@@ -23,6 +23,8 @@
 //   'leaveWorld'       손님 별 · 가까운 행성 표시를 지운다. 좁은 화면이면 왼쪽 서랍을 닫는다
 //   'offline'          빈 우주 말풍선을 숨긴다(연결 실패 카드가 대신 말한다)
 // 연결 실패 카드는 main.js(showOffline)가 #worldMsg에 그린다. #worldMsg는 이제 그 카드에만 쓴다(빈 우주 안내는 말풍선 #wHint).
+// 좁은 화면(760px 이하)의 기간 바는 🕐(#wPeriodBtn, 지금 기간 이름이 붙는다)를 눌렀을 때만 아이콘 줄 아래에 펼쳐진다(body.period-open).
+//   전체 · 오늘 · 이번 주를 고르거나 바깥 · Esc(34)로 접는다. 직접 지정은 날짜를 고르게 남긴다. 별 찾기(search.js)가 열리면 접는다.
 // 화면 배치 변수(:root): --tr-bottom 기간 바 + 띠 배너의 아래 끝(W-02 패널 · 토스트가 그 아래에서 시작한다),
 //   --hint-lift 화면 아래에서 말풍선 위 끝까지(좁은 화면의 착륙 안내가 그 위로 비킨다).
 // 손님 별은 clearGuestStar()로 언제든(손님 별이 없을 때도) 숨길 수 있다: 패널 닫기 · 목록으로 · 삭제 · 이동.
@@ -177,6 +179,22 @@ export function flyToStar(star) {
 }
 
 /* ---------- 기간 ---------- */
+const PERIOD_NAME = { all: '전체', today: '오늘', week: '이번 주', custom: '직접 지정' };
+
+function isPeriodOpen() {
+  return typeof document !== 'undefined' && document.body.classList.contains('period-open');
+}
+
+/** 좁은 화면의 기간 바를 펼치거나 접는다(🕐). 넓은 화면에서는 기간 바가 늘 보여 아무 영향이 없다. */
+export function setPeriodOpen(on, { focus = false } = {}) {
+  on = Boolean(on);
+  if (isPeriodOpen() === on) return;
+  document.body.classList.toggle('period-open', on);
+  $('wPeriodBtn').setAttribute('aria-expanded', String(on));
+  updateLayoutVars(); // 기간 바 높이만큼 패널 · 토스트 자리가 바뀐다
+  if (!on && focus) $('wPeriodBtn').focus({ preventScroll: true });
+}
+
 function paintPeriod() {
   const period = store.state.period;
   for (const b of document.querySelectorAll('#period .seg button')) {
@@ -187,6 +205,10 @@ function paintPeriod() {
   $('range').hidden = period !== 'custom';
   if ($('rFrom').value !== custom.from) $('rFrom').value = custom.from;
   if ($('rTo').value !== custom.to) $('rTo').value = custom.to;
+  // 좁은 화면의 🕐 버튼: 기간 바를 접어도 지금 기간이 보이게 이름을 붙인다
+  const name = PERIOD_NAME[period] ?? '';
+  $('wPeriodName').textContent = name;
+  $('wPeriodBtn').setAttribute('aria-label', `기간: ${name}, 바꾸기`);
   updateLayoutVars(); // 좁은 화면에서 "직접 지정"은 기간 바를 아래 줄로 내린다(app.css): 패널 · 토스트 자리를 다시 잰다
 }
 
@@ -216,7 +238,15 @@ async function applyPeriod(period) {
 function onPeriodClick(e) {
   const el = e.target instanceof Element ? e.target.closest('button') : null;
   if (!el) return;
+  if (el.id === 'wPeriodBtn') {
+    const on = !isPeriodOpen();
+    setPeriodOpen(on);
+    if (on) document.querySelector('#period .seg button.on')?.focus({ preventScroll: true });
+    return;
+  }
   const period = el.dataset.act === 'today' ? 'today' : el.dataset.p;
+  // 좁은 화면: 전체 · 오늘 · 이번 주를 고르면 기간 바를 접는다(직접 지정은 날짜를 고르게 남긴다)
+  if (el.dataset.p && el.dataset.p !== 'custom' && narrowMq.matches) setPeriodOpen(false, { focus: true });
   if (!period || period === store.state.period) return;
   applyPeriod(period);
 }
@@ -471,7 +501,7 @@ function onMeMenuClick(e) {
     return;
   }
   closeDrawer(); // 좁은 화면: 초점이 펼치기 버튼으로 간다 → 창을 닫으면 거기로 돌아온다
-  store.emit(act === 'character' ? 'openCharacter' : 'openAccount');
+  if (act === 'account') store.emit('openAccount');
 }
 
 /* ---------- 시작 ---------- */
@@ -489,6 +519,10 @@ export function initHud() {
     store.emit('newPlanet');
   });
   // 사람 아이콘 메뉴: 패널 안에서 아래로 펼쳐진다. 바깥을 누르거나 Esc면 접힌다
+  $('wCharacter').addEventListener('click', () => {
+    closeDrawer(); // 좁은 화면: 초점이 펼치기 버튼으로 간다 → 창을 닫으면 거기로 돌아온다
+    store.emit('openCharacter');
+  });
   $('wMe').addEventListener('click', () => setMeMenu($('wMeMenu').hidden));
   $('wMeMenu').addEventListener('click', onMeMenuClick);
   addEventListener('pointerdown', (e) => {
@@ -534,6 +568,16 @@ export function initHud() {
     setSide(true, { focus: true });
     return true;
   });
+  // 좁은 화면의 기간 바: 바깥을 누르거나 Esc면 접는다. 넓은 화면으로 바뀌면 접힌 상태로 되돌린다
+  addEventListener('pointerdown', (e) => {
+    if (isPeriodOpen() && e.target instanceof Node && !$('period').contains(e.target)) setPeriodOpen(false);
+  });
+  registerEscape(34, () => {
+    if (!store.state.inWorld || !isPeriodOpen()) return false;
+    setPeriodOpen(false, { focus: true });
+    return true;
+  });
+  narrowMq.addEventListener?.('change', () => setPeriodOpen(false));
   narrowMq.addEventListener?.('change', restoreSide);
   restoreSide();
 
@@ -585,6 +629,7 @@ export function initHud() {
     dropGuest();
     setSelectedStar(null);
     nearId = null;
+    setPeriodOpen(false);
     paintHint(); // 우주 밖: 말풍선과 기록하기 테두리를 내린다
     if (narrowMq.matches) setSide(true); // 좁은 화면은 다음에 들어올 때도 접힌 채로
   });
@@ -642,14 +687,21 @@ export function initHud() {
     }
     widened = store.state.period;
   });
-  // 토스트는 우주가 열린 뒤에 띄운다. transition.js가 바로 뒤에 띄우는 안내("WASD로…" · "비행 중…")보다
-  // 나중에 나오게 한 박자 늦춘다. 손님 별 토스트가 떠 있으면 그것을 남긴다.
+  // 기간을 넓혔다는 안내는 우주가 다 열리고 0.3초 뒤, 눈높이(화면 위쪽 1/3 가운데)에 4초 동안 띄운다(app.css #toast.notice).
+  // 다른 토스트 자리(넓은 화면은 맨 아래, 좁은 화면은 맨 위)는 들어온 직후의 시선에서 멀어 놓치기 쉽다.
+  // 함께 기간 바(좁은 화면은 🕐)를 한 번 반짝여 "무엇이 바뀌었는지"를 잇는다. 손님 별 토스트가 떠 있으면 그것을 남긴다.
   store.on('enterWorld', () => {
     if (!widened) return;
     const to = widened;
     widened = false;
     setTimeout(() => {
-      if (store.state.inWorld && !guest) toast(widenToast(to));
-    }, 0);
+      if (!store.state.inWorld || guest) return;
+      toast(widenToast(to), { notice: true, duration: 4000 });
+      const tools = $('pTools');
+      tools.classList.remove('flash');
+      void tools.offsetWidth; // 다시 들어와도 반짝임이 처음부터
+      tools.classList.add('flash');
+      setTimeout(() => tools.classList.remove('flash'), 1800);
+    }, 300);
   });
 }

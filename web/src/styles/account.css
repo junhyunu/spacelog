@@ -30,7 +30,8 @@ body:not(.signed-out) .auth-out{display:none!important}
 }
 
 /* ---------- W-01 왼쪽 패널: 홈 · 사람 아이콘. 아이콘을 누르면 패널 위에 메뉴가 뜬다(아래를 밀지 않는다) ---------- */
-#side .sd-acts{grid-template-columns:minmax(0,1fr) auto}
+/* 홈(남는 폭) · 캐릭터 · 사람 아이콘 */
+#side .sd-acts{grid-template-columns:minmax(0,1fr) auto auto}
 #wMe[aria-expanded="true"]{background:var(--yellow)}
 /* 자리(top · left)는 hud.js가 버튼 바로 아래로 맞춘다. 서랍(#side z-index:1) 위에 뜬다 */
 .me-menu{position:absolute;z-index:2;width:248px;max-width:calc(100vw - 16px);box-sizing:border-box;padding:6px;display:flex;flex-direction:column;box-shadow:0 5px 0 var(--ink),0 14px 28px rgba(10,6,30,.35);transform-origin:top left;animation:menuIn .14s ease-out}
