@@ -10,6 +10,7 @@ import './styles/character.css';
 import './styles/detail.css';
 import './styles/save.css';
 import './styles/chat.css';
+import './styles/select.css'; // 선택 상자 화살표: 각 창의 선택 상자 규칙 뒤에 와야 한다
 
 import { api } from './api.js';
 import { store } from './store.js';

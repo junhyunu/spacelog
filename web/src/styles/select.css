@@ -1,0 +1,20 @@
+/* 선택 상자(select) 공통: 브라우저 기본 화살표는 오른쪽 여백(8~10px) 안에 붙어 굵은 테두리에 달라붙어 보인다.
+   기본 화살표를 끄고 앱 아이콘과 같은 아래 화살표(Lucide chevron-down, 잉크색, 굵기 2.5)를 오른쪽 테두리에서 14px 안쪽에 그린다.
+   글자 칸은 오른쪽을 40px 비워 긴 행성 이름이 화살표 밑으로 들어가지 않게 한다. 비활성일 때는 화살표도 흐린 색이다.
+
+   쓰는 곳: 별 띄우기(#save 행성) · 별 상세(#panel 행성 옮기기) · 합치기 확인 창(#confirm) · 행성 지우기(#planetDel). 새로 생기는 선택 상자에도 적용된다.
+   각 창의 선택 상자 규칙(#save select 등)은 background · padding을 한꺼번에 정해 이 규칙을 덮는다. 그래서 선택자 안의 :is(…, body)로
+   그 규칙들과 같은 무게(id 하나 + 태그 하나)를 갖게 하고(body를 넣었으니 어느 선택 상자에나 맞는다), 이 파일을 맨 마지막에 실어 이기게 한다(main.js). */
+:is(#save, body) select:not([multiple]):not([size]) {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%231a1430' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px 16px;
+  cursor: pointer;
+}
+:is(#save, body) select:not([multiple]):not([size]):disabled {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235b5480' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
