@@ -184,6 +184,7 @@ function paintPeriod() {
   $('range').hidden = period !== 'custom';
   if ($('rFrom').value !== custom.from) $('rFrom').value = custom.from;
   if ($('rTo').value !== custom.to) $('rTo').value = custom.to;
+  updateLayoutVars(); // 좁은 화면에서 "직접 지정"은 기간 바를 아래 줄로 내린다(app.css): 패널 · 토스트 자리를 다시 잰다
 }
 
 // 기간을 바꾸고 다시 받는다. 연결이 끊긴 경우가 아닌데 실패하면 마지막으로 받은 기간으로 되돌린다

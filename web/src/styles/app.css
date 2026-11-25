@@ -339,4 +339,15 @@ body:has(#panel:not([hidden])) #wHint{visibility:hidden}
 @media (max-width:378px){
   #period,body:has(#side:not([hidden])) #period{--left-w:-12px;top:calc(var(--edge) + 52px + env(safe-area-inset-top,0px))}
 }
+/* "직접 지정"의 날짜 칸 두 개는 로고 옆 자리(약 210px)에 들어가지 않는다. 좁은 화면에서 "직접 지정"을 켠 동안만
+   기간 바를 로고 아래 줄로 내려 화면 폭을 다 쓰게 한다: 버튼 4개는 고르게 퍼지고, 날짜 칸은 폭을 반씩 나눈다.
+   (--tr-bottom은 hud.js가 실제 위치로 다시 잰다. 넓은 화면은 지금처럼 한 줄) */
+@media (max-width:760px){
+  body:has(#range:not([hidden])) #period{--left-w:-12px;top:calc(var(--edge) + 52px + env(safe-area-inset-top,0px))}
+  body:has(#range:not([hidden])) #period .pbar{align-self:stretch;justify-content:stretch}
+  body:has(#range:not([hidden])) #period .seg{flex:1 1 100%}
+  body:has(#range:not([hidden])) #period .seg button{flex:1;text-align:center}
+  body:has(#range:not([hidden])) #period .range{flex:1 1 100%;min-width:0;padding:0 4px}
+  body:has(#range:not([hidden])) #period .range input{flex:1;min-width:0}
+}
 @media (prefers-reduced-motion:reduce){#panel{animation:none;transition:none}.rec.new{animation:none}#wLog.beckon::before{animation:none}#left.drawer #side{animation:none}#helpToggle .i{transition:none}}
