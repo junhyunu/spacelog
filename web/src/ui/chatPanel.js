@@ -13,7 +13,7 @@
 // 읽지 않음 확인(30초): 켜져 있고 쓸 수 있을 때만, 탭이 숨겨졌거나 연결이 끊기면 쉰다.
 //
 // store에서 듣는 것: 'data'(행성 목록이 바뀌면 열린 탭 · 설정의 행성 목록을 다시 그린다), 'enterWorld' · 'leaveWorld'(홈 탭의 바로 묻기),
-//   'reachable'(다시 연결되면 읽지 않음 확인). 알리는 것: 'openSave' { text }(chatThread.js), 'openStar'(hud.js의 flyToStar)
+//   'leavingWorld'(우주에서 홈으로 나가면 창을 닫는다), 'reachable'(다시 연결되면 읽지 않음 확인). 알리는 것: 'openSave' { text }(chatThread.js), 'openStar'(hud.js의 flyToStar)
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { esc, ico, planetFace } from '../util.js';
@@ -709,6 +709,8 @@ export function initChat() {
   };
   store.on('enterWorld', reHome);
   store.on('leaveWorld', reHome);
+  // 우주에서 홈으로 나갈 때는 챗봇 창을 닫는다(홈에서 그대로 열려 있지 않게)
+  store.on('leavingWorld', () => closeChat({ focus: false }));
   const back = () => {
     refreshUnread();
     resumeRunning();
