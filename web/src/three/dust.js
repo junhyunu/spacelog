@@ -8,8 +8,7 @@ const DUST_PINK = 0xff5d8f; // 고른 먼지(프로젝트 핑크)
 const STRIPE_COLORS = ['#26303c', '#2f3a48', '#3a4757', '#4c5b6b', '#33404f', '#2a3340', '#56677a', '#303b49'];
 
 /**
- * 줄무늬 몸 텍스처(512×256 캔버스, 가로로 물결치는 띠). seed(행성 id)가 같으면 늘 같은 무늬.
- * 띠 경계의 물결은 가로 폭에 정수 번 들어가게 해서 RepeatWrapping으로 이어 붙여도 이음매가 없다.
+ * 줄무늬 몸 텍스처(512×256 캔버스, 가로로 물결치는 띠, 띠 사이로 가는 진한 끊긴 줄). seed(행성 id)가 같으면 늘 같은 무늬.
  */
 export function stripeTexture(seed) {
   const W = 512;
@@ -20,29 +19,32 @@ export function stripeTexture(seed) {
   c.height = H;
   const g = c.getContext('2d');
 
-  // 경계선: 맨 위 · 맨 아래는 평평, 그 사이는 높이 6~32px 간격으로 사인 물결(진폭 2~3px)
-  const edges = [{ y: 0, amp: 0, k: 1, phase: 0 }];
-  let y = 0;
-  for (;;) {
-    y += rand(6, 32);
-    if (y >= H - 4) break;
-    edges.push({ y, amp: rand(2, 3), k: Math.floor(rand(1, 5)), phase: rand(0, Math.PI * 2) });
-  }
-  edges.push({ y: H, amp: 0, k: 1, phase: 0 });
-  const edgeY = (e, x) => e.y + e.amp * Math.sin((x / W) * Math.PI * 2 * e.k + e.phase);
+  // 바탕은 진한 잉크 청색: 띠마다 위 · 아래 경계가 따로 물결쳐서 이웃 띠와 살짝 어긋난 곳이
+  // 가는 진한 끊긴 줄로 드러난다(사용자가 고른 시안의 거친 줄무늬 느낌)
+  g.fillStyle = '#141a24';
+  g.fillRect(0, 0, W, H);
+
+  // 물결은 가로 폭에 정수 번(2~3번) 들어가게 해서 RepeatWrapping으로 이어 붙여도 이음매가 없다
+  const wave = (amp) => ({ amp, k: Math.floor(rand(2, 4)), phase: rand(0, Math.PI * 2) });
+  const at = (base, w, x) => base + w.amp * Math.sin((x / W) * Math.PI * 2 * w.k + w.phase);
 
   const STEP = 8;
-  for (let i = 0; i < edges.length - 1; i++) {
-    const top = edges[i];
-    const bottom = edges[i + 1];
+  let y = 0;
+  while (y < H) {
+    const h = rand(6, 32);
+    const first = y === 0;
+    const last = y + h >= H;
+    const top = first ? { amp: 0, k: 1, phase: 0 } : wave(2.2);
+    const bottom = last ? { amp: 0, k: 1, phase: 0 } : wave(2.6);
+    const bottomY = last ? H : y + h;
     g.fillStyle = STRIPE_COLORS[Math.floor(rand(0, STRIPE_COLORS.length))];
     g.beginPath();
-    g.moveTo(0, edgeY(top, 0));
-    for (let x = STEP; x <= W; x += STEP) g.lineTo(x, edgeY(top, x));
-    // 아래 경계는 1px 더 내려 그려 띠 사이에 틈이 보이지 않게 한다(다음 띠가 위에 덮는다)
-    for (let x = W; x >= 0; x -= STEP) g.lineTo(x, edgeY(bottom, x) + 1);
+    g.moveTo(0, at(y, top, 0));
+    for (let x = STEP; x <= W; x += STEP) g.lineTo(x, at(y, top, x));
+    for (let x = W; x >= 0; x -= STEP) g.lineTo(x, at(bottomY, bottom, x));
     g.closePath();
     g.fill();
+    y += h;
   }
 
   const tex = new THREE.CanvasTexture(c);

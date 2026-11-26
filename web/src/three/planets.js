@@ -14,7 +14,8 @@ export const BASE_RADIUS = 4.2;
 export const MAX_RADIUS = 6;
 const GROW_PER_STAR = 0.035;
 /** 한 행성에 그리는 별의 최대 개수(최근 것부터). */
-export const STARS_PER_PLANET = 50;
+export const STAR_SIZE = 0.75;
+export const STARS_PER_PLANET = 24;
 /** 기간 안의 별이 이보다 많으면 별을 그리지 않는다. */
 export const STAR_CAP = 2000;
 
@@ -502,7 +503,7 @@ function createStar(id, P, fromPos) {
     };
   } else {
     starMats();
-    pivot.rotation.set(rnd(-0.7, 0.7), rnd(0, 6.28), rnd(-0.7, 0.7));
+    pivot.rotation.set(rnd(-0.26, 0.26), rnd(0, 6.28), rnd(-0.26, 0.26));
     const m = ol(new THREE.Mesh(starGeo, starMat), 1.16);
     m.userData = { starId: id, planetId: P.id };
     S = {
@@ -511,10 +512,10 @@ function createStar(id, P, fromPos) {
       pivot,
       holder,
       mesh: m,
-      extra: 2.4 + rnd(0, 1.8), // 궤도 반지름 = 행성 반지름 + 2.4 ~ 4.2
+      extra: 2.6 + rnd(0, 1.4), // 궤도 반지름 = 행성 반지름 + 2.6 ~ 4.0
       bandY: 0,
-      size: 1,
-      speed: rnd(0.18, 0.38) * (Math.random() < 0.5 ? -1 : 1),
+      size: STAR_SIZE,
+      speed: 0.26,
       spin: rnd(1, 2.4),
     };
   }
