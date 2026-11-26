@@ -20,7 +20,7 @@ body:not(.signed-out) .auth-out{display:none!important}
 #hLoginHint b{font-size:15px;line-height:1.4;text-wrap:balance}
 #hLoginHint .btn{flex:none;font-size:14px;padding:7px 14px}
 #hLoginHint::before,#hLoginHint::after{content:"";position:absolute;left:50%;width:0;height:0;border-style:solid;border-color:transparent;pointer-events:none;transform:translateX(-50%)}
-#hLoginHint::before{top:-21px;border-width:0 14px 18px;border-bottom-color:var(--ink)}
+#hLoginHint::before{top:-20px;border-width:0 14px 18px;border-bottom-color:var(--ink)}
 #hLoginHint::after{top:-11px;border-width:0 9px 12px;border-bottom-color:var(--panel)}
 #hLoginHint.nudge{animation:nudge .36s ease-in-out}
 @keyframes nudge{20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
@@ -34,7 +34,7 @@ body:not(.signed-out) .auth-out{display:none!important}
 #side .sd-acts{grid-template-columns:minmax(0,1fr) auto auto}
 #wMe[aria-expanded="true"]{background:var(--yellow)}
 /* 자리(top · left)는 hud.js가 버튼 바로 아래로 맞춘다. 서랍(#side z-index:1) 위에 뜬다 */
-.me-menu{position:absolute;z-index:2;width:248px;max-width:calc(100vw - 16px);box-sizing:border-box;padding:6px;display:flex;flex-direction:column;box-shadow:0 5px 0 var(--ink),0 14px 28px rgba(10,6,30,.35);transform-origin:top left;animation:menuIn .14s ease-out}
+.me-menu{position:absolute;z-index:2;width:248px;max-width:calc(100vw - 16px);box-sizing:border-box;padding:6px;display:flex;flex-direction:column;box-shadow:var(--drop-card),0 14px 28px rgba(10,6,30,.35);transform-origin:top left;animation:menuIn .14s ease-out}
 @keyframes menuIn{from{opacity:0;transform:translateY(-4px) scale(.97)}}
 .me-menu .me-head{display:flex;flex-direction:column;gap:2px;padding:8px 10px 6px;min-width:0}
 .me-menu .me-email{font-size:12.5px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -43,7 +43,7 @@ body:not(.signed-out) .auth-out{display:none!important}
 .me-menu button{display:flex;align-items:center;gap:10px;font:600 14px var(--f-body);text-align:left;min-height:44px;padding:0 10px;border:0;border-radius:10px;background:transparent;color:var(--ink);cursor:pointer}
 .me-menu button .i{flex:none;color:var(--mute)}
 @media (hover:hover){.me-menu button:hover{background:var(--panel-2)}}
-.me-menu button:focus-visible{outline:var(--line) solid var(--sky);outline-offset:-3px}
+.me-menu button:focus-visible{outline:var(--ring) solid var(--sky);outline-offset:-3px}
 @media (prefers-reduced-motion:reduce){.me-menu{animation:none}}
 
 /* ---------- 로그인 · 계정 설정 창 ---------- */
@@ -54,9 +54,9 @@ body:not(.signed-out) .auth-out{display:none!important}
 .authdlg header .x{width:34px;height:34px;padding:0;flex:none;display:grid;place-items:center}
 .authdlg .fld{display:flex;flex-direction:column;gap:var(--gap-1);min-width:0;margin:0;padding:0;border:0}
 .authdlg .lbl{font-size:13px;font-weight:700;padding:0}
-.authdlg input{font:600 14px var(--f-body);border:var(--line-thin) solid var(--ink);border-radius:10px;padding:8px 10px;background:var(--white);color:var(--ink);width:100%;min-height:44px;box-sizing:border-box}
+.authdlg input{font:600 14px var(--f-body);border:var(--line) solid var(--ink);border-radius:10px;padding:8px 10px;background:var(--white);color:var(--ink);width:100%;min-height:44px;box-sizing:border-box}
 .authdlg input::placeholder{color:#9a94bd;font-weight:500}
-.authdlg :focus-visible{outline:var(--line) solid var(--sky);outline-offset:2px}
+.authdlg :focus-visible{outline:var(--ring) solid var(--sky);outline-offset:2px}
 .authdlg .demo{margin:-4px 0 0;font-size:12.5px;line-height:1.5;color:var(--mute);background:var(--notice);border:2px dashed var(--ink);border-radius:10px;padding:7px 10px}
 .authdlg .acct{margin:0;font:500 14px var(--f-mono);color:var(--mute);background:var(--panel-2);border-radius:10px;padding:10px;overflow-wrap:anywhere}
 .authdlg .pw{gap:var(--gap-2);padding-top:var(--gap-3);border-top:1.5px dashed #b7b0e0}

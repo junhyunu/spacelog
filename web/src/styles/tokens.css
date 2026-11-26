@@ -9,7 +9,8 @@
   --white:#ffffff;    /* 목록 항목, 입력창, 미리보기 바탕 */
   --yellow:#ffd23f;   /* 기본 버튼, 선택된 항목, 별 */
   --pink:#ff5d8f;     /* 고른 별, 새 항목 강조, 지우기 확정 */
-  --violet:#7a6cff;   /* 우주로 들어가기, 라벨 */
+  --violet:#7a6cff;   /* 우주로 들어가기, 로고 글자, 채움 · 테두리 */
+  --violet-text:#5a4ad1; /* 작은 글자 라벨(12~13px). --violet은 --panel 위에서 3.5:1이라 작은 글자 AA(4.5:1)에 못 미친다 */
   --sky:#5ec8ff;      /* 키보드 포커스 링 */
   --notice:#fff4c2;   /* 띠 배너 */
   --danger-text:#c2185b; /* "이 별 지우기" 글자 링크 */
@@ -21,10 +22,19 @@
   --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
 
   /* 3-3 모양과 간격 */
-  --line:3px; --line-thin:2.5px;
+  /* 선 굵기 세 단계(1단계 · 차분한 화면): 창 · 카드 2px > 기본 버튼 2.5px > 창 안의 목록 줄 1.5px 연보라.
+     --line: 카드 · 창 테두리, 카드 안의 잉크 구분선, 입력칸, 보조(고스트) · 아이콘 버튼.
+     --line-thin: 작은 부품(스위치 · 칩 · 말풍선 · 점선 새 항목). 지금은 --line과 같은 2px.
+     --line-btn: 기본 버튼(노랑 · 분홍 · 보라)과 체크칸.
+     --line-row · --row-line: 창 안의 목록 줄(그림자 없음). --thumb-line: 줄 안의 작은 그림 칸.
+     --ring: 키보드 포커스 링 굵기(테두리가 얇아져도 3px 그대로) */
+  --line:2px; --line-thin:2px; --line-btn:2.5px; --line-row:1.5px; --ring:3px;
+  --row-line:#c9c2ec;   /* 목록 줄 테두리 */
+  --thumb-line:#b9b1e6; /* 줄 안의 작은 그림 칸 테두리 */
+  --sel:#ffe58a;        /* 고른 줄 · 고른 칩 바탕(--yellow보다 한 단계 연하다. 버튼은 --yellow 그대로) */
   --r-card:16px; --r-btn:12px; --r-item:12px; --r-thumb:8px; --r-pill:999px;
-  --drop-card:0 5px 0 var(--ink);
-  --drop-btn:0 4px 0 var(--ink);
+  --drop-card:0 3px 0 var(--ink);
+  --drop-btn:0 3px 0 var(--ink);
   --gap-1:6px; --gap-2:8px; --gap-3:12px; --gap-4:16px; --gap-5:24px;
   --edge:14px; /* 화면 가장자리에서 떨어지는 거리 */
 

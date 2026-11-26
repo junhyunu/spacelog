@@ -3,8 +3,9 @@
    iOS Safari는 터치 리스너가 하나도 없으면 :active를 무시해서, main.js에 빈 touchstart 리스너를 둔다.
 
    세 가지:
-   ① 그림자가 있는 두꺼운 버튼 → 아래로 꺼진다(.btn · 챗봇 버튼은 app.css · chat.css에 이미 있다)
-   ② 목록 줄 · 메뉴 항목       → 바탕이 살짝 어두워진다
+   ① 그림자가 있는 버튼 → 그림자(3px)만큼 꺼진다: 2px 내려가고 1px 남는다(.btn · 챗봇 버튼은 app.css · chat.css에 이미 있다)
+      보조(고스트) · 아이콘 .btn은 그림자가 없어 1px 내려가고 바탕만 어두워진다(app.css)
+   ② 목록 줄 · 메뉴 항목       → 바탕이 살짝 어두워진다(그림자 없는 줄이라 꺼지지 않는다)
    ③ 작은 아이콘 · 알약 버튼    → 바탕이 살짝 어두워지고 0.94배로 줄어든다
    "어두워짐"은 안쪽 그림자를 덮어씌운다: 바탕이 흰색 · 노랑 · 연보라 어느 것이든 같은 만큼 어두워진다.
    ② · ③의 목록은 :where()로 묶는다: 목록 안의 #id가 우선순위를 올려 각 부품의 규칙(⋯의 세로 가운데 맞춤 등)을 덮지 않게. */
@@ -13,12 +14,12 @@
 html{-webkit-tap-highlight-color:transparent}
 
 /* ① 꺼짐 */
-.dock button,#sideOpen,.tbtn,.fbtn,#hSideOpen{transition:transform .15s ease-out,box-shadow .15s ease-out}
-.dock button:active,#sideOpen:active,.tbtn:active,.fbtn:active,#hSideOpen:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink);transition-duration:0s}
+#sideOpen,.tbtn,.fbtn,#hSideOpen{transition:transform .15s ease-out,box-shadow .15s ease-out}
+#sideOpen:active,.tbtn:active,.fbtn:active,#hSideOpen:active{transform:translateY(2px);box-shadow:0 1px 0 var(--ink);transition-duration:0s}
 
 /* ② 어두워짐 */
-:where(.rec,.wsr,#rowMenu button,.menu button,.me-menu button,button.src,.cvb,#planetDel .opt,.authdlg .leave,#hsNew){transition:box-shadow .15s ease-out}
-:where(.rec,.wsr,#rowMenu button,.menu button,.me-menu button,button.src,.cvb,#planetDel .opt,.authdlg .leave,#hsNew):active:not(:disabled){box-shadow:inset 0 0 0 100vmax rgba(20,12,50,.10);transition-duration:0s}
+:where(.rec,.dock button,.wsr,#rowMenu button,.menu button,.me-menu button,button.src,.cvb,#planetDel .opt,.authdlg .leave,#hsNew){transition:box-shadow .15s ease-out}
+:where(.rec,.dock button,.wsr,#rowMenu button,.menu button,.me-menu button,button.src,.cvb,#planetDel .opt,.authdlg .leave,#hsNew):active:not(:disabled){box-shadow:inset 0 0 0 100vmax rgba(20,12,50,.10);transition-duration:0s}
 
 /* ③ 어두워짐 + 줄어듦 */
 :where(.ic,.seg button,.tabs button,.cp-tabs button,#wSearch .qx,.more,#helpToggle,#wNewPlanet,.linkdel,#planetForm .chip,#planetForm .sw,#charForm .chip,#charForm .sw,.gsw,.sfav,#hSearch .qx,.sqmore button){transition:transform .15s ease-out,box-shadow .15s ease-out}
@@ -28,7 +29,7 @@ html{-webkit-tap-highlight-color:transparent}
 
 /* 움직임 줄이기: 꺼짐 · 줄어듦은 빼고 색만 바뀐다 */
 @media (prefers-reduced-motion:reduce){
-  .dock button:active,#sideOpen:active,.tbtn:active,.fbtn:active,#hSideOpen:active{transform:none}
+  #sideOpen:active,.tbtn:active,.fbtn:active,#hSideOpen:active{transform:none}
   :where(.ic,.seg button,.tabs button,.cp-tabs button,#wSearch .qx,.more,#helpToggle,#wNewPlanet,.linkdel,#planetForm .chip,#planetForm .sw,#charForm .chip,#charForm .sw,.gsw,.sfav,#hSearch .qx,.sqmore button):active:not(:disabled){transform:none}
   :is(.drow,.recw) .more:active:not(:disabled){transform:translateY(-50%)}
 }

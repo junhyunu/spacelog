@@ -17,8 +17,8 @@
 #planetForm h3,#planetDel h3,#charForm h3{margin:0;font-size:17px;line-height:1.4;overflow-wrap:anywhere}
 #planetForm .row,#planetDel .row,#charForm .row{display:flex;gap:var(--gap-2);justify-content:flex-end;margin-top:4px}
 #planetForm .err,#planetDel .err,#charForm .err{margin:0;font-size:13px;font-weight:700;line-height:1.5;color:var(--danger-text)}
-#planetForm input[type="text"],#planetDel select{font:600 14px var(--f-body);border:var(--line-thin) solid var(--ink);border-radius:10px;padding:8px 10px;background:var(--white);color:var(--ink);width:100%;min-height:44px;box-sizing:border-box}
-#planetForm :focus-visible,#planetDel :focus-visible,#charForm :focus-visible{outline:var(--line) solid var(--sky);outline-offset:2px}
+#planetForm input[type="text"],#planetDel select{font:600 14px var(--f-body);border:var(--line) solid var(--ink);border-radius:10px;padding:8px 10px;background:var(--white);color:var(--ink);width:100%;min-height:44px;box-sizing:border-box}
+#planetForm :focus-visible,#planetDel :focus-visible,#charForm :focus-visible{outline:var(--ring) solid var(--sky);outline-offset:2px}
 /* 저장 · 지우는 중에는 창 자체가 초점을 쥔다(tabindex="-1"): 테두리는 그리지 않는다 */
 #planetForm .card:focus,#planetDel .card:focus,#charForm .card:focus{outline:none}
 #planetForm input[type="checkbox"],#planetDel input[type="radio"]{width:20px;height:20px;margin:0;flex:none;accent-color:var(--ink)}
@@ -43,13 +43,13 @@
 #planetForm .swatches{display:grid;grid-template-columns:repeat(8,minmax(0,44px));justify-content:space-between}
 :is(#planetForm,#charForm) .sw{width:44px;height:44px;justify-self:center;padding:0;border:0;background:transparent;display:grid;place-items:center;cursor:pointer;border-radius:50%}
 :is(#planetForm,#charForm) .sw span{width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);box-sizing:border-box}
-:is(#planetForm,#charForm) .sw[aria-checked="true"] span{border-width:var(--line);box-shadow:0 0 0 3px var(--panel),0 0 0 6px var(--sky)}
+:is(#planetForm,#charForm) .sw[aria-checked="true"] span{border-width:3px;box-shadow:0 0 0 3px var(--panel),0 0 0 6px var(--sky)}
 :is(#planetForm,#charForm) .sw:focus-visible{outline-offset:-2px}
-/* 장식 칩 10개: 줄바꿈 배치. 고른 칩은 잉크 바탕 노랑 글자 */
+/* 장식 칩 10개: 줄바꿈 배치. 고른 칩은 연한 노랑(--sel) 바탕 · 더 굵은 잉크 테두리(안쪽 그림자 1.5px) · 굵은 글자 */
 :is(#planetForm,#charForm) .chips{display:flex;flex-wrap:wrap;gap:var(--gap-2)}
 :is(#planetForm,#charForm) .chip{font:600 14px var(--f-body);color:var(--ink);background:var(--white);border:var(--line-thin) solid var(--ink);border-radius:var(--r-pill);padding:0 14px;min-height:44px;min-width:44px;cursor:pointer}
 @media (hover:hover){:is(#planetForm,#charForm) .chip:hover{background:var(--panel-2)}}
-:is(#planetForm,#charForm) .chip[aria-checked="true"]{background:var(--ink);color:var(--yellow)}
+:is(#planetForm,#charForm) .chip[aria-checked="true"]{background:var(--sel);color:var(--ink);font-weight:800;box-shadow:inset 0 0 0 1.5px var(--ink)} /* 안쪽 1.5px를 더해 테두리가 굵어 보인다(자리는 그대로) */
 #planetForm .chk{display:flex;align-items:center;gap:var(--gap-2);font-size:14px;font-weight:600;min-height:44px;align-self:flex-start;cursor:pointer}
 
 /* ---------- 행성 삭제 창 (스펙 6-7) ---------- */
