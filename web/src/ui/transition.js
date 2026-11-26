@@ -374,7 +374,7 @@ async function runEnter({ planetId, starId }) {
         }
       }
     } else if (!hasPlanet && store.state.planets.length && !touchMq.matches) {
-      toast('WASD로 날아보거나, 왼쪽 행성을 눌러 바로 이동해 보세요');
+      toast('방향키(또는 WASD)로 날아보거나, 왼쪽 행성을 눌러 바로 이동해 보세요');
     }
   } catch (err) {
     console.error('[transition] 자동 비행 중 오류', err);

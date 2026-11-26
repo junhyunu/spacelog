@@ -79,26 +79,26 @@ function glow(color) {
 }
 
 function buildBackdrop() {
-  // 먼 점별 1800개
-  const N = 1800;
+  // 먼 점별: 넓은 화면 700개 · 좁은 화면(760px 이하) 350개. 노랑(기록 별) · 분홍(고른 별)과 헷갈리지 않게
+  // 대부분 흰색에 연한 하늘색만 조금 섞고, 밝기는 희미한 쪽이 많도록 0.35~1 사이에서 고른다
+  const narrow = typeof matchMedia === 'function' && matchMedia('(max-width: 760px)').matches;
+  const N = narrow ? 350 : 700;
   const pos = new Float32Array(N * 3);
   const col = new Float32Array(N * 3);
-  const pal = [
-    [1, 1, 1],
-    [1, 0.85, 0.5],
-    [0.7, 0.85, 1],
-    [1, 0.6, 0.8],
-  ];
+  const WHITE_STAR = [1, 1, 1];
+  const SKY_STAR = [0.75, 0.87, 1];
   const v = new THREE.Vector3();
   for (let i = 0; i < N; i++) {
     v.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize().multiplyScalar(rand(400, 900));
     pos.set([v.x, v.y, v.z], i * 3);
-    col.set(pal[i % 4], i * 3);
+    const base = i % 5 === 0 ? SKY_STAR : WHITE_STAR;
+    const lum = 0.35 + 0.65 * Math.random() ** 2.2; // 희미한 별이 대부분, 밝은 별은 조금
+    col.set([base[0] * lum, base[1] * lum, base[2] * lum], i * 3);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ size: 2.2, vertexColors: true, sizeAttenuation: false })));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ size: narrow ? 1.6 : 1.8, vertexColors: true, sizeAttenuation: false })));
 
   // 성운 4개
   [

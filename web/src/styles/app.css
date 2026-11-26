@@ -103,6 +103,8 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 .hero{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
 .hero h2{margin:0;font-family:var(--f-display);font-weight:400;font-size:clamp(24px,3.4vw,34px);line-height:1.15;text-shadow:0 3px 0 var(--ink);text-wrap:balance}
 .hero h2 em{font-style:normal;color:var(--yellow)}
+/* 좁은 화면: 위쪽 바와 제목 사이를 24px로(바 아래 기본 8px + 16px) */
+@media (max-width:760px){.hero{padding-top:16px}}
 .hstats{display:flex;gap:8px;font-weight:700;font-size:13px;align-items:center}
 .hstats b{background:var(--ink);color:var(--yellow);border-radius:999px;padding:2px 9px;font-variant-numeric:tabular-nums;border:2px solid #3a2f6a}
 .bh-wrap{position:relative;width:210px;height:210px;max-width:80vw;max-height:80vw;display:grid;place-items:center;margin:-8px 0}
@@ -309,8 +311,9 @@ body{word-break:keep-all}
 #helpToggle .ht{font-family:var(--f-body);font-weight:800;font-size:14px}
 #helpToggle .i{transition:transform .2s}
 #help.big #helpToggle .i{transform:rotate(180deg)}
-#help .keys{display:none;grid-template-columns:repeat(2,auto);justify-content:start;gap:7px 16px;padding:4px 8px 6px}
-#help.big .keys{display:grid}
+#help .keys{display:none;flex-wrap:wrap;gap:7px 16px;padding:4px 8px 6px}
+#help .keys > span{white-space:nowrap}
+#help.big .keys{display:flex}
 /* 터치 화면(마우스처럼 올려 둘 수 없고 손가락으로 누르는 기기)에서는 WASD · Space · Enter를 누를 수 없다.
    키 안내 칸을 숨기고 한 줄 안내만 보인다. 화면 폭이 아니라 입력 장치로 가른다(좁은 창의 PC에는 그대로 키 안내) */
 #touchHint{display:none;flex:none;margin:8px 0 0;padding:10px 16px 4px;border-top:2.5px dashed #b7b0e0;font-size:12.5px;line-height:1.5;color:var(--mute)}
