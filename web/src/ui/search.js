@@ -11,6 +11,7 @@ import { planetFace, esc, shortDate } from '../util.js';
 import { registerEscape } from './escape.js';
 import { isOutsidePeriod } from './hudLogic.js';
 import { flyToStar, setPeriodOpen } from './hud.js';
+import { queryTerms, matchesText, markHtml, snipAround } from './searchMatch.js';
 
 const $ = (id) => document.getElementById(id);
 const narrowMq = typeof matchMedia === 'function' ? matchMedia('(max-width: 760px)') : { matches: false };
@@ -24,32 +25,6 @@ let all = null; // 받아 둔 모든 별(최신순). null이면 다음 검색 �
 let loading = null;
 let seq = 0;
 let ready = false;
-
-const norm = (t) => String(t ?? '').toLowerCase();
-
-/** 찾은 낱말을 <mark>로 감싼다(나머지는 esc). */
-function markQ(text, q) {
-  text = String(text ?? '');
-  if (!q) return esc(text);
-  const low = norm(text);
-  let out = '';
-  let i = 0;
-  let j;
-  while ((j = low.indexOf(q, i)) !== -1) {
-    out += `${esc(text.slice(i, j))}<mark>${esc(text.slice(j, j + q.length))}</mark>`;
-    i = j + q.length;
-  }
-  return out + esc(text.slice(i));
-}
-
-/** 메모에서 찾았으면 그 낱말 둘레의 한 줄. 없으면 '' */
-function memoSnip(memo, q) {
-  const m = String(memo ?? '').replace(/\s+/g, ' ').trim();
-  const at = q ? norm(m).indexOf(q) : -1;
-  if (at < 0) return '';
-  const from = Math.max(0, at - 12);
-  return (from ? '…' : '') + markQ(m.slice(from), q);
-}
 
 // 날짜는 목록과 같은 표기('11.26', util.js shortDate)
 const md = shortDate;
@@ -70,7 +45,7 @@ function loadAll() {
   return loading;
 }
 
-const query = () => norm($('wQ').value.trim());
+const query = () => $('wQ').value.trim();
 
 function setResults(html) {
   const box = $('wResults');
@@ -85,14 +60,15 @@ const RECENT = 5; // 검색어가 비었을 때 보여 주는 최근 별 개수
 /** 결과 한 줄. q가 있으면 찾은 낱말을 표시하고, 제목에 없으면 찾은 곳(메모 · 내용) 둘레 한 줄을 보여 준다. */
 function rowHtml(s, q) {
   const p = faceOf(s.planet_id);
-  const memo = q ? memoSnip(s.memo, q) : '';
-  const body = q && !memo && !norm(s.title).includes(q) ? memoSnip(s.body, q) : '';
+  const terms = queryTerms(q);
+  const memo = terms.length ? (snipAround(s.memo, q) ?? '') : '';
+  const body = terms.length && !memo && !matchesText([s.title], terms) ? (snipAround(s.body, q) ?? '') : '';
   const snip = memo ? `메모: ${memo}` : body ? `내용: ${body}` : '';
   const out = isOutsidePeriod(s, store.state.range);
   return (
     `<li><button type="button" class="wsr" data-star="${esc(s.id)}">` +
     `<span class="pdot" style="background:${p.face}" aria-hidden="true"></span>` +
-    `<span class="tx"><span class="n">${markQ(s.title, q)}</span>` +
+    `<span class="tx"><span class="n">${markHtml(s.title, q)}</span>` +
     (snip ? `<span class="m">${snip}</span>` : '') +
     `<span class="k">${esc(p.name)} · ${md(s.created_at)}${out ? ' · <i>기간 밖</i>' : ''}</span></span>` +
     '</button></li>'
@@ -102,7 +78,7 @@ function rowHtml(s, q) {
 async function paint() {
   const q = query();
   $('wQClear').hidden = !$('wQ').value;
-  if (!q && !isOpen()) {
+  if (!queryTerms(q).length && !isOpen()) {
     setResults(null);
     return;
   }
@@ -115,7 +91,7 @@ async function paint() {
     return;
   }
   if (token !== seq || query() !== q) return; // 그사이 더 적었다
-  if (!q) {
+  if (!queryTerms(q).length) {
     // 검색어가 비었으면: 최근 별 5개(적지 않고 바로 고를 수 있게). 별이 없으면 무엇을 찾는지 안내
     if (!isOpen()) return;
     const recent = list.slice(0, RECENT);
@@ -126,7 +102,8 @@ async function paint() {
     );
     return;
   }
-  const hits = list.filter((s) => norm(s.title).includes(q) || norm(s.body).includes(q) || norm(s.memo).includes(q));
+  const terms = queryTerms(q);
+  const hits = list.filter((s) => matchesText([s.title, s.body, s.memo], terms));
   if (!hits.length) {
     setResults(`<p class="sr-msg"><b>‘${esc($('wQ').value.trim())}’에 맞는 별이 없어요</b>제목·내용·메모에서 찾았어요. 다른 낱말로 찾아보세요</p>`);
     return;

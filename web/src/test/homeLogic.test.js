@@ -124,3 +124,16 @@ describe('emptyState', () => {
     expect(emptyState({ shown: 0 })).toBe('period');
   });
 });
+
+describe('homeLogic search uses the shared rules', () => {
+  test('ignores spacing, word order and spans fields', () => {
+    expect(matches({ title: '이번 주 회의', body: 'Flask 웹' }, '이번주')).toBe(true);
+    expect(matches({ title: '이번주 회의' }, '이번 주')).toBe(true);
+    expect(matches({ title: 'RAG', body: 'Flask 웹' }, 'flask rag')).toBe(true);
+    expect(matches({ title: 'RAG' }, 'flask rag')).toBe(false);
+  });
+  test('marks across the spacing', () => {
+    expect(markHtml('이번 주에는', '이번주')).toBe('<mark>이번 주</mark>에는');
+    expect(snipHtml('앞'.repeat(30) + ' 이번 주 끝', '이번주')).toMatch(/^….*<mark>이번 주<\/mark>/);
+  });
+});
