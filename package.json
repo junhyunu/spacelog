@@ -16,7 +16,8 @@
     "test": "vitest run",
     "rag:setup": "node scripts/rag-setup.mjs",
     "rag:test": "node scripts/rag-test.mjs",
-    "demo": "node scripts/demo.mjs"
+    "demo": "node scripts/demo.mjs",
+    "deploy:demo": "node scripts/deploy-demo.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.8",

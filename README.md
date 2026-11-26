@@ -156,7 +156,9 @@ npm run preview:demo   # 빌드한 것을 http://localhost:4850 에서 열어 �
 - 로그인 없이 데모 계정으로 시작하고, 위 데모와 같은 가짜 데이터(날짜는 처음 연 날 기준)가 들어 있어요.
 - 챗봇은 OpenAI를 부르지 않아요. 추천 질문과 준비된 질문 몇 개에만 답해요(`web/demo/chat.js`).
 - 원본 열기 · 폴더에서 보기는 안내만 띄우고, 새로 넣은 링크는 제목을 가져오지 않아요. 파일은 하나에 50MB까지예요.
-- Vercel: 저장소를 연결하면 `vercel.json`(빌드 `npm run build:demo`, 결과 `dist-demo`)대로 정적 사이트로 올라가요.
+- 공개 주소: https://spacelog-eta.vercel.app (Vercel 프로젝트 `spacelog`)
+- 다시 올리기: `npm run deploy:demo` — 빌드 → `dist-demo`를 프로젝트에 연결 → Vercel이 만든 접속 토큰 파일(`.env.local`) 지우기 → 운영 배포 → 공개 주소 확인까지 한 번에 해요. 이 컴퓨터의 Vercel CLI가 로그인돼 있어야 해요(`npx vercel whoami`).
+- 저장소를 Vercel에 연결해 자동 배포하는 방법도 있어요: `vercel.json`(빌드 `npm run build:demo`, 결과 `dist-demo`)대로 올라가요.
 
 ## 테스트
 
