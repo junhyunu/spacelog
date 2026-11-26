@@ -32,7 +32,7 @@ import { api } from '../api.js';
 import { store } from '../store.js';
 import { flyTo, setInputBlocked } from '../three/controls.js';
 import { STAR_CAP, setSelectedStar, syncUniverse } from '../three/planets.js';
-import { planetFace, daysAgo, esc, periodCountLabel, periodRange } from '../util.js';
+import { planetFace, daysAgo, esc, periodCountLabel, periodName, periodRange } from '../util.js';
 import { planetLocked } from './planetLogic.js';
 import { registerEscape } from './escape.js';
 import { confirmDeletePlanet } from './planetDelete.js';
@@ -180,8 +180,6 @@ export function flyToStar(star) {
 }
 
 /* ---------- 기간 ---------- */
-const PERIOD_NAME = { all: '전체', today: '오늘', week: '이번 주', custom: '직접 지정' };
-
 function isPeriodOpen() {
   return typeof document !== 'undefined' && document.body.classList.contains('period-open');
 }
@@ -207,7 +205,7 @@ function paintPeriod() {
   if ($('rFrom').value !== custom.from) $('rFrom').value = custom.from;
   if ($('rTo').value !== custom.to) $('rTo').value = custom.to;
   // 좁은 화면의 🕐 버튼: 기간 바를 접어도 지금 기간이 보이게 이름을 붙인다
-  const name = PERIOD_NAME[period] ?? '';
+  const name = periodName(period);
   $('wPeriodName').textContent = name;
   $('wPeriodBtn').setAttribute('aria-label', `기간: ${name}, 바꾸기`);
   updateLayoutVars(); // 좁은 화면에서 "직접 지정"은 기간 바를 아래 줄로 내린다(app.css): 패널 · 토스트 자리를 다시 잰다

@@ -29,6 +29,7 @@ import { setEscapeGuards } from './ui/escape.js';
 import { initHome, renderHome } from './ui/home.js';
 import { initHud } from './ui/hud.js';
 import { initSearch } from './ui/search.js';
+import { initTopbar } from './ui/topbar.js';
 import { initPanel } from './ui/panel.js';
 import { closePlanetDelete } from './ui/planetDelete.js';
 import { closePlanetForm, openPlanetForm } from './ui/planetForm.js';
@@ -156,6 +157,8 @@ store.on('openSave', (o) => {
 initDropzone();
 // 챗봇(2차 스펙 7장): 오른쪽 아래 버튼 · 창 · 읽지 않음 확인. W-00 · W-01 어디서나
 initChat();
+// 행성 패널 · 챗봇 창이 열린 동안 위쪽 막대를 숨기고 손잡이를 단다(topbar.js)
+initTopbar();
 // 우주에서 나갈 때 패널 · 행성 창은 닫는다. 저장 창은 비어 있고 한가할 때만 스스로 닫힌다(쓰던 글을 지키려고).
 store.on('leavingWorld', () => {
   closePlanetForm();

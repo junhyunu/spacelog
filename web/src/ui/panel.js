@@ -24,9 +24,9 @@ import { registerEscape } from './escape.js';
 import { clearGuestStar } from './hud.js';
 import { confirmDeletePlanet } from './planetDelete.js';
 import { openPlanetForm } from './planetForm.js';
-import { detailKey, keepPicked, mergeDesc, mergeErrorText, mergeFailure, moveTargets, panelStars, pickAllHtml, pickAllState, pickBarHtml, pickButtonHtml, planetLocked, thumbKind, toggleAll, togglePickedId } from './planetLogic.js';
+import { detailKey, keepPicked, mergeDesc, mergeErrorText, mergeFailure, moveTargets, panelStars, pickAllHtml, pickAllState, pickBarHtml, pickButtonHtml, panelCountText, planetLocked, thumbKind, toggleAll, togglePickedId } from './planetLogic.js';
 import { openRowMenu } from './rowMenu.js';
-import { deletePickedStars, deleteStar, movePickedStars, moveStar, setPickingUi } from './starActions.js';
+import { deletePickedStars, deleteStar, movePickedStars, moveStar } from './starActions.js';
 import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
@@ -100,7 +100,7 @@ function listHtml(planet, stars) {
     `<div class="hd"><h2><span class="pn">${esc(planet.name)}</span> ` +
     (locked ? '' : `<button type="button" class="ic" data-act="edit" data-focus="edit" aria-label="행성 꾸미기" title="행성 꾸미기">${ico('pencil', 16)}</button>`) +
     '</h2>' +
-    `<div class="sub">${store.state.period === 'all' ? `전체 별 ${num(planet.count_total)}개` : `이 기간 별 ${num(stars.length)}개 · 전체 ${num(planet.count_total)}개`}</div></div>` +
+    `<div class="sub">${esc(panelCountText({ period: store.state.period, inPeriod: stars.length, total: planet.count_total, range: store.state.range }))}</div></div>` +
     (locked ? '' : `<button type="button" class="btn x ghost" data-act="menu" data-focus="menu" aria-label="행성 메뉴" aria-expanded="${menuOpen}" aria-controls="pMenu">${ico('ellipsis')}</button>`) +
     `<button type="button" class="btn x" data-act="close" data-focus="close" aria-label="닫기">${ico('x')}</button></header>` +
     (menuOpen && !locked
@@ -272,6 +272,7 @@ export function closePanel({ overview = false, keepPosition = false } = {}) {
   el.hidden = true;
   el.textContent = '';
   setSelectedStar(null);
+  store.emit('panelClosed'); // 위쪽 막대가 다시 내려올지 정한다(topbar.js)
   if (overview) {
     clearGuestStar();
     if (store.state.inWorld && !keepPosition) enterOverview();
@@ -376,7 +377,7 @@ function menuAct(act, planet) {
 /* ---------- 여러 개 골라 옮기기 ---------- */
 
 function endPick() {
-  if (picking) setPickingUi(false);
+  // 우주 패널 고르기는 body.picking(물어보기 숨김)을 켜지 않는다. 홈 목록 고르기에서만 켠다.
   picking = false;
   pickedIds = new Set();
 }
@@ -388,7 +389,7 @@ function togglePick() {
     picking = true;
     pickedIds = new Set();
     menuOpen = false;
-    setPickingUi(true);
+    // (setPickingUi 안 부름: 패널 고르기 중에도 물어보기 버튼은 그대로)
   }
   renderPanel();
   panelEl().querySelector('[data-act="pick"]')?.focus({ preventScroll: true });

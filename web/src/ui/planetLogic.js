@@ -1,10 +1,31 @@
 // W-02 행성 패널 · 행성 꾸미기 창 · 행성 삭제 창의 순수 함수(DOM 없음).
 // 문구는 스펙 6-6 · 6-7 그대로다. 조사는 "을(를)" · "(으)로"로 쓴다.
-import { isUnsorted } from '../util.js';
+import { isUnsorted, periodName, shortDate } from '../util.js';
 
 const TEXT_MAX = 20; // 이름 · 한 줄 설명
 const num = (v) => (Number(v) || 0).toLocaleString('ko-KR');
 const key = (v) => (v === null || v === undefined ? null : String(v));
+
+// 직접 지정 기간의 날짜 표기: "11.20–11.26"(하루면 "11.20"). range.to는 끝 날 다음 자정이라 1ms 앞을 끝 날로 본다. 못 읽으면 ''
+function rangeLabel(range) {
+  const from = new Date(range?.from ?? '');
+  const to = new Date(range?.to ?? '');
+  if (!range?.from || !range?.to || Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return '';
+  const a = shortDate(from.toISOString());
+  const b = shortDate(new Date(to.getTime() - 1).toISOString());
+  return a === b ? a : `${a}–${b}`;
+}
+
+/**
+ * 행성 패널 머리의 개수 줄. 위쪽 막대가 숨어도 무엇으로 걸렀는지 보이게 실제 기간을 쓴다.
+ * 전체 기간이면 "전체 별 M개", 아니면 "오늘 별 N개 · 전체 M개"(이름은 periodName, 🕐 버튼과 같다).
+ * 직접 지정은 실제 날짜 "11.20–11.26 별 N개 · 전체 M개"(range = store.state.range). 날짜를 못 읽으면 "직접 지정"
+ */
+export function panelCountText({ period, inPeriod, total, range } = {}) {
+  if (period === 'all') return `전체 별 ${num(total)}개`;
+  const name = (period === 'custom' && rangeLabel(range)) || periodName(period);
+  return `${name} 별 ${num(inPeriod)}개 · 전체 ${num(total)}개`;
+}
 
 /* ---------- 행성 삭제 (스펙 6-7) ---------- */
 

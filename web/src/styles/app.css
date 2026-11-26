@@ -397,7 +397,8 @@ body:has(#panel:not([hidden])) #wHint{visibility:hidden}
 #wSearch .qx{flex:none;width:36px;height:36px;border:0;border-radius:50%;background:var(--panel-2);color:var(--ink);display:grid;place-items:center;cursor:pointer}
 @media (hover:hover){#wSearch .qx:hover{background:var(--hair,#d6d1f2)}}
 #wQClose{display:none}
-body:has(#wResults:not([hidden])) #period{z-index:8}
+/* 결과 목록(최근 별 포함)은 행성 패널(2 · 좁은 화면 4) · 챗봇 창(22) · 손잡이(23) · 내려온 막대(24)보다 위 */
+body:has(#wResults:not([hidden])) #period{z-index:25}
 #wResults{position:absolute;top:calc(100% + 10px);left:-3px;right:-3px;max-height:min(420px,calc(100dvh - var(--tr-bottom,64px) - 110px));overflow-y:auto;overscroll-behavior:contain;padding:6px;box-sizing:border-box}
 #wResults ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 #wResults li + li{border-top:1.5px solid var(--hair,#d6d1f2)}
@@ -466,3 +467,47 @@ body:has(#left:not([hidden])) #toast.notice{top:28vh;top:28dvh;bottom:auto;font-
 #pTools.flash .pbar,#pTools.flash #wPeriodBtn{position:relative}
 #pTools.flash .pbar::after,#pTools.flash #wPeriodBtn::after{content:"";position:absolute;inset:-10px -10px -15px;border:3px solid var(--yellow);border-radius:23px;pointer-events:none;opacity:0;animation:pflash .8s ease-in-out 2}
 @media (prefers-reduced-motion:reduce){#pTools.flash .pbar::after,#pTools.flash #wPeriodBtn::after{animation:none}}
+
+/* ---------- 위쪽 막대 자동 숨김 · 손잡이(topbar.js) ----------
+   행성 패널 · 챗봇 창이 열린 동안(body.top-tucked) 막대(#period)는 0.2초 동안 위로 미끄러져 숨고, 다 숨으면 초점도 받지 않는다(visibility).
+   창은 그만큼 위로 늘어난다: 위 끝이 --tuck-top(손잡이 아래). 손잡이로 내리면(body.top-peek) 막대가 창 위에 겹쳐 내려오고 창 크기는 그대로.
+   transform은 내려온(peek) · 평소 상태에서 none으로 둔다: 좁은 화면의 전체 화면 검색(#wSearch, position:fixed)이 막대를 기준으로 잡히지 않게 */
+:root{--tuck-top:calc(env(safe-area-inset-top,0px) + 56px)}
+#period{transition:transform .2s ease-out,visibility 0s}
+body.top-tucked:not(.top-peek) #period{transform:translateY(calc(-100% - var(--edge) - env(safe-area-inset-top,0px) - 12px));visibility:hidden;transition:transform .2s ease-in,visibility 0s linear .2s}
+body.top-tucked.top-peek #period{z-index:24}
+@media (min-width:761px){
+  body.top-tucked #panel{top:var(--tuck-top)}
+  body.top-tucked:has(#left:not([hidden])) #chatPanel{top:var(--tuck-top)}
+}
+/* 손잡이: 오른쪽 위 끝에 매달린 카드 탭(🔍 · 🕐 · "검색 · 기간" · 아래 화살표). 위 끝에 붙고 아래 모서리만 둥글다.
+   보이는 높이 40px(테두리 포함) + 그림자 4px = 누르는 자리 44px */
+#topHandle{position:fixed;top:env(safe-area-inset-top,0px);right:calc(var(--edge) + env(safe-area-inset-right,0px));z-index:23;height:40px;box-sizing:border-box;margin:0;padding:0 12px 0 11px;border-radius:0 0 14px 14px;box-shadow:var(--drop-btn);color:var(--ink);cursor:pointer;display:flex;align-items:center;gap:5px;font:700 14px var(--f-body);white-space:nowrap;animation:tabIn .2s ease-out}
+#topHandle[hidden]{display:none}
+#topHandle .tl{margin-left:1px}
+#topHandle .chev{margin-left:1px}
+@media (hover:hover){#topHandle:hover{background:var(--panel-2)}}
+#topHandle:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+/* 접기: 내려온 동안만 막대 줄의 오른쪽 끝에(넓은 화면은 🔍와 같은 43px 동그라미). 손잡이는 숨는다 */
+#topFold{display:none}
+body.top-peek #topFold{display:grid;border-radius:50%;width:43px;height:43px}
+#topFold:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+@keyframes tabIn{from{transform:translateY(-100%)}}
+/* 좁은 화면의 서랍이 펼쳐진 동안은 손잡이를 숨긴다(서랍 뒤는 누를 수 없다) */
+body:has(#left.drawer) #topHandle{visibility:hidden}
+@media (max-width:760px){
+  /* 로고 버튼 줄(위 끝 ~ 46px)은 막대가 숨어도 남는다: 패널은 그 아래부터. 막대가 두 줄(🕐로 펼친 기간 바 · 직접 지정 · 378px 이하)이던 만큼 위로 늘어난다 */
+  :root{--tuck-top:calc(var(--edge) + 46px + 12px + env(safe-area-inset-top,0px))}
+  body.top-tucked #panel{--p-top:var(--tuck-top)}
+  /* 챗봇 창은 전체 화면이라 막대를 이미 덮는다: 손잡이도 두지 않는다(창의 ✕ 자리와 겹치지 않게) */
+  body:has(#chatPanel:not([hidden])) #topHandle{display:none}
+  /* 전체 화면 검색은 내려온 막대(24)보다도 위 */
+  body.top-tucked.wsearch-open #period{z-index:40}
+  body.top-peek #topFold{width:46px;height:46px;border-radius:var(--r-card)}
+  /* 전체 화면 검색 중에는 접기를 숨긴다(검색의 ← 로 닫으면 접힌다) */
+  body.wsearch-open #topFold{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  #period,body.top-tucked:not(.top-peek) #period{transition:none}
+  #topHandle{animation:none}
+}

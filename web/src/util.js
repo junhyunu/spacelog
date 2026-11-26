@@ -95,6 +95,13 @@ export function periodRange(period, custom, now = new Date()) {
   return { from: start.toISOString(), to: end.toISOString() };
 }
 
+const PERIOD_NAME = { all: '전체', today: '오늘', week: '이번 주', custom: '직접 지정' };
+
+/** 기간 이름: 우주의 🕐 버튼(#wPeriodName)과 행성 패널 머리가 같은 이름을 쓴다. 모르는 값이면 '' */
+export function periodName(period) {
+  return PERIOD_NAME[period] ?? '';
+}
+
 /** 기간에 맞는 별 개수 말머리: 전체면 "전체 별", 아니면 "이 기간 별" */
 export function periodCountLabel(period) {
   return period === 'all' ? '전체 별' : '이 기간 별';

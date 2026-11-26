@@ -138,6 +138,8 @@
       <div class="range" id="range" hidden><input type="date" id="rFrom" aria-label="시작 날짜"><span>~</span><input type="date" id="rTo" aria-label="끝 날짜"></div>
     </div>
     <button type="button" id="wPeriodBtn" class="card tbtn" aria-expanded="false" aria-controls="range"><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span id="wPeriodName" aria-hidden="true"></span></button>
+    <!-- 손잡이로 내린 동안만 보이는 접기(topbar.js · app.css): 막대 줄의 오른쪽 끝 -->
+    <button type="button" id="topFold" class="card tbtn" aria-label="검색과 기간 접기" aria-expanded="true" aria-controls="period"><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg></button>
   </div>
   <!-- 별 찾기: 모든 기간의 별에서 제목 · 내용 · 메모를 찾는다. 결과를 누르면 그 별로 날아간다(기간 밖이면 손님 별) -->
   <div id="wSearch" class="card" role="search">
@@ -149,6 +151,10 @@
   </div>
   <div id="wBanner" class="banner" role="status" hidden></div>
 </div>
+
+<!-- 위쪽 막대 손잡이: 행성 패널 · 챗봇 창이 열려 막대(#period)가 위로 숨은 동안만 보인다. 누르면 막대가 창 위로 내려오고(topbar.js · app.css)
+     손잡이는 숨는다(접기는 막대 줄 오른쪽 끝의 #topFold). 위 끝에 매달린 카드 탭: 🔍 · 🕐 · "검색 · 기간" · 아래 화살표 -->
+<button type="button" id="topHandle" class="card" aria-label="검색과 기간 펼치기" aria-expanded="false" aria-controls="period" hidden><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span class="tl" aria-hidden="true">검색 · 기간</span><svg class="i chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
 
 <button type="button" id="near" class="btn" hidden></button>
 

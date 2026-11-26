@@ -203,6 +203,7 @@ export async function openChat() {
   const el = panel();
   el.hidden = false;
   btn.setOpen(true);
+  store.emit('chatOpened'); // 위쪽 막대를 숨길지 정한다(topbar.js)
   paintShell();
   const seq = ++loadSeq;
   el.querySelector('.cp-body').innerHTML = '<p class="cp-wait">불러오는 중…</p>';
@@ -234,19 +235,20 @@ export function closeChat({ focus = true } = {}) {
   const had = el.contains(document.activeElement);
   el.hidden = true;
   btn.setOpen(false);
+  store.emit('chatClosed'); // 위쪽 막대가 다시 내려올지 정한다(topbar.js)
   const target = had && focus ? closeFocusTarget() : null;
   if (target) target.focus({ preventScroll: true });
   else if (had) document.activeElement.blur();
 }
 
-// 창을 닫은 뒤 초점을 둘 곳: 보통은 물어보기 버튼. 여러 개 고르는 중(body.picking)에는 버튼이 숨어 있으니
+// 창을 닫은 뒤 초점을 둘 곳: 보통은 물어보기 버튼. 홈 목록에서 여러 개 고르는 중(body.picking)에는 버튼이 숨어 있으니
 // 보이는 아래 바의 첫 버튼(잠기지 않은 것) → 머리의 전체 선택 체크칸 순으로 고른다. 없으면 null(초점을 뺀다)
 function closeFocusTarget() {
   if (!document.body.classList.contains('picking')) return btn.el;
   const usable = (el) => el instanceof HTMLElement && !el.disabled && el.getClientRects().length > 0;
   return (
-    [...document.querySelectorAll('.pickbar button')].find(usable) ??
-    [...document.querySelectorAll('.pickall')].find(usable) ??
+    [...document.querySelectorAll('#hTable .pickbar button')].find(usable) ??
+    [...document.querySelectorAll('#hTable .pickall')].find(usable) ??
     (usable(btn.el) ? btn.el : null)
   );
 }
