@@ -3,7 +3,7 @@
 
 /* ---------- 로그인 전 · 후로 보이고 숨기 ---------- */
 /* 로그인 전(body.signed-out): 기록과 관련된 것을 모두 숨긴다. 연결 실패 카드(#hState 안의 [data-retry])는 남긴다 */
-body.signed-out :is(.auth-in,#hStats,#home .home-grid,#chatBtn,#chatHint,#chatPanel),
+body.signed-out :is(.auth-in,#hStats,#home .hmain,#chatBtn,#chatHint,#chatPanel),
 body.signed-out #hState:not(:has([data-retry])){display:none!important}
 body:not(.signed-out) .auth-out{display:none!important}
 

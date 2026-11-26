@@ -210,6 +210,19 @@ function paintPeriod() {
   $('wPeriodName').textContent = name;
   $('wPeriodBtn').setAttribute('aria-label', `기간: ${name}, 바꾸기`);
   updateLayoutVars(); // 좁은 화면에서 "직접 지정"은 기간 바를 아래 줄로 내린다(app.css): 패널 · 토스트 자리를 다시 잰다
+  store.emit('period', { period, custom }); // 홈의 기간 바(homeList.js)도 같은 값을 보인다
+}
+
+// 홈의 기간 바가 보낸 것('setPeriod'): { period } 또는 "직접 지정"의 날짜 { from, to }. 우주의 기간 바를 누른 것과 같은 길을 탄다
+function onSetPeriod({ period, from, to } = {}) {
+  if (from !== undefined || to !== undefined) {
+    custom = nextCustom(custom, { from: from ?? custom.from, to: to ?? custom.to });
+    if (store.state.period === 'custom') applyPeriod('custom');
+    else paintPeriod();
+    return;
+  }
+  if (!period || period === store.state.period) return;
+  applyPeriod(period);
 }
 
 // 기간을 바꾸고 다시 받는다. 연결이 끊긴 경우가 아닌데 실패하면 마지막으로 받은 기간으로 되돌린다
@@ -515,6 +528,7 @@ export function initHud() {
   $('period').addEventListener('click', onPeriodClick);
   $('rFrom').addEventListener('change', onRangeChange);
   $('rTo').addEventListener('change', onRangeChange);
+  store.on('setPeriod', onSetPeriod);
   $('dock').addEventListener('click', onDockClick);
   $('wNewPlanet').addEventListener('click', () => {
     closeDrawer();

@@ -95,7 +95,6 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 #bhCanvas{position:absolute;inset:0;width:100%;height:100%}
 #enterBtn{position:relative;font-size:16px;padding:8px 14px;min-height:44px;box-sizing:border-box;box-shadow:0 5px 0 var(--ink)}
 .hero .hint{margin:0;font-size:13px;color:#b9b3e6}
-.home-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .hcard{padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
 .hcard .eyebrow{font-family:var(--f-display);font-size:12px;color:var(--violet);letter-spacing:.06em}
 .hcard h3{margin:0;font-size:16px;line-height:1.35}
@@ -113,11 +112,6 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 /* 빈 우주 카드의 두 버튼: 같은 높이 · 같은 너비 · 같은 글자 크기. 기록하기(주된 행동)가 오른쪽 */
 #hState .hrow.eq{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:min(100%,320px);margin-inline:auto}
 #hState .hrow.eq .btn{align-self:stretch;justify-content:center;min-width:0;min-height:46px;padding:8px 14px;font-size:15px;gap:6px}
-/* 카드가 2개보다 적을 때(별 없는 행성만 있음) */
-@media (min-width:761px){
-  .home-grid[data-n="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .home-grid[data-n="1"]{grid-template-columns:minmax(0,460px);justify-content:center}
-}
 /* 전환 4 ~ 5단계: 조작 UI는 우주가 다 열린 뒤 페이드 인한다(transition.js) */
 body.world-entering :is(#left,#period,#wLog,#wHint,#worldMsg,#near){opacity:0;pointer-events:none}
 
@@ -327,7 +321,6 @@ body:has(#panel:not([hidden])) #wHint{visibility:hidden}
   #left.drawer #side{position:fixed;top:0;bottom:0;left:0;z-index:1;width:min(300px,calc(100vw - 48px));max-height:none;border-radius:0 var(--r-card) var(--r-card) 0;border-left:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);animation:drawer .2s ease-out}
   @keyframes drawer{from{transform:translateX(-100%)}}
   #near{bottom:calc(80px + env(safe-area-inset-bottom,0px))}
-  .home-grid{grid-template-columns:minmax(0,1fr)}
   .bh-wrap{width:180px;height:180px}
   #near{font-size:14px}
   /* 아래 시트가 덮는 착륙 안내 · 말풍선은 시트가 열린 동안 숨긴다(가려진 채 초점을 받지 않게). 기간 바는 그대로 쓸 수 있다 */

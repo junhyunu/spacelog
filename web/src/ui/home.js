@@ -1,9 +1,9 @@
-// W-00 메인 홈: 인사말 · 개수 · 블랙홀 엠블럼 · 행성 목록 · 최근 별.
+// W-00 메인 홈: 인사말 · 개수 · 블랙홀 엠블럼 · 상단 줄. 아래의 행성 패널 + 별 목록은 homeList.js가 그린다.
 // 시안 934~987행(renderHome · homeStates · drawBH)을 옮겼다. 데이터만 API에서 받는다.
 //
 // store로 알리는 것:
 //   'openSave'                  "기록하기"(상단 줄 · 빈 우주 카드)
-//   'newPlanet'                   "+ 새 행성"(#hNewPlanet)
+//   'newPlanet'                   "+ 새 행성"(행성 패널의 #hsNew · 빈 우주 카드의 #hNewPlanet)
 //   'openLogin'                   "로그인"(#hLogin · 로그인 안내 말풍선)
 //   'signOut'                     "로그아웃"(#hLogout)
 //   'openAccount'                 사람 아이콘(#hMe) → 계정 설정 창
@@ -14,13 +14,13 @@
 // 연결 실패 상태는 main.js(showOffline)가 그린다. 여기서는 그 카드를 건드리지 않는다.
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { PLANET_COLORS, esc, ico, periodRange, shortDate } from '../util.js';
+import { esc, ico, periodRange } from '../util.js';
 import { accountName, isSignedIn } from './account.js';
+import { initHomeList, renderHomeList } from './homeList.js';
 import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
 const num = (n) => (Number(n) || 0).toLocaleString('en-US');
-const faceOf = (planet) => PLANET_COLORS[planet?.color_index]?.face ?? '#7a6cff';
 const reduceMq = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
 
 let home = null;
@@ -28,22 +28,11 @@ let onEnter = () => {};
 let renderSeq = 0;
 
 /* ---------- 그리기 ---------- */
-function recRow(planet, star, right) {
-  const starAttr = star ? ` data-star="${esc(star.id)}"` : '';
-  const label = star ? star.title || '제목 없음' : planet.name;
-  return (
-    `<button type="button" class="rec" data-planet="${esc(planet.id)}"${starAttr}>` +
-    `<span class="pdot" style="background:${faceOf(planet)}"></span><span class="t">${esc(label)}</span>${right}</button>`
-  );
-}
-
-const NEW_PLANET_BTN = `<button type="button" class="btn ghost sm" id="hNewPlanet" data-act="newPlanet">${ico('plus', 12)} 새 행성</button>`;
-
-function paint({ summary, planets, recent }) {
+function paint({ summary }) {
   const total = Number(summary?.total) || 0;
+  const planetCount = Number(summary?.planets ?? store.state.planets.length) || 0;
   const todayN = Number(summary?.in_period) || 0;
   const empty = total === 0; // 전체 0개: 별이 하나도 없다(빈 행성은 있을 수 있다)
-  const byId = new Map(planets.map((p) => [String(p.id), p]));
 
   $('hGreet').innerHTML = !isSignedIn()
     ? '나만의 우주를 시작해 보세요'
@@ -52,26 +41,12 @@ function paint({ summary, planets, recent }) {
     : todayN
       ? `오늘 별 <em>${num(todayN)}개</em>를 띄웠어요`
       : '오늘은 아직 별이 없어요';
-  $('hStats').innerHTML = `<b>${num(total)}</b>개의 별 <b>${num(summary?.planets ?? planets.length)}</b>개의 행성`;
+  $('hStats').innerHTML = `<b>${num(total)}</b>개의 별 <b>${num(planetCount)}</b>개의 행성`;
 
-  // 행성 목록: 색 점 · 이름 · 전체 별 개수. 맨 끝에 "+ 새 행성"(전체 0개일 때는 빈 우주 카드 안에 둔다)
-  const planetsEl = $('hPlanets');
-  planetsEl.innerHTML =
-    planets.map((p) => recRow(p, null, `<span class="n2">${num(p.count_total)}</span>`)).join('') + (empty ? '' : NEW_PLANET_BTN);
-  planetsEl.closest('.hcard').hidden = empty && planets.length === 0;
+  // 아래 영역(행성 패널 + 별 목록, homeList.js): 별도 행성도 없으면 숨긴다(빈 우주 카드만 보인다)
+  $('hMain').hidden = empty && planetCount === 0;
+  renderHomeList();
 
-  // 최근 별 5개: 색 점 · 제목 · 날짜
-  const recentEl = $('hRecent');
-  const rows = recent.filter((s) => byId.has(String(s.planet_id))).slice(0, 5);
-  recentEl.innerHTML = rows
-    .map((s) => recRow(byId.get(String(s.planet_id)), s, `<span class="d">${esc(shortDate(s.created_at))}</span>`))
-    .join('');
-  recentEl.closest('.hcard').hidden = empty || rows.length === 0;
-
-  const grid = home.querySelector('.home-grid');
-  const shown = [...grid.children].filter((el) => !el.hidden).length;
-  grid.hidden = shown === 0;
-  grid.dataset.n = String(shown);
   home.querySelector('.hero').hidden = false;
   $('hLog').hidden = false;
 
@@ -102,9 +77,10 @@ export async function renderHome() {
   const seq = ++renderSeq;
   const now = new Date();
   const today = periodRange('today', null, now);
-  let summary, planets, recent;
+  // 인사말은 늘 "오늘" 기준이다(목록의 기간과 상관없다). 목록 · 행성은 store의 것을 쓴다
+  let summary;
   try {
-    [summary, planets, recent] = await Promise.all([api.summary(today), api.planets(today), api.stars({ limit: 5 })]);
+    summary = await api.summary(today);
   } catch (err) {
     if (err?.code !== 'offline' && seq === renderSeq) toast('데이터를 불러오지 못했어요. 새로고침해 주세요');
     return false;
@@ -114,7 +90,7 @@ export async function renderHome() {
   // 기다리는 사이 전환이 시작됐거나 우주 안이면 그리지 않는다(흡입 중인 요소를 갈아 끼우지 않게).
   // 돌아올 때 leaveWorld가 다시 그린다.
   if (home.inert || store.state.inWorld) return false;
-  paint({ summary, planets: planets || [], recent: recent || [] });
+  paint({ summary });
   return true;
 }
 
@@ -244,7 +220,11 @@ function onClick(e) {
   else if (el.id === 'hMe') store.emit('openAccount');
   else if (el.id === 'hLog' || el.dataset.act === 'log') store.emit('openSave');
   else if (el.dataset.act === 'newPlanet') store.emit('newPlanet');
-  else if (el.dataset.planet) onEnter({ planetId: el.dataset.planet, starId: el.dataset.star || undefined });
+  else if (el.id === 'hTopEnter') {
+    // 상단 줄의 "우주로 들어가기": 블랙홀이 보이게 맨 위로 올린 뒤 들어간다(전환이 블랙홀 자리에서 시작한다)
+    home.scrollTo({ top: 0 });
+    onEnter({});
+  }
 }
 
 /**
@@ -257,6 +237,13 @@ export function initHome({ enter } = {}) {
   if (typeof enter === 'function') onEnter = enter;
   scatterStars();
   home.addEventListener('click', onClick);
+  // 별 제목을 누르면: 우주로 들어가 그 별로 날아간다
+  initHomeList({ openStar: (star) => onEnter({ planetId: star.planet_id, starId: star.id }) });
+  // 스크롤하면 상단 줄이 위에 붙고(.stuck), 블랙홀이 화면 밖으로 나가면 상단 줄에 "우주로 들어가기"가 나타난다
+  home.addEventListener('scroll', () => home.querySelector('.home-top').classList.toggle('stuck', home.scrollTop > 8), { passive: true });
+  if (typeof IntersectionObserver === 'function') {
+    new IntersectionObserver(([en]) => { $('hTopEnter').hidden = en.isIntersecting; }, { root: home, rootMargin: '-70px 0px 0px 0px' }).observe($('enterBtn'));
+  }
   document.addEventListener('visibilitychange', resumeEmblem);
   // 우주 밖에 있고 전환 중(inert)이 아닐 때만 다시 그린다
   store.on('data', () => {

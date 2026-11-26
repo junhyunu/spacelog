@@ -1,0 +1,169 @@
+/* W-00 홈의 아래 영역: 왼쪽 행성 패널(#hSide) + 오른쪽 별 목록(#hList). 그리는 곳은 homeList.js.
+   비교 테스트 홈(docs/research/ab-test/spacelog-home.html)에서 먼저 써 본 모양을 옮겼다. 값은 tokens.css의 토큰을 쓴다.
+   함께 쓰는 것: 카드 · 버튼 · 행성 줄(.dock button · .zero) = app.css / ⋯ 버튼(.drow .more) · 떠 있는 메뉴 = rowmenu.css /
+   기간 버튼(.seg) · 날짜 칸(.range) = app.css / 누르는 반응 = press.css */
+
+/* ---------- 상단 줄: 스크롤하면 위에 붙는다 ---------- */
+#home{--htop:66px} /* 붙은 상단 줄의 높이(왼쪽 패널이 그 아래에 붙는다) */
+.home-wrap{max-width:1240px}
+.home-top{position:sticky;top:0;z-index:6;padding:10px 0;margin:-10px 0}
+/* 붙어 있는 동안: 화면 폭 전체에 어두운 띠와 잉크 밑줄(#home이 overflow-x:hidden이라 밖으로 넘친 부분은 잘린다) */
+.home-top::before{content:"";position:absolute;inset:0 -100vmax;z-index:-1;background:rgba(21,16,58,.94);border-bottom:var(--line) solid var(--ink);opacity:0;transition:opacity .15s;pointer-events:none}
+.home-top.stuck::before{opacity:1}
+#hTopEnter{display:flex;align-items:center;gap:var(--gap-2)}
+/* 한 덩어리 홈: 블랙홀(보는 부분)과 목록(조작하는 부분) 사이는 크게 띄운다 */
+.hmain{display:grid;grid-template-columns:280px minmax(0,1fr);gap:18px;align-items:start;margin-top:30px}
+
+/* ---------- 왼쪽 행성 패널 ---------- */
+#hSide{position:sticky;top:calc(var(--htop) + 12px);max-height:calc(100vh - var(--htop) - 28px);display:flex;flex-direction:column;overflow:hidden}
+#hSide .hs-title{margin:0;padding:14px 16px 0;font-family:var(--f-display);font-weight:400;font-size:20px;line-height:1.2}
+#hSide .hs-stats{padding:6px 16px 14px;font-size:12.5px;font-weight:700;line-height:1.8}
+#hSide .hs-stats b{display:inline-block;margin:0 2px 0 4px;background:var(--ink);color:var(--yellow);border-radius:var(--r-pill);padding:1px 8px;font-family:var(--f-display);font-weight:400;font-size:12px;line-height:1.35;font-variant-numeric:tabular-nums}
+#hSide .hs-planets{min-height:0;display:flex;flex-direction:column;gap:var(--gap-2);padding:14px 16px 16px;border-top:var(--line) solid var(--ink)}
+#hDock{display:flex;flex-direction:column;gap:var(--gap-2);overflow-y:auto;min-height:0;padding:2px 2px 6px;margin:0 -2px}
+#hDock button[data-planet]{width:100%;min-height:44px;box-sizing:border-box}
+#hDock button .t{min-width:0;overflow:hidden;text-overflow:ellipsis}
+#hDock .dot.all{display:grid;place-items:center;border:0;background:transparent}
+#hDock button[aria-pressed="true"]{background:var(--yellow)}
+#hDock .drow > button[aria-pressed="true"] + .more{background:color-mix(in srgb,var(--ink) 10%,var(--yellow))}
+/* 새 행성: 우주 왼쪽 패널의 #wNewPlanet과 같은 모양(점선 · 그림자 없음) */
+#hsNew{flex:none;display:flex;align-items:center;gap:10px;width:100%;min-height:44px;box-sizing:border-box;font:600 14px var(--f-body);color:var(--ink);background:color-mix(in srgb,var(--panel-2) 60%,var(--white));border:var(--line-thin) dashed var(--ink);border-radius:14px;padding:7px 12px 7px 8px;cursor:pointer;text-align:left;white-space:nowrap}
+#hsNew .dot{width:22px;height:22px;flex:none;display:grid;place-items:center}
+#hsNew:focus-visible{outline:var(--line) solid var(--sky);outline-offset:2px}
+
+/* ---------- 거르기 줄: 검색 · 스위치 · 기간 바(모두 높이 50px) ---------- */
+.hl-head{display:flex;align-items:center;flex-wrap:wrap;gap:var(--gap-3);margin-bottom:var(--gap-3)}
+#hSearch{flex:1 1 160px;min-width:160px;display:flex;align-items:center;gap:var(--gap-2);min-height:50px;box-sizing:border-box;padding:0 6px 0 14px}
+#hSearch:focus-within{outline:var(--line) solid var(--sky);outline-offset:2px}
+#hQ{flex:1;min-width:0;height:44px;border:0;background:transparent;color:var(--ink);font:600 15px var(--f-body);outline:0}
+#hQ::placeholder{color:var(--mute);font-weight:500}
+#hQ::-webkit-search-cancel-button{display:none}
+#hSearch .qx{flex:none;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:var(--panel-2);color:var(--ink);display:grid;place-items:center;cursor:pointer}
+@media (hover:hover){#hSearch .qx:hover{background:#d6d1f2}}
+#hList mark{background:var(--yellow);color:inherit;border-radius:3px;padding:0 1px}
+/* 스위치 덩어리: 안쪽 여백 5px을 고르게. 스위치의 올림 영역은 높이 34px · 모서리 8px(카드 16 - 테두리 3 - 여백 5), 누르는 영역은 ::after로 44px */
+#hSw{flex:none;display:flex;align-items:center;min-height:50px;box-sizing:border-box;padding:5px}
+.gsw{position:relative;display:flex;align-items:center;gap:var(--gap-2);min-height:34px;padding:4px 10px 4px 6px;border:0;background:transparent;color:var(--ink);font:700 13px var(--f-body);cursor:pointer;white-space:nowrap;border-radius:8px}
+.gsw::after{content:"";position:absolute;left:0;right:0;top:50%;height:44px;transform:translateY(-50%)}
+@media (hover:hover){.gsw:hover{background:var(--panel-2)}}
+.gsw:focus-visible{outline:var(--line) solid var(--sky);outline-offset:1px}
+.gsw .star{flex:none;margin-right:-3px}
+.gsw[aria-checked="true"] .star{fill:var(--yellow)}
+/* 두 스위치가 다 보일 때만 사이에 세로 줄 */
+#hGroupSw:not([hidden]) + #hFavSw{margin-left:9px}
+#hGroupSw:not([hidden]) + #hFavSw::before{content:"";position:absolute;left:-6px;top:6px;bottom:6px;border-left:1.5px solid #d6d1f2}
+.gsw .track{width:40px;height:24px;box-sizing:border-box;border-radius:var(--r-pill);border:var(--line-thin) solid var(--ink);background:var(--panel-2);display:flex;align-items:center;padding:2px;transition:background .12s}
+.gsw .knob{width:15px;height:15px;border-radius:50%;background:var(--ink);transition:transform .12s}
+.gsw[aria-checked="true"] .track{background:var(--yellow)}
+.gsw[aria-checked="true"] .knob{transform:translateX(16px)}
+/* 기간 바: 우주의 #period .pbar와 같은 모양. 버튼 높이는 34px(바 높이 50px에서 안쪽 여백 5px을 고르게) */
+#hPeriod{flex:none;max-width:100%;min-height:50px;box-sizing:border-box;padding:5px;display:flex;gap:6px;row-gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;color-scheme:light}
+#hPeriod .seg button{min-height:34px}
+#hPeriod .range{color:var(--ink)}
+#hPeriod .range input{margin:-5px 0;border-width:5px 0;border-radius:8px/13px}
+
+/* ---------- 별 목록: 바깥 카드만 굵은 테두리, 줄 사이는 얇은 선 ---------- */
+#hTable{padding:4px 16px 8px;overflow:hidden}
+#hTable .scount{margin:0;padding:14px 4px 2px;font-family:var(--f-display);font-weight:400;font-size:19px;line-height:1.2;color:var(--ink)}
+.sqmore{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;margin:0;padding:2px 4px 8px;font-size:13px;color:var(--mute)}
+.sqmore button{border:0;background:transparent;padding:6px 2px;min-height:36px;color:var(--ink);font:700 13px var(--f-body);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.srow{--dtw:84px;display:grid;grid-template-columns:36px minmax(0,1fr) 170px minmax(0,.75fr) var(--dtw);align-items:center;gap:var(--gap-3);padding:10px 4px;border-top:1.5px solid #d6d1f2;min-height:64px;box-sizing:border-box}
+.srow.head{min-height:0;padding:12px 4px 10px;border-top:0;font-size:12px;font-weight:700;color:var(--mute)}
+.srow .c-dt{text-align:right;position:relative}
+/* 제목 칸: 종류 그림 + 제목 / 종류. 누르면 그 별을 연다 */
+.sttl{display:flex;align-items:center;gap:var(--gap-3);min-width:0;border:0;background:transparent;padding:4px;margin:-4px;border-radius:10px;color:var(--ink);cursor:pointer;text-align:left;font-family:var(--f-body)}
+.sttl:focus-visible{outline:var(--line) solid var(--sky);outline-offset:1px}
+@media (hover:hover){.sttl:hover .n{text-decoration:underline;text-underline-offset:3px}}
+.sttl .th{width:38px;height:38px;border-radius:10px;background:var(--white);overflow:hidden}
+.sttl .th img{width:100%;height:100%;object-fit:cover;display:block}
+.sttl .tx{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.sttl .n{font-weight:700;font-size:15.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sttl .k{font-size:12.5px;font-weight:500;color:var(--mute);display:flex;justify-content:space-between;gap:var(--gap-2)}
+/* 좁은 화면에서만: 넣은 날 칸이 숨어 날짜를 종류 줄 오른쪽 끝에 둔다 */
+.sttl .k-dt{display:none;flex:none;font-variant-numeric:tabular-nums;white-space:nowrap}
+/* 메모에서 찾았을 때 제목 아래의 한 줄: 메모 칸이 숨는 폭(900px 이하)에서만 */
+.sttl .snip{display:none;font-size:12.5px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.spl{display:flex;align-items:center;gap:6px;min-width:0;font-size:13.5px;font-weight:600}
+.spl .dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--ink);flex:none;box-sizing:border-box}
+.spl .t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.smemo{min-width:0;font-size:13px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sdate{font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+/* 자주 찾음 ☆: 줄 맨 왼쪽 고정 칸 */
+.sfav{flex:none;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:transparent;color:#a9a3cc;cursor:pointer;display:grid;place-items:center}
+@media (hover:hover){.sfav:hover{background:var(--panel-2)}}
+.sfav:focus-visible{outline:var(--line) solid var(--sky);outline-offset:1px}
+.sfav[aria-pressed="true"]{color:var(--ink)}
+.sfav[aria-pressed="true"] svg{fill:var(--yellow)}
+/* "자주 찾음만" 보는 중에 ☆를 끈 줄: 바로 빼지 않고 흐리게 남긴다 */
+.srow.dim > :not(.c-fav){opacity:.45}
+/* ⋯: 마우스를 올리거나 키보드로 그 줄에 오면 넣은 날 칸 위에 겹쳐 나타나고 그동안 날짜는 숨는다(rowmenu.css의 .drow · .recw와 같은 규칙) */
+.srow .more{position:absolute;right:0;top:50%;transform:translateY(-50%);width:36px;height:36px;padding:0;margin:0;border:0;border-radius:10px;background:var(--panel-2);color:var(--ink);display:grid;place-items:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .1s}
+.srow .more::after{content:"";position:absolute;inset:-4px}
+.srow .more[aria-expanded="true"]{background:var(--yellow)}
+@media (hover:hover){.srow .more:hover{background:var(--yellow)}}
+.srow .more:focus-visible{outline:var(--line) solid var(--sky);outline-offset:1px}
+.srow:is(:hover,:focus-within) .more,.srow .more[aria-expanded="true"]{opacity:1;pointer-events:auto}
+.srow:is(:hover,:focus-within) .c-dt .d,.srow:has(.more[aria-expanded="true"]) .c-dt .d{visibility:hidden}
+.srow .more:active:not(:disabled){transform:translateY(-50%) scale(.94)}
+/* 터치 화면: ⋯는 늘 보이고 날짜는 그 왼쪽에 그대로(넣은 날 칸을 그만큼 넓힌다) */
+@media (hover:none){
+  .srow{--dtw:128px}
+  .srow .c-dt{display:flex;align-items:center;justify-content:flex-end;gap:var(--gap-2)}
+  .srow .more{position:static;transform:none;opacity:1;pointer-events:auto}
+  .srow .more:active:not(:disabled){transform:scale(.94)}
+  .srow:is(:hover,:focus-within) .c-dt .d{visibility:visible}
+}
+/* 행성별로 묶었을 때의 머리줄 */
+.sgrp{display:flex;align-items:center;gap:var(--gap-2);padding:16px 4px 8px;font-family:var(--f-display);font-size:15px}
+.sgrp .dot{width:16px;height:16px;border-radius:50%;border:var(--line-thin) solid var(--ink);box-sizing:border-box}
+.sgrp .n{font-size:12px;background:var(--ink);color:var(--yellow);border-radius:var(--r-pill);padding:1px 8px}
+.sgrp + .srow{border-top:var(--line-thin) solid var(--ink)}
+/* 빈 목록 안내 · 더 보기 */
+.sempty{padding:40px 16px;text-align:center}
+.sempty b{display:block;font-family:var(--f-display);font-weight:400;font-size:18px;margin-bottom:6px}
+.sempty p{margin:0 0 14px;font-size:13.5px;color:var(--mute);line-height:1.6}
+.smore{display:flex;justify-content:center;padding:14px 4px 8px;border-top:1.5px solid #d6d1f2}
+
+/* ---------- 폭에 따라 ---------- */
+@media (max-width:900px){
+  .srow{grid-template-columns:36px minmax(0,1fr) 150px var(--dtw)}
+  .srow > .c-memo{display:none}
+  .sttl .snip{display:block}
+}
+@media (max-width:760px){
+  /* 좁은 화면: 행성 패널은 목록 위에 그대로 쌓인다 */
+  #home{--htop:60px}
+  .hmain{grid-template-columns:minmax(0,1fr)}
+  #hSide{position:static;max-height:none}
+  #hDock{max-height:236px}
+  /* 상단 줄: 버튼이 하나 늘어도(우주로 들어가기) 한 줄에 들어가게 로고 · 버튼을 줄인다. 우주로 들어가기는 아이콘만 */
+  .home-top{flex-wrap:nowrap}
+  .home-top .logo{font-size:18px;padding:7px 9px}
+  .home-acts{gap:6px;flex:none}
+  .home-acts .btn{padding:6px 8px;font-size:13px}
+  #hTopEnter .lt{display:none}
+  #hTopEnter{width:40px;height:40px;padding:0;justify-content:center;flex:none}
+  #hTopEnter .i{display:block}
+  #hSearch{flex-basis:100%}
+  .hl-head{gap:var(--gap-2)}
+  #hPeriod{flex:1 1 100%;justify-content:stretch}
+  #hPeriod .seg{flex:1 1 100%}
+  #hPeriod .seg button{flex:1;text-align:center;padding:6px 7px}
+  #hPeriod .range{flex:1 1 100%;padding:0 4px}
+  #hPeriod .range input{flex:1;min-width:0}
+  #hTable{padding:2px 10px 6px}
+  /* [☆][제목 · 종류 ··· 날짜][⋯]: 날짜는 종류 줄 오른쪽 끝, ⋯는 늘 보인다 */
+  .srow{grid-template-columns:36px minmax(0,1fr) 36px;gap:var(--gap-2)}
+  .srow > .c-pl{display:none}
+  .srow.head > .c-dt{visibility:hidden}
+  .srow .c-dt{display:block}
+  .srow .c-dt .d{display:none}
+  .srow .more{position:static;transform:none;opacity:1;pointer-events:auto}
+  .srow .more:active:not(:disabled){transform:scale(.94)}
+  .sttl .k-dt{display:block}
+}
+@media (prefers-reduced-motion:reduce){
+  .home-top::before,.gsw .track,.gsw .knob,.srow .more{transition:none}
+  .srow .more:active:not(:disabled){transform:translateY(-50%)}
+}
+@media (prefers-reduced-motion:reduce) and ((hover:none) or (max-width:760px)){.srow .more:active:not(:disabled){transform:none}}

@@ -12,6 +12,7 @@ import './styles/detail.css';
 import './styles/save.css';
 import './styles/chat.css';
 import './styles/account.css';
+import './styles/home.css';
 import './styles/select.css'; // 선택 상자 화살표: 각 창의 선택 상자 규칙 뒤에 와야 한다
 import './styles/press.css'; // 누르는 순간의 반응: 모든 부품 규칙 뒤에 와야 한다
 
@@ -56,7 +57,7 @@ export function showOffline() {
   const other = inWorld ? $('hState') : $('worldMsg');
   if (!inWorld) {
     document.querySelector('#home .hero').hidden = true;
-    document.querySelector('#home .home-grid').hidden = true;
+    $('hMain').hidden = true;
     $('hLog').hidden = true;
   }
   if (other.querySelector('[data-retry]')) other.hidden = true;
@@ -76,7 +77,7 @@ function hideOffline() {
     }
   }
   document.querySelector('#home .hero').hidden = false;
-  document.querySelector('#home .home-grid').hidden = false;
+  $('hMain').hidden = false;
   $('hLog').hidden = false;
 }
 

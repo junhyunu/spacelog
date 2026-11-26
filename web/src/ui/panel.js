@@ -20,7 +20,6 @@ import { enterOverview } from '../three/controls.js';
 import { setSelectedStar } from '../three/planets.js';
 import { PLANET_COLORS, esc, ico, shortDate } from '../util.js';
 import { ask } from './confirm.js';
-import { deleteCopy } from './detailLogic.js';
 import { flushMemo, renderDetail } from './detail.js';
 import { registerEscape } from './escape.js';
 import { clearGuestStar } from './hud.js';
@@ -28,6 +27,7 @@ import { confirmDeletePlanet } from './planetDelete.js';
 import { openPlanetForm } from './planetForm.js';
 import { detailKey, mergeDesc, mergeErrorText, mergeFailure, panelStars, thumbKind } from './planetLogic.js';
 import { openRowMenu } from './rowMenu.js';
+import { deleteStar, moveStar } from './starActions.js';
 import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
@@ -393,52 +393,10 @@ function openStarMenu(button, planet) {
   if (!star) return;
   const others = store.state.planets.filter((p) => !same(p.id, planet.id));
   openRowMenu(button, `'${star.title || '제목 없음'}' 별 메뉴`, [
-    { key: 'move', label: '행성 옮기기', disabled: others.length === 0, run: () => moveStar(star, others) },
-    { key: 'del', label: '지우기', danger: true, run: () => deleteStar(star) },
+    // 옮기기 · 지우기는 홈의 별 목록과 같이 쓴다(starActions.js). 끝나면 이 패널만 다시 그린다
+    { key: 'move', label: '행성 옮기기', disabled: others.length === 0, run: () => moveStar(star, others).then((moved) => moved && renderPanel()) },
+    { key: 'del', label: '지우기', danger: true, run: () => deleteStar(star).then((gone) => gone && renderPanel()) },
   ]);
-}
-
-async function moveStar(star, others) {
-  const target = await ask({
-    title: `'${star.title || '제목 없음'}'을(를) 어느 행성으로 옮길까요?`,
-    desc: '옮기면 우주에서도 별이 그 행성으로 이동해요.',
-    confirmLabel: '옮기기',
-    confirmKind: 'yellow',
-    select: { options: others.map((p) => ({ value: p.id, label: p.name })), value: others[0].id, label: '옮길 행성' },
-  });
-  if (!target) return;
-  const name = others.find((p) => same(p.id, target))?.name ?? '';
-  try {
-    await api.patchStar(star.id, { planet_id: target });
-  } catch (err) {
-    if (err?.code !== 'offline') toast('옮기지 못했어요');
-    return;
-  }
-  const inStore = store.state.stars.find((s) => same(s.id, star.id));
-  if (inStore) inStore.planet_id = target; // 다시 받기 전에도 이 행성 목록에서 빠지게
-  renderPanel();
-  toast(`'${name}'(으)로 옮겼어요`);
-  store.reload().catch(() => {});
-}
-
-async function deleteStar(star) {
-  // 목록의 별에는 첨부 목록이 없을 수 있다: 확인 창이 "보관함 복사본 N개"를 정확히 말하도록 전체를 받아 온다
-  const full = Array.isArray(star.attachments) ? star : await api.star(star.id).catch(() => star);
-  const ok = await ask(deleteCopy(full));
-  if (!ok) return;
-  try {
-    await api.deleteStar(star.id);
-  } catch (err) {
-    // 이미 지워진 별(404)은 지운 것으로 본다
-    if (err?.status !== 404) {
-      if (err?.code !== 'offline') toast('지우지 못했어요. 다시 눌러 주세요');
-      return;
-    }
-  }
-  store.state.stars = store.state.stars.filter((s) => !same(s.id, star.id));
-  renderPanel();
-  toast('지웠어요');
-  store.reload().catch(() => {});
 }
 
 // 축소본을 못 받으면(보관함에서 사라짐 등) 종류 아이콘으로 바꾼다

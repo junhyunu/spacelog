@@ -22,6 +22,8 @@
            .auth-in · .auth-out은 body.signed-out으로 보이고 숨는다(account.css) -->
       <div class="home-acts">
       <button type="button" class="btn auth-out" id="hLogin">로그인</button>
+      <!-- 블랙홀이 화면 밖으로 나가면 나타난다(home.js). 누르면 맨 위로 올라가 블랙홀로 들어간다 -->
+      <button type="button" class="btn violet auth-in" id="hTopEnter" hidden><svg class="i" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(-20 12 12)"><ellipse cx="12" cy="12" rx="10.5" ry="3.6"/><circle cx="12" cy="12" r="6.3" fill="#ffd23f"/><path d="M1.5 12a10.5 3.6 0 0 0 21 0"/></g></svg><span class="lt">우주로 들어가기</span></button>
       <button type="button" class="btn auth-in" id="hLog" data-suck><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 기록하기</button>
       <button type="button" class="btn ghost auth-in" id="hLogout" data-suck>로그아웃</button>
       <button type="button" class="btn ghost auth-in me-btn" id="hMe" aria-label="계정 설정" title="계정 설정" data-suck><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg></button>
@@ -36,11 +38,40 @@
       <!-- 로그인 전에 "우주로 들어가기"를 누르면 뜨는 말풍선. 꼬리가 위로 버튼을 가리킨다 -->
       <div id="hLoginHint" class="card auth-out" role="note" aria-labelledby="hLoginHintTitle" hidden><b id="hLoginHintTitle">로그인하면 내 우주로 들어갈 수 있어요</b><button type="button" class="btn" data-act="login">로그인</button></div>
     </div>
-    <div class="home-grid">
-      <article class="card hcard" data-suck><div class="eyebrow">행성으로 바로 들어가기</div><div class="hlist" id="hPlanets"></div></article>
-      <article class="card hcard" data-suck><div class="eyebrow">최근 별</div><div class="hlist" id="hRecent"></div></article>
-    </div>
     <article class="card hcard" id="hState" hidden></article>
+    <!-- 왼쪽 행성 패널 + 오른쪽 별 목록(homeList.js). 비교 테스트 홈에서 먼저 써 본 구조다.
+         행성을 누르면 날아가는 대신 오른쪽 목록이 그 행성의 별만 보여 준다. 기간은 우주의 기간과 같은 값이다 -->
+    <div class="hmain" id="hMain" hidden>
+      <aside id="hSide" class="card" aria-label="행성 고르기" data-suck>
+        <h3 class="hs-title" id="hDockLabel">행성 고르기</h3>
+        <div class="hs-stats"><span id="hsLabel"></span><b id="hsRec">0</b>개 · 행성<b id="hsPlanet">0</b>개</div>
+        <div class="hs-planets">
+          <button type="button" id="hsNew" data-act="newPlanet"><span class="dot" aria-hidden="true"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></span>새 행성</button>
+          <div class="dock" id="hDock" role="group" aria-labelledby="hDockLabel"></div>
+        </div>
+      </aside>
+      <section id="hList" aria-label="별 목록">
+        <!-- 거르기 줄: 검색 · 스위치(행성별로 묶기 · 자주 찾음만) · 기간 바 -->
+        <div class="hl-head" data-suck>
+          <div class="card" id="hSearch" role="search">
+            <svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input type="search" id="hQ" autocomplete="off" enterkeyhint="search" placeholder="제목·메모에서 찾기" aria-label="제목, 메모에서 찾기">
+            <button type="button" class="qx" id="hQClear" aria-label="검색어 지우기" hidden><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          </div>
+          <div class="card" id="hSw">
+            <!-- 행성별로 묶기: "전체 보기"일 때만 보인다(행성 하나를 고르면 묶을 것이 없다) -->
+            <button type="button" class="gsw" id="hGroupSw" role="switch" aria-checked="false" aria-label="행성별로 묶기" title="행성별로 묶기"><span class="track" aria-hidden="true"><span class="knob"></span></span>행성별</button>
+            <button type="button" class="gsw" id="hFavSw" role="switch" aria-checked="false" aria-label="자주 찾음만 보기" title="자주 찾음만 보기"><span class="track" aria-hidden="true"><span class="knob"></span></span><svg class="i star" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></button>
+          </div>
+          <!-- 기간 바: 우주 오른쪽 위의 기간 바와 같은 모양 · 같은 값(hud.js가 기간을 쥐고 있다) -->
+          <div class="card" id="hPeriod">
+            <div class="seg" id="hSeg" role="group" aria-label="기간 선택"><button type="button" data-p="all">전체</button><button type="button" data-p="today">오늘</button><button type="button" data-p="week">이번 주</button><button type="button" data-p="custom">직접 지정</button></div>
+            <div class="range" id="hRange" hidden><input type="date" id="hFrom" aria-label="시작 날짜"><span>~</span><input type="date" id="hTo" aria-label="끝 날짜"></div>
+          </div>
+        </div>
+        <div id="hTable" class="card" data-suck></div>
+      </section>
+    </div>
   </div>
 </section>
 
