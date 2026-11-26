@@ -10,6 +10,8 @@
     "dev": "concurrently \"node --watch server/index.js --dev\" \"vite\"",
     "build": "vite build",
     "build:abtest": "vite build --config vite.abtest.config.js",
+    "build:demo": "vite build --config vite.demo.config.js",
+    "preview:demo": "vite preview --config vite.demo.config.js --port 4850",
     "start": "node server/index.js",
     "test": "vitest run",
     "rag:setup": "node scripts/rag-setup.mjs",
