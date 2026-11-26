@@ -78,6 +78,7 @@ function toStar(s) {
     title: s.title,
     body: s.kind === 'csv' ? s.memo || null : s.body || null,
     memo: s.kind === 'csv' ? '' : s.memo || '',
+    fav: Boolean(s.fav),
     planet_id: s.planet,
     created_at: s.at,
     has_thumb: false,
@@ -186,8 +187,8 @@ export const api = {
     return later(st.character);
   },
 
-  stars: ({ from, to, planet_id, limit } = {}) => {
-    let list = state().stars.filter((s) => inRange(s.at, from, to) && (!planet_id || same(s.planet, planet_id)));
+  stars: ({ from, to, planet_id, limit, fav } = {}) => {
+    let list = state().stars.filter((s) => inRange(s.at, from, to) && (!planet_id || same(s.planet, planet_id)) && (!fav || s.fav));
     list = list.sort((a, b) => (a.at < b.at ? 1 : -1));
     if (limit) list = list.slice(0, Number(limit));
     return later(list.map(toStar));
@@ -206,6 +207,7 @@ export const api = {
       else s.body = patch.body ?? '';
     }
     if (patch.memo !== undefined) s.memo = patch.memo ?? '';
+    if (patch.fav !== undefined) s.fav = Boolean(patch.fav);
     if (patch.planet_id !== undefined) s.planet = patch.planet_id;
     commit(st);
     return later(toStar(s));

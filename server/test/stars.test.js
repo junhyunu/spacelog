@@ -7,7 +7,7 @@ import { cleanup, makeApp } from './helpers.js';
 const HOST = { host: '127.0.0.1:4747' };
 // 별 응답의 칸.
 const STAR_KEYS = [
-  'id', 'type', 'title', 'body', 'memo', 'planet_id', 'created_at', 'has_thumb', 'thumb_attachment_id',
+  'id', 'type', 'title', 'body', 'memo', 'fav', 'planet_id', 'created_at', 'has_thumb', 'thumb_attachment_id',
   'attachment_count', 'attachments',
 ].sort();
 const ATTACHMENT_KEYS = ['id', 'kind', 'position', 'file_name', 'file_ext', 'file_size', 'url', 'link_title', 'has_thumb'].sort();
@@ -75,6 +75,7 @@ test('text star: title defaults to first line, max 40 chars', async () => {
     title: '첫 줄입니다',
     body: '첫 줄입니다\n둘째 줄',
     memo: '',
+    fav: false,
     planet_id: planet.id,
     created_at: expect.any(String),
     has_thumb: false,
@@ -407,6 +408,60 @@ test('POST body over 20000 characters → 400 invalid_body (code points)', async
     expect(res.json()).toEqual({ error: 'invalid_body' });
   }
   expect(app.db.prepare('SELECT COUNT(*) AS c FROM stars').get().c).toBe(1);
+});
+
+test('fav: new stars start false; PATCH turns it on and off; it survives a move and does not touch the chatbot index', async () => {
+  const star = await post({ type: 'text', title: '제목', body: '글', planet_id: planet.id });
+  expect(star.fav).toBe(false);
+  const marked = [];
+  app.ragSync = { markStars: (ids, reason) => marked.push([ids, reason]) };
+
+  const on = await call('PATCH', `/api/stars/${star.id}`, { fav: true });
+  expect(on.statusCode).toBe(200);
+  expect(on.json()).toMatchObject({ fav: true, title: '제목', body: '글' });
+  expect(dbRow(star.id).fav).toBe(1);
+  expect(dbRow(star.id).search_text).toBe('제목\n글');
+  expect(marked).toEqual([]); // 자주 찾음만 바꾸면 다시 색인하지 않는다
+
+  // 다른 행성으로 옮겨도 남는다
+  const other = createPlanet(app.db, { name: '다른 행성' });
+  const moved = await call('PATCH', `/api/stars/${star.id}`, { planet_id: other.id });
+  expect(moved.json()).toMatchObject({ fav: true, planet_id: other.id });
+  expect((await call('GET', `/api/stars/${star.id}`)).json().fav).toBe(true);
+
+  const off = await call('PATCH', `/api/stars/${star.id}`, { fav: false });
+  expect(off.json().fav).toBe(false);
+  expect(dbRow(star.id).fav).toBe(0);
+});
+
+test('fav: anything but true / false → 400 invalid_fav and nothing changes', async () => {
+  const star = await post({ type: 'text', body: '글', planet_id: planet.id });
+  for (const bad of [1, 0, 'true', null, {}, []]) {
+    const res = await call('PATCH', `/api/stars/${star.id}`, { fav: bad, title: '바뀌면 안 됨' });
+    expect(res.statusCode, JSON.stringify(bad)).toBe(400);
+    expect(res.json()).toEqual({ error: 'invalid_fav' });
+  }
+  expect(dbRow(star.id)).toMatchObject({ fav: 0, title: '글' });
+});
+
+test('list: fav=1 keeps only favourites and combines with period and planet; other fav values → 400 invalid_query', async () => {
+  const other = createPlanet(app.db, { name: '다른 행성' });
+  const a = seed('2026-11-01T00:00:00.000Z', { title: 'a' });
+  const b = seed('2026-11-02T00:00:00.000Z', { title: 'b' });
+  const c = seed('2026-11-03T00:00:00.000Z', { title: 'c', planet_id: other.id });
+  for (const s of [a, c]) await call('PATCH', `/api/stars/${s.id}`, { fav: true });
+
+  const titles = async (qs) => (await call('GET', `/api/stars${qs}`)).json().map((s) => s.title);
+  expect(await titles('?fav=1')).toEqual(['c', 'a']);
+  expect(await titles('')).toEqual(['c', 'b', 'a']);
+  expect(await titles(`?fav=1&planet_id=${planet.id}`)).toEqual(['a']);
+  expect(await titles('?fav=1&from=2026-11-02T00:00:00.000Z')).toEqual(['c']);
+  expect(b.fav).toBe(false);
+  for (const bad of ['?fav=0', '?fav=true', '?fav=']) {
+    const res = await call('GET', `/api/stars${bad}`);
+    expect(res.statusCode, bad).toBe(400);
+    expect(res.json()).toEqual({ error: 'invalid_query' });
+  }
 });
 
 test('patch planet_id moves star', async () => {

@@ -14,7 +14,7 @@ import { cleanup, makeApp } from './helpers.js';
 
 const HOST = { host: '127.0.0.1:4747' };
 const STAR_KEYS = [
-  'id', 'type', 'title', 'body', 'memo', 'planet_id', 'created_at', 'has_thumb', 'thumb_attachment_id',
+  'id', 'type', 'title', 'body', 'memo', 'fav', 'planet_id', 'created_at', 'has_thumb', 'thumb_attachment_id',
   'attachment_count', 'attachments',
 ].sort();
 

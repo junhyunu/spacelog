@@ -96,7 +96,8 @@ export const api = {
   character: () => request('GET', '/character'),
   saveCharacter: ({ kind, suit, accent, flame } = {}) => request('PUT', '/character', { kind, suit, accent, flame }),
 
-  stars: ({ from, to, planet_id, limit } = {}) => request('GET', `/stars${qs({ from, to, planet_id, limit })}`),
+  // fav: true면 자주 찾음(☆)만
+  stars: ({ from, to, planet_id, limit, fav } = {}) => request('GET', `/stars${qs({ from, to, planet_id, limit, fav: fav ? 1 : undefined })}`),
   star: (starId) => request('GET', `/stars/${id(starId)}`),
   patchStar: (starId, patch) => request('PATCH', `/stars/${id(starId)}`, patch),
   deleteStar: (starId) => request('DELETE', `/stars/${id(starId)}`),

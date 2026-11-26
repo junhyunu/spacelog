@@ -100,7 +100,7 @@ test('a fresh data folder gets the new schema at the current version and no back
   const dataDir = tempDir();
   const db = openDb(dataDir);
   expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
-  expect(SCHEMA_VERSION).toBe(4);
+  expect(SCHEMA_VERSION).toBe(5);
   const cols = db.prepare("SELECT name FROM pragma_table_info('attachments')").all().map((r) => r.name);
   expect(cols).toEqual([
     'id', 'star_id', 'kind', 'position', 'file_name', 'file_ext', 'file_size', 'file_hash',
@@ -484,11 +484,36 @@ test('v3 → v4: messages get saved_star_id (null), existing messages are kept, 
   db0.close();
 
   const db = openDb(dataDir);
-  expect(db.pragma('user_version', { simple: true })).toBe(4);
+  expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
   const cols = db.prepare("SELECT name FROM pragma_table_info('messages')").all().map((r) => r.name);
   expect(cols).toContain('saved_star_id');
   expect(db.prepare("SELECT content, saved_star_id FROM messages WHERE id = 'm1'").get()).toEqual({ content: '답', saved_star_id: null });
   db.close();
   openDb(dataDir).close();
   expect(fs.readdirSync(dataDir).filter((n) => n.includes('bak'))).toEqual(['spacelog.db.bak-4']);
+});
+
+// --- 판 4 → 5 (자주 찾음) ---
+test('v4 → v5: stars get fav (0), existing stars are kept as they were, backs up to bak-5, re-opening is a no-op', () => {
+  const dataDir = tempDir();
+  const db0 = openDb(dataDir);
+  db0.exec("INSERT INTO planets (id, name, color_index, deco, slot, created_at) VALUES ('p1', '행성', 1, 'town', 0, '2026-11-01T00:00:00.000Z')");
+  db0.exec("INSERT INTO stars (id, type, title, body, planet_id, created_at, search_text) VALUES ('s1', 'text', '제목', '글', 'p1', '2026-11-02T00:00:00.000Z', '제목 글')");
+  db0.exec('ALTER TABLE stars DROP COLUMN fav');
+  db0.pragma('user_version = 4');
+  db0.close();
+
+  const db = openDb(dataDir);
+  expect(SCHEMA_VERSION).toBe(5);
+  expect(db.pragma('user_version', { simple: true })).toBe(5);
+  expect(db.prepare("SELECT title, body, planet_id, created_at, search_text, fav FROM stars WHERE id = 's1'").get()).toEqual({
+    title: '제목', body: '글', planet_id: 'p1', created_at: '2026-11-02T00:00:00.000Z', search_text: '제목 글', fav: 0,
+  });
+  db.close();
+  openDb(dataDir).close();
+  expect(fs.readdirSync(dataDir).filter((n) => n.includes('bak'))).toEqual(['spacelog.db.bak-5']);
+  const bak = new Database(path.join(dataDir, 'spacelog.db.bak-5'), { readonly: true });
+  expect(bak.pragma('user_version', { simple: true })).toBe(4);
+  expect(bak.prepare("SELECT name FROM pragma_table_info('stars')").all().map((r) => r.name)).not.toContain('fav');
+  bak.close();
 });

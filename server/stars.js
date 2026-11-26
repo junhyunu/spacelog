@@ -56,6 +56,7 @@ export function toStarJson(row, attachments = []) {
     title: row.title,
     body: row.body ?? null,
     memo: row.memo ?? '',
+    fav: row.fav === 1 || row.fav === true, // 자주 찾음(홈 목록의 ☆)
     planet_id: row.planet_id,
     created_at: row.created_at,
     has_thumb: Boolean(thumb),
@@ -192,6 +193,10 @@ function parsePatch(db, body) {
     out.title = cutTitle(src.title);
   }
   if (src.memo !== undefined) out.memo = checkMemo(src.memo);
+  if (src.fav !== undefined) {
+    if (typeof src.fav !== 'boolean') throw new ApiError(400, 'invalid_fav');
+    out.fav = src.fav ? 1 : 0;
+  }
   if (src.planet_id !== undefined) {
     if (!planetExists(db, src.planet_id)) throw new ApiError(400, 'unknown_planet');
     out.planet_id = src.planet_id;
@@ -211,7 +216,12 @@ export function registerStars(app) {
     const cond = [];
     const params = {};
     periodCond(req.query, cond, params);
-    const { planet_id: planetId, limit } = req.query;
+    const { planet_id: planetId, limit, fav } = req.query;
+    // fav=1: 자주 찾음만. 그 밖의 값은 받지 않는다(안 보내면 모두)
+    if (fav !== undefined) {
+      if (fav !== '1') throw new ApiError(400, 'invalid_query');
+      cond.push('fav = 1');
+    }
     if (planetId !== undefined && typeof planetId !== 'string') throw new ApiError(400, 'invalid_query');
     if (typeof planetId === 'string' && planetId) {
       cond.push('planet_id = @planet_id');
@@ -242,11 +252,13 @@ export function registerStars(app) {
         next.attachments = attachmentsOf(db, id);
         next.search_text = buildSearchText(next, next.attachments);
         db.prepare(
-          'UPDATE stars SET title = @title, body = @body, memo = @memo, planet_id = @planet_id, search_text = @search_text WHERE id = @id',
-        ).run({ id, title: next.title, body: next.body ?? null, memo: next.memo, planet_id: next.planet_id, search_text: next.search_text });
+          'UPDATE stars SET title = @title, body = @body, memo = @memo, fav = @fav, planet_id = @planet_id, search_text = @search_text WHERE id = @id',
+        ).run({ id, title: next.title, body: next.body ?? null, memo: next.memo, fav: next.fav ? 1 : 0, planet_id: next.planet_id, search_text: next.search_text });
         return next;
       })();
-      app.ragSync?.markStars([id], 'patch');
+      // 자주 찾음만 바꾼 요청은 챗봇 색인과 상관없다(글 · 제목 · 행성이 그대로다)
+      const keys = Object.keys(req.body && typeof req.body === 'object' ? req.body : {});
+      if (!(keys.length === 1 && keys[0] === 'fav')) app.ragSync?.markStars([id], 'patch');
       return toStarJson(updated, updated.attachments);
     } catch (err) {
       return fail(reply, err);
