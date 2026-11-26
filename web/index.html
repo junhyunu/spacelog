@@ -20,15 +20,15 @@
       <div class="logo card" data-suck>space<span>Log</span></div>
       <!-- 좁은 화면(760px 이하) · 로그인 뒤: 로고 대신 이 버튼이 보인다(우주의 #sideOpen과 같은 모양). 누르면 왼쪽에서 행성 서랍이 펼쳐진다 -->
       <button type="button" id="hSideOpen" class="logo card" aria-label="행성 고르기 펼치기" aria-expanded="false" aria-controls="hSide" data-suck><span>space<span>Log</span></span><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/></svg></button>
-      <!-- 로그인 전: 로그인 하나. 로그인 후: 기록하기 · 로그아웃 · 계정 설정(사람 아이콘). 캐릭터는 우주 안에서만 꾸민다.
+      <!-- 로그인 전: 로그인 하나. 로그인 후: 기록하기 · 로그아웃(좁은 화면에서는 숨는다) · 사람 아이콘(내 메뉴 #hMeMenu). 캐릭터는 우주 안에서만 꾸민다.
            .auth-in · .auth-out은 body.signed-out으로 보이고 숨는다(account.css) -->
       <div class="home-acts">
       <button type="button" class="btn auth-out" id="hLogin">로그인</button>
       <!-- 블랙홀이 화면 밖으로 나가면 나타난다(home.js). 누르면 맨 위로 올라가 블랙홀로 들어간다 -->
       <button type="button" class="btn violet auth-in" id="hTopEnter" hidden><svg class="i" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(-20 12 12)"><ellipse cx="12" cy="12" rx="10.5" ry="3.6"/><circle cx="12" cy="12" r="6.3" fill="#ffd23f"/><path d="M1.5 12a10.5 3.6 0 0 0 21 0"/></g></svg><span class="lt">우주로 들어가기</span></button>
-      <button type="button" class="btn auth-in" id="hLog" data-suck><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 기록하기</button>
+      <button type="button" class="btn auth-in" id="hLog" data-suck><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg> <span class="lt">기록하기</span></button>
       <button type="button" class="btn ghost auth-in" id="hLogout" data-suck>로그아웃</button>
-      <button type="button" class="btn ghost auth-in me-btn" id="hMe" aria-label="계정 설정" title="계정 설정" data-suck><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg></button>
+      <button type="button" class="btn ghost auth-in me-btn" id="hMe" aria-label="내 메뉴" title="내 메뉴" aria-haspopup="menu" aria-expanded="false" aria-controls="hMeMenu" data-suck><svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg></button>
       </div>
     </header>
     <div class="hero">
@@ -84,6 +84,14 @@
         <section id="hDetail" class="card" aria-label="별 상세" data-suck hidden></section>
       </section>
     </div>
+  </div>
+  <!-- 홈의 사람 아이콘(#hMe) 메뉴: 우주의 #wMeMenu와 같은 모양. 계정(이메일 · 이름) | 계정 설정 | 로그아웃. 자리는 home.js가 버튼 바로 아래 · 오른쪽 끝에 맞춘다 -->
+  <div id="hMeMenu" class="me-menu card auth-in" role="menu" aria-labelledby="hMe" hidden>
+    <div class="me-head"><span class="me-email" id="hMeEmail"></span><b class="me-name" id="hMeName"></b></div>
+    <hr>
+    <button type="button" role="menuitem" data-me="account"><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>계정 설정</button>
+    <hr>
+    <button type="button" role="menuitem" data-me="logout"><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>로그아웃</button>
   </div>
 </section>
 

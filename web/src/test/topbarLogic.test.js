@@ -25,6 +25,13 @@ describe('topbarState', () => {
   test('searching with nothing open → not tucked', () => {
     expect(topbarState({ inWorld: true, panelOpen: false, chatOpen: false, peek: false, searching: true })).toEqual({ tucked: false, peek: false });
   });
+  test('narrow screen → never tucked, even with panel or chat open', () => {
+    expect(topbarState({ inWorld: true, narrow: true, panelOpen: true, chatOpen: false, peek: true })).toEqual({ tucked: false, peek: false });
+    expect(topbarState({ inWorld: true, narrow: true, panelOpen: false, chatOpen: true, searching: true })).toEqual({ tucked: false, peek: false });
+  });
+  test('wide screen (narrow false) → tucks as before', () => {
+    expect(topbarState({ inWorld: true, narrow: false, panelOpen: true })).toEqual({ tucked: true, peek: false });
+  });
   test('no argument → not tucked', () => {
     expect(topbarState()).toEqual({ tucked: false, peek: false });
   });

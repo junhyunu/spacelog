@@ -21,6 +21,8 @@ import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
 const reduceMq = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+// 터치 기기(폰 · 태블릿): WASD도 없고 왼쪽 패널도 접혀 있어 첫 비행 안내("WASD로 날아보거나…")를 띄우지 않는다
+const touchMq = typeof matchMedia === 'function' ? matchMedia('(hover: none), (pointer: coarse)') : { matches: false };
 
 // 들어오면 보이는 조작 UI. #left(왼쪽 패널 · 접힌 로고 버튼)와 #period(기간 바 + 띠 배너)는 스펙 6-8 배치.
 // #worldMsg · #near · #wHint(빈 우주 말풍선) · #panel은 주인(hud.js · main.js · controls.js · panel.js)이 켜고 끈다.
@@ -371,7 +373,7 @@ async function runEnter({ planetId, starId }) {
           else store.emit('land', targetPlanet);
         }
       }
-    } else if (!hasPlanet && store.state.planets.length) {
+    } else if (!hasPlanet && store.state.planets.length && !touchMq.matches) {
       toast('WASD로 날아보거나, 왼쪽 행성을 눌러 바로 이동해 보세요');
     }
   } catch (err) {

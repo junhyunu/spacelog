@@ -58,6 +58,8 @@ function paint() {
   document.body.classList.toggle('signed-out', !account);
   $('wMeName').textContent = account ? `${account.name}님` : '';
   $('wMeEmail').textContent = account?.email ?? '';
+  $('hMeName').textContent = $('wMeName').textContent; // 홈의 사람 아이콘 메뉴도 같은 글
+  $('hMeEmail').textContent = $('wMeEmail').textContent;
   if (account) $('hLoginHint').hidden = true;
 }
 

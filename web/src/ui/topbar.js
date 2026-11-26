@@ -1,6 +1,6 @@
 // 우주 화면 위쪽 막대(#period: 별 찾기 🔍 · 기간 바 · 검색 줄 · 띠 배너) 자동 숨김과 손잡이(#topHandle).
 //
-// 행성 패널(#panel) · 챗봇 창(#chatPanel) 중 하나라도 열려 있으면 막대는 위로 숨고(body.top-tucked), 창은 그만큼 위로 늘어난다(app.css).
+// 넓은 화면(761px 이상)에서만: 행성 패널(#panel) · 챗봇 창(#chatPanel) 중 하나라도 열려 있으면 막대는 위로 숨고(body.top-tucked), 창은 그만큼 위로 늘어난다(app.css).
 // 숨은 동안 오른쪽 위에 손잡이가 매달린다. 누르면 막대가 창 위로 내려오고(body.top-peek, 창 크기는 그대로) 손잡이는 숨는다.
 // 내려온 동안 접기는 막대 줄 오른쪽 끝의 #topFold(위 화살표).
 // 다시 접히는 때: 접기(#topFold)를 누를 때 · 기간(전체 · 오늘 · 이번 주)을 고른 뒤 · 막대와 손잡이 밖을 누를 때 · Esc(escape.js 33).
@@ -8,11 +8,13 @@
 //
 // store에서 듣는 것: 'panelOpened' · 'panelClosed'(panel.js), 'chatOpened' · 'chatClosed'(chatPanel.js),
 // 'enterWorld' · 'leavingWorld' · 'leaveWorld'(transition.js). 열림 여부는 이벤트마다 두 창의 hidden으로 다시 읽는다.
+// 좁은 화면(760px 이하)에서는 숨기지 않는다(topbarLogic.js). 창 폭이 760px을 넘나들면 다시 판단한다.
 import { store } from '../store.js';
 import { registerEscape } from './escape.js';
 import { topbarState } from './topbarLogic.js';
 
 const $ = (id) => document.getElementById(id);
+const narrowMq = typeof matchMedia === 'function' ? matchMedia('(max-width: 760px)') : { matches: false };
 
 let ready = false;
 let inWorld = false;
@@ -25,6 +27,7 @@ function update() {
   const body = document.body;
   const s = topbarState({
     inWorld,
+    narrow: narrowMq.matches,
     panelOpen: !$('panel').hidden,
     chatOpen: !$('chatPanel').hidden,
     peek,
@@ -112,5 +115,6 @@ export function initTopbar() {
   });
   store.on('leavingWorld', leave);
   store.on('leaveWorld', leave);
+  narrowMq.addEventListener?.('change', update);
   update();
 }

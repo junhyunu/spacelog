@@ -5,8 +5,9 @@
 //   'openSave'                  "기록하기"(상단 줄 · 빈 우주 카드)
 //   'newPlanet'                   "+ 새 행성"(행성 패널의 #hsNew · 빈 우주 카드의 #hNewPlanet)
 //   'openLogin'                   "로그인"(#hLogin · 로그인 안내 말풍선)
-//   'signOut'                     "로그아웃"(#hLogout)
-//   'openAccount'                 사람 아이콘(#hMe) → 계정 설정 창
+//   'signOut'                     "로그아웃"(#hLogout · 사람 아이콘 메뉴의 "로그아웃")
+//   'openAccount'                 사람 아이콘(#hMe) 메뉴의 "계정 설정" → 계정 설정 창
+// 사람 아이콘 메뉴(#hMeMenu)는 우주의 #wMeMenu와 같은 모양: ↑↓ · Home · End로 옮기고, Esc(36) · 바깥 누르기 · Tab으로 접는다.
 // 캐릭터 꾸미기는 우주 안에서만 연다(hud.js의 사람 아이콘 메뉴).
 // 로그인 전에 "우주로 들어가기"를 누르면 전환 대신 로그인 안내 말풍선(#hLoginHint)을 띄운다.
 // store에서 듣는 것:
@@ -16,6 +17,7 @@ import { api } from '../api.js';
 import { store } from '../store.js';
 import { esc, periodRange } from '../util.js';
 import { accountName, isSignedIn } from './account.js';
+import { registerEscape } from './escape.js';
 import { initHomeList, renderHomeList } from './homeList.js';
 import { toast } from './toast.js';
 
@@ -200,6 +202,77 @@ function showLoginHint() {
   hint.querySelector('button').focus({ preventScroll: true });
 }
 
+/* ---------- 사람 아이콘 메뉴(#hMeMenu) ---------- */
+// 홈(#home)이 화면에 붙어 있으므로 화면 기준(position:fixed)으로 버튼 바로 아래, 오른쪽 끝을 버튼 오른쪽 끝에 맞춘다
+function placeMeMenu() {
+  const menu = $('hMeMenu');
+  if (menu.hidden) return;
+  const b = $('hMe').getBoundingClientRect();
+  const w = menu.offsetWidth;
+  const left = Math.max(8, Math.min(b.right - w, innerWidth - w - 8)); // 화면 밖으로 나가지 않게
+  menu.style.left = `${left}px`;
+  menu.style.top = `${b.bottom + 8}px`;
+}
+
+function setMeMenu(on, { focus = false } = {}) {
+  const menu = $('hMeMenu');
+  if (menu.hidden === !on) return;
+  menu.hidden = !on;
+  $('hMe').setAttribute('aria-expanded', String(on));
+  if (on) {
+    placeMeMenu();
+    menu.querySelector('[role="menuitem"]').focus({ preventScroll: true });
+  } else if (focus) $('hMe').focus({ preventScroll: true });
+}
+
+function onMeMenuKey(e) {
+  const items = [...$('hMeMenu').querySelectorAll('[role="menuitem"]')];
+  const i = items.indexOf(document.activeElement);
+  let next = -1;
+  if (e.key === 'ArrowDown') next = (i + 1) % items.length;
+  else if (e.key === 'ArrowUp') next = (i - 1 + items.length) % items.length;
+  else if (e.key === 'Home') next = 0;
+  else if (e.key === 'End') next = items.length - 1;
+  if (next < 0) return;
+  e.preventDefault();
+  items[next].focus({ preventScroll: true });
+}
+
+function onMeMenuClick(e) {
+  const el = e.target instanceof Element ? e.target.closest('[data-me]') : null;
+  if (!el) return;
+  e.stopPropagation(); // 홈의 버튼 처리(onClick)로 넘기지 않는다
+  const act = el.dataset.me;
+  setMeMenu(false, { focus: act === 'account' }); // 계정 설정 창을 닫으면 사람 아이콘으로 돌아온다
+  if (act === 'logout') store.emit('signOut');
+  else if (act === 'account') store.emit('openAccount');
+}
+
+function initMeMenu() {
+  const menu = $('hMeMenu');
+  menu.addEventListener('click', onMeMenuClick);
+  menu.addEventListener('keydown', onMeMenuKey);
+  addEventListener('pointerdown', (e) => {
+    if (menu.hidden || !(e.target instanceof Node)) return;
+    if (!menu.contains(e.target) && !$('hMe').contains(e.target)) setMeMenu(false);
+  });
+  // 초점이 메뉴 밖으로 나가면(Tab) 접는다. 스크롤 · 화면 크기가 바뀌면 자리를 다시 맞춘다
+  menu.addEventListener('focusout', (e) => {
+    const to = e.relatedTarget;
+    if (to instanceof Node && (menu.contains(to) || $('hMe').contains(to))) return;
+    if (to) setMeMenu(false);
+  });
+  home.addEventListener('scroll', placeMeMenu, { passive: true });
+  addEventListener('resize', placeMeMenu);
+  // Esc: 홈에서 메뉴가 펼쳐져 있으면 그것부터 접는다(우주의 #wMeMenu와 같은 자리, 둘이 함께 열릴 일은 없다)
+  registerEscape(36, () => {
+    if (menu.hidden || store.state.inWorld) return false;
+    setMeMenu(false, { focus: true });
+    return true;
+  });
+  store.on('signOut', () => setMeMenu(false));
+}
+
 function onClick(e) {
   const el = e.target instanceof Element ? e.target.closest('button') : null;
   if (!el || !home.contains(el)) return;
@@ -208,7 +281,7 @@ function onClick(e) {
     else showLoginHint();
   } else if (el.id === 'hLogin' || el.dataset.act === 'login') store.emit('openLogin');
   else if (el.id === 'hLogout') store.emit('signOut');
-  else if (el.id === 'hMe') store.emit('openAccount');
+  else if (el.id === 'hMe') setMeMenu($('hMeMenu').hidden);
   else if (el.id === 'hLog' || el.dataset.act === 'log') store.emit('openSave');
   else if (el.dataset.act === 'newPlanet') store.emit('newPlanet');
   else if (el.id === 'hTopEnter') {
@@ -228,6 +301,7 @@ export function initHome({ enter } = {}) {
   if (typeof enter === 'function') onEnter = enter;
   scatterStars();
   home.addEventListener('click', onClick);
+  initMeMenu();
   // 별 제목을 누르면: 우주로 들어가 그 별로 날아간다
   initHomeList({ openStar: (star) => onEnter({ planetId: star.planet_id, starId: star.id }) });
   // 스크롤하면 상단 줄이 위에 붙고(.stuck), 블랙홀이 화면 밖으로 나가면 상단 줄에 "우주로 들어가기"가 나타난다
