@@ -1,4 +1,4 @@
-/* W-03 별 상세 보정. 기본 모양(.pv · .meta · .acts · #memo · .mv · .linkdel)은 app.css에 있다. 값은 tokens.css의 토큰만 쓴다. */
+/* W-03 별 상세 보정. 기본 모양(.pv · .meta · .acts · #memo · .linkdel)은 app.css에 있다. 값은 tokens.css의 토큰만 쓴다. */
 
 /* 조각 묶음은 배치에 끼어들지 않는다(.body의 세로 간격을 그대로 쓴다) */
 :is(#panel,#hDetail) .dsec{display:contents}
@@ -21,12 +21,10 @@
 :is(#panel,#hDetail) .memofoot .cnt{margin-left:auto;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 :is(#panel,#hDetail) .st.bad{color:var(--danger-text);font-weight:700}
 
-:is(#panel,#hDetail) .mv{flex:none}
-:is(#panel,#hDetail) .mv label{flex:none}
-:is(#panel,#hDetail) .mv select{min-height:44px}
-:is(#panel,#hDetail) .mv select:disabled{background:var(--panel-2);color:var(--mute);cursor:progress}
-
-:is(#panel,#hDetail) .linkdel{flex:none;align-self:flex-end;min-height:44px;color:var(--danger-text)} /* 오른쪽 끝 */
+/* 아래 줄: 왼쪽에 버튼(홈은 우주에서 보기 + 행성 옮기기, 우주는 행성 옮기기), 오른쪽 끝에 이 별 지우기 */
+:is(#panel,#hDetail) .dfoot{flex:none;display:flex;align-items:center;justify-content:space-between;gap:var(--gap-3);flex-wrap:wrap}
+:is(#panel,#hDetail) .dacts{display:flex;gap:var(--gap-2);flex-wrap:wrap}
+:is(#panel,#hDetail) .linkdel{flex:none;align-self:center;margin-left:auto;min-height:44px;color:var(--danger-text)} /* 오른쪽 끝 */
 
 /* 첨부 목록(스펙 6-9): 이미지 축소본 격자 · 파일 줄 · 링크 줄 · 크게 보기 */
 :is(#panel,#hDetail) .atts{display:flex;flex-direction:column;gap:var(--gap-2);flex:none;min-width:0}

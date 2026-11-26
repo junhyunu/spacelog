@@ -163,9 +163,6 @@
 /* 이미지 크게 보기 · 축소본 격자: 넓은 자리에서 화면을 다 덮지 않게 폭을 정한다(우주의 패널은 380px라 그대로 꽉 찬다) */
 #hDetail .viewer{max-width:560px}
 #hDetail .igrid{grid-template-columns:repeat(auto-fill,minmax(72px,96px))}
-/* 발: 우주에서 보기(왼쪽) · 이 별 지우기(오른쪽) */
-#hDetail .dfoot{display:flex;align-items:center;justify-content:space-between;gap:var(--gap-3);flex-wrap:wrap}
-#hDetail .dfoot .linkdel{align-self:center;min-height:44px}
 
 /* ---------- 폭에 따라 ---------- */
 @media (max-width:900px){

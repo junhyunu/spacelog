@@ -247,7 +247,7 @@ mark{background:var(--yellow);color:inherit;border-radius:3px;padding:0 1px}
 .pager .btn:disabled{opacity:.35;cursor:default;transform:none;box-shadow:0 4px 0 var(--ink)}
 .pager span{min-width:52px;text-align:center}
 /* 아래 덩어리는 우주 안 별 상세(앱 detail.js · detail.css)와 같은 순서 · 이름 · 모양:
-   행성 이름 + 제목 → 첨부 카드 → 종류 · 넣은 날짜 → 메모 → 행성 옮기기 → 이 별 지우기 */
+   행성 이름 + 제목 → 첨부 카드 → 종류 · 넣은 날짜 → 메모 → 아래 줄(행성 옮기기 버튼 · 이 별 지우기) */
 .dhd{display:flex;flex-direction:column;gap:2px;min-width:0}
 .dhd .pname{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mute);min-width:0}
 .dhd .pname .dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--ink);flex:none}
@@ -268,9 +268,8 @@ mark{background:var(--yellow);color:inherit;border-radius:3px;padding:0 1px}
 .meta dd.mono{font-family:var(--f-mono);font-weight:500;font-variant-numeric:tabular-nums}
 #memo{width:100%;min-height:calc(3 * 1.55em + 21px);border:var(--line-thin) solid var(--ink);border-radius:10px;padding:8px 10px;font:500 14px/1.55 var(--f-body);resize:vertical;background:var(--white);color:var(--ink);margin-top:-6px;color-scheme:light}
 #detail .st{font-size:11.5px;color:var(--mute);margin-top:-8px}
-.mv{display:flex;gap:10px;align-items:center;font-size:13px;font-weight:600}
-.mv label{flex:none}
-.mv select{flex:1;min-width:0;min-height:44px;font:600 13px var(--f-body);border:var(--line-thin) solid var(--ink);border-radius:10px;padding:6px 8px;background:var(--white);color:var(--ink);color-scheme:light}
+.dfoot{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.dfoot .linkdel{align-self:center}
 .fld{display:flex;flex-direction:column;gap:6px;min-width:0}
 .fld .lbl{font-size:13px;font-weight:700}
 .fld :is(input,textarea,select){font:500 14px/1.55 var(--f-body);border:var(--line-thin) solid var(--ink);border-radius:10px;padding:8px 10px;min-height:44px;background:var(--white);color:var(--ink);width:100%;color-scheme:light}
@@ -514,9 +513,9 @@ mark{background:var(--yellow);color:inherit;border-radius:3px;padding:0 1px}
 #save .psel .dot{width:22px;height:22px;border-radius:50%;border:var(--line) solid var(--ink);flex:none;box-sizing:border-box;background:var(--panel-2)}
 #save .psel .dot.new{border-style:dashed}
 #save .psel select{flex:1;min-width:0}
-/* 선택 상자 화살표(앱 select.css와 같다): 이 페이지의 모든 선택 상자(기록하기 · 상세의 행성 옮기기 · 별 옮기기 · 행성 지우기).
+/* 선택 상자 화살표(앱 select.css와 같다): 이 페이지의 모든 선택 상자(기록하기 · 별 옮기기 · 행성 지우기).
    브라우저 기본 화살표를 끄고 잉크색 아래 화살표를 오른쪽 테두리에서 14px 안쪽에. 글자는 오른쪽 40px을 비운다.
-   각 창의 선택 상자 규칙(.mv select · #modal .opts select 등)이 background · padding을 한꺼번에 정해서, :is(#save, body)로 그보다 무겁게 하고 뒤에 둔다 */
+   각 창의 선택 상자 규칙(#modal .opts select 등)이 background · padding을 한꺼번에 정해서, :is(#save, body)로 그보다 무겁게 하고 뒤에 둔다 */
 :is(#save, body) select:not([multiple]):not([size]){-webkit-appearance:none;appearance:none;padding-right:40px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%231a1430' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;background-size:16px 16px;cursor:pointer}
 :is(#save, body) select:not([multiple]):not([size]):disabled{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235b5480' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");cursor:not-allowed}
 body.dragging-files #save #svText{border-color:var(--yellow);box-shadow:0 0 0 3px var(--yellow)}
@@ -958,8 +957,10 @@ function renderDetail() {
     '<label class="lbl" for="memo">메모</label>' +
     `<textarea id="memo" rows="3" data-d="memo" placeholder="이 별에 남길 말" autocomplete="off" aria-describedby="memoSt">${esc(noteOf(s))}</textarea>` +
     '<small class="st" id="memoSt">입력을 멈추면 저장돼요</small>' +
-    (planets.length > 1 ? `<div class="mv"><label for="aMove">행성 옮기기</label><select id="aMove" data-d="move">${planetOptions(s.planet)}</select></div>` : '') +
-    '<button type="button" class="linkdel" data-d="del">이 별 지우기</button>';
+    // 아래 줄: 행성 옮기기(누르면 목록 ⋯ 메뉴와 같은 확인 창. 행성이 하나뿐이면 없다) · 이 별 지우기
+    '<div class="dfoot">' +
+    (planets.length > 1 ? '<button type="button" class="btn ghost sm" data-d="move">행성 옮기기</button>' : '<span></span>') +
+    '<button type="button" class="linkdel" data-d="del">이 별 지우기</button></div>';
   el.hidden = false;
   growMemo();
 }
@@ -1469,9 +1470,16 @@ function askMove(s, others) {
     // 앱 확인 창(confirm.js)처럼 이름표 없이 선택 상자만(화면 읽기 프로그램용 이름은 붙인다)
     fields: `<select name="planet" aria-label="옮길 행성">${others.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>`,
     onOk(f) {
+      const inDetail = S.detail === s.id; // 상세의 "행성 옮기기"에서 왔다
       s.planet = f.planet.value;
       const name = P(s.planet).name;
       render();
+      if (inDetail) {
+        // 목록에 남았으면 상세에 머물고, 빠졌으면(행성으로 걸러 보는 중) 목록의 보던 자리로 돌아간다
+        if (S.detail) { toast(`'${name}'(으)로 옮겼어요`); $('detail').querySelector('[data-d=move]')?.focus({ preventScroll: true }); }
+        else { scrollTo({ top: backY }); toast(`'${name}'(으)로 옮겼어요. 지금 보는 목록에서는 빠졌어요`); }
+        return;
+      }
       const more = $('table').querySelector(`[data-id="${s.id}"] .more`);
       if (more) { more.focus({ preventScroll: true }); toast(`'${name}'(으)로 옮겼어요`); }
       else toast(`'${name}'(으)로 옮겼어요. 지금 보는 목록에서는 빠졌어요`);
@@ -1803,6 +1811,10 @@ $('detail').addEventListener('click', (e) => {
   else if (d === 'openLink') open(e.target.closest('[data-url]').dataset.url, '_blank', 'noopener');
   else if (d === 'folder') toast('테스트용 화면이라 폴더는 열리지 않아요');
   else if (d === 'del') askDelete([S.detail]);
+  else if (d === 'move') {
+    const s = stars.find((x) => x.id === S.detail);
+    if (s) askMove(s, planets.filter((p) => p.id !== s.planet));
+  }
 });
 let memoT = 0;
 $('detail').addEventListener('input', (e) => {
@@ -1814,15 +1826,6 @@ $('detail').addEventListener('input', (e) => {
   $('memoSt').textContent = '입력을 멈추면 저장돼요';
   clearTimeout(memoT);
   memoT = setTimeout(() => { const st = $('memoSt'); if (st) st.textContent = '저장됨'; }, 700);
-});
-$('detail').addEventListener('change', (e) => {
-  const s = stars.find((x) => x.id === S.detail);
-  if (!s || e.target.dataset.d !== 'move') return;
-  s.planet = e.target.value;
-  const name = P(s.planet).name;
-  render();
-  if (!S.detail) { scrollTo({ top: backY }); toast(`'${name}'(으)로 옮겼어요. 지금 보는 목록에서는 빠졌어요`); }
-  else { toast(`'${name}'(으)로 옮겼어요`); $('detail').querySelector('[data-d=move]').focus(); }
 });
 
 

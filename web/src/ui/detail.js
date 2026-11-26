@@ -35,6 +35,7 @@ import {
 } from './detailLogic.js';
 import { registerEscape } from './escape.js';
 import { clearGuestStar } from './hud.js';
+import { moveCopy } from './starActions.js';
 import { toast } from './toast.js';
 
 const same = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined && String(a) === String(b);
@@ -295,19 +296,13 @@ function topHtml(ctx, star) {
 }
 
 function bottomHtml(star, home) {
-  const planets = store.state.planets;
-  const move =
-    planets.length > 1
-      ? '<div class="mv"><label for="aMove">행성 옮기기</label><select id="aMove" data-a="move">' +
-        planets
-          .map((p) => `<option value="${esc(p.id)}"${same(p.id, star.planet_id) ? ' selected' : ''}>${esc(p.name)}</option>`)
-          .join('') +
-        '</select></div>'
-      : '';
+  // 아래 줄: 왼쪽에 버튼, 오른쪽 끝에 지우기.
+  // 홈에서는 "우주에서 보기"(우주로 들어가 이 별로 날아간다)가 맨 앞에 온다.
+  // "행성 옮기기"는 누르면 확인 창에서 행성을 고른다(목록의 ⋯ 메뉴와 같은 창). 행성이 하나뿐이면 없다.
+  const fly = home?.onFly ? '<button type="button" class="btn ghost sm" data-a="fly">우주에서 보기</button>' : '';
+  const move = store.state.planets.length > 1 ? '<button type="button" class="btn ghost sm" data-a="move">행성 옮기기</button>' : '';
   const del = '<button type="button" class="linkdel" data-a="del">이 별 지우기</button>';
-  // 홈에서는 "우주에서 보기"(우주로 들어가 이 별로 날아간다)를 지우기 왼쪽에 둔다
-  if (home?.onFly) return `${move}<div class="dfoot"><button type="button" class="btn ghost sm" data-a="fly">우주에서 보기</button>${del}</div>`;
-  return `${move}${del}`;
+  return `<div class="dfoot"><div class="dacts">${fly}${move}</div>${del}</div>`;
 }
 
 /* ---------- 행동 ---------- */
@@ -358,13 +353,20 @@ function setView(ctx, attId) {
   else if (prev) el?.querySelector(`[data-a="view:${CSS.escape(prev)}"]`)?.focus({ preventScroll: true });
 }
 
-async function move(ctx, select) {
+// 옮길 행성을 확인 창에서 고른 뒤에 옮긴다(고르는 것만으로는 옮겨지지 않는다)
+async function move(ctx) {
+  if (ctx.moving) return;
   const origin = String(ctx.star.planet_id);
-  const target = select.value;
-  if (ctx.moving || !target || target === origin) return;
+  const others = store.state.planets.filter((p) => !same(p.id, origin));
+  if (!others.length) return;
+  const picked = await ask(moveCopy(ctx.star, others));
+  if (!picked || ctx.moving || !live(ctx)) return;
+  const target = String(picked);
+  if (target === origin) return;
   const name = store.state.planets.find((p) => same(p.id, target))?.name ?? '';
+  const moveBtn = () => (live(ctx) ? ctx.container.querySelector('[data-a="move"]') : null);
   ctx.moving = true;
-  select.disabled = true;
+  if (moveBtn()) moveBtn().disabled = true;
   // 별이 지금 있는 자리(다시 받기 전에 잡아 둔다). 그려져 있지 않으면 날아오지 않는다
   const from = starMesh(ctx.id)?.getWorldPosition(new Vector3()) ?? null;
   await ctx.saver.flush(); // 쓰던 메모부터
@@ -372,13 +374,10 @@ async function move(ctx, select) {
     await api.patchStar(ctx.id, { planet_id: target });
   } catch {
     ctx.moving = false;
-    if (live(ctx)) {
-      const sel = ctx.container.querySelector('#aMove');
-      if (sel) {
-        sel.value = origin;
-        sel.disabled = false;
-        sel.focus({ preventScroll: true });
-      }
+    const btn = moveBtn();
+    if (btn) {
+      btn.disabled = false;
+      btn.focus({ preventScroll: true });
     }
     toast('옮기지 못했어요');
     return;
@@ -388,9 +387,19 @@ async function move(ctx, select) {
   if (inStore) inStore.planet_id = target; // 다시 받기 전에도 원래 행성 목록에서 빠지게
   if (live(ctx)) {
     clearGuestStar();
+    // 아래 줄은 내용이 같으면 다시 그리지 않는다(renderPart): 잠가 둔 버튼을 여기서 푼다
+    const container = ctx.container;
+    const unlock = moveBtn();
+    if (unlock) unlock.disabled = false;
     // 우주: 원래 행성의 목록으로. 홈: 그 별이 목록에 남아 있으면 상세에 머문다(homeList.js가 정한다)
     if (ctx.home?.onMoved) ctx.home.onMoved(target);
     else ctx.handlers.onBack?.();
+    // 상세에 머물렀으면(홈) 초점을 "행성 옮기기"로 돌려준다
+    const again = container.querySelector('[data-a="move"]');
+    if (again && again.offsetParent !== null) {
+      again.disabled = false;
+      again.focus({ preventScroll: true });
+    }
   }
   // 3D가 별의 새 행성을 알게 된 뒤에(다시 받기가 반영된 뒤에) 날린다
   const fly = () => {
@@ -496,10 +505,10 @@ function bindPart(ctx, part, el) {
       }
     }
   } else {
-    const sel = el.querySelector('#aMove');
-    if (sel) {
-      sel.disabled = ctx.moving;
-      sel.addEventListener('change', () => move(ctx, sel));
+    const mv = el.querySelector('[data-a="move"]');
+    if (mv) {
+      mv.disabled = ctx.moving;
+      mv.addEventListener('click', () => move(ctx));
     }
     el.querySelector('[data-a="del"]').addEventListener('click', () => remove(ctx));
     el.querySelector('[data-a="fly"]')?.addEventListener('click', () => ctx.home?.onFly?.());

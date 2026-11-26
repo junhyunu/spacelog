@@ -8,18 +8,23 @@ import { toast } from './toast.js';
 
 const same = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined && String(a) === String(b);
 
-/**
- * 옮길 행성을 묻고 옮긴다. others = 지금 행성을 뺀 행성들(하나 이상).
- * @returns {Promise<string|null>} 옮긴 행성 id. 취소했거나 실패했으면 null
- */
-export async function moveStar(star, others) {
-  const target = await ask({
+/** "어느 행성으로 옮길까요?" 확인 창의 내용. 목록의 ⋯ 메뉴와 상세(detail.js)의 "행성 옮기기"가 같은 창을 쓴다. */
+export function moveCopy(star, others) {
+  return {
     title: `'${star.title || '제목 없음'}'을(를) 어느 행성으로 옮길까요?`,
     desc: '옮기면 우주에서도 별이 그 행성으로 이동해요.',
     confirmLabel: '옮기기',
     confirmKind: 'yellow',
     select: { options: others.map((p) => ({ value: p.id, label: p.name })), value: others[0].id, label: '옮길 행성' },
-  });
+  };
+}
+
+/**
+ * 옮길 행성을 묻고 옮긴다. others = 지금 행성을 뺀 행성들(하나 이상).
+ * @returns {Promise<string|null>} 옮긴 행성 id. 취소했거나 실패했으면 null
+ */
+export async function moveStar(star, others) {
+  const target = await ask(moveCopy(star, others));
   if (!target) return null;
   const name = others.find((p) => same(p.id, target))?.name ?? '';
   try {

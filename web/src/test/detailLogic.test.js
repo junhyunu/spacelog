@@ -265,8 +265,8 @@ describe('focusKeyOf', () => {
   test('data-d, data-a, then id', () => {
     expect(focusKeyOf(el({ d: 'back' }))).toBe('[data-d="back"]');
     expect(focusKeyOf(el({ a: 'open' }))).toBe('[data-a="open"]');
-    expect(focusKeyOf(el({ a: 'move' }, { id: 'aMove' }))).toBe('[data-a="move"]');
-    expect(focusKeyOf(el({}, { id: 'aMove' }))).toBe('#aMove');
+    expect(focusKeyOf(el({ a: 'move' }, { id: 'memo' }))).toBe('[data-a="move"]');
+    expect(focusKeyOf(el({}, { id: 'memo' }))).toBe('#memo');
   });
   test('an element with neither (the text preview) falls back to its tabindex, never to "undefined"', () => {
     const key = focusKeyOf(el({}, { getAttribute: (n) => (n === 'tabindex' ? '0' : null) }));
