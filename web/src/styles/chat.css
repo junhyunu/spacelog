@@ -81,9 +81,14 @@ body:has(#left.drawer) #chatBtn{visibility:hidden}
 
 /* 홈 탭 */
 .cp-hi{margin:0;font-family:var(--f-display);font-weight:400;font-size:20px;line-height:1.25}
-.cp-quick{display:flex;flex-direction:column;gap:9px}
-/* 추천 질문: 창 안의 목록 줄과 같은 무게(흰 바탕 · 얇은 연보라 테두리 · 그림자 없음) */
-.cp-quick .btn{text-align:left;white-space:normal;overflow-wrap:anywhere;font-size:14px;min-height:44px;border:var(--line-row) solid var(--row-line);box-shadow:none}
+/* 챗봇 홈의 덩어리: 제목 · 설명은 붙이고(4px), 추천 질문은 칩, 최근 대화 위는 28px(간격 12 + 16), 새 대화 위는 20px(12 + 8) */
+.cp-intro{display:flex;flex-direction:column;gap:4px}
+.cp-hi{color:var(--ink)}
+.cp-sec{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.cp-home > .cp-new{margin-top:8px}
+.cp-quick{display:flex;flex-wrap:wrap;gap:8px}
+/* 추천 질문: 가로로 흐르는 둥근 칩(흰 바탕 · 얇은 연보라 테두리 · 그림자 없음). "바로 묻기"라 아래 대화 줄과 모양을 나눈다 */
+.cp-quick .btn{text-align:left;white-space:normal;overflow-wrap:anywhere;font-size:13.5px;font-weight:700;min-height:40px;padding:6px 14px;border-radius:var(--r-pill);border:var(--line-row) solid var(--row-line);box-shadow:none}
 .cp-quick .btn:not(:disabled){background:var(--white)}
 @media (hover:hover){.cp-quick .btn.ghost:hover:not(:disabled){background:var(--hover)}}
 .cp-banner{white-space:normal;border-radius:14px;margin:0}

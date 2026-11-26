@@ -474,13 +474,14 @@ function renderHome(body) {
   body.innerHTML =
     '<div class="cp-home">' +
     blockBanner() +
-    '<h3 class="cp-hi">무엇을 찾아 드릴까요</h3>' +
-    '<p class="cp-sub">띄운 별에서 찾아 답해요. 답 아래에 근거가 된 별이 보여요.</p>' +
+    '<div class="cp-intro"><h3 class="cp-hi">무엇을 찾아 드릴까요</h3>' +
+    '<p class="cp-sub">띄운 별에서 찾아 답해요. 답 아래에 근거가 된 별이 보여요.</p></div>' +
     '<div class="cp-quick">' +
     qs.map((q, i) => `<button type="button" class="btn ghost" data-q="${i}"${blocked ? ' disabled' : ''}>${esc(q)}</button>`).join('') +
     '</div>' +
-    '<div class="lbl">최근 대화</div>' +
+    '<div class="cp-sec"><div class="lbl">최근 대화</div>' +
     (recent.length ? `<ul class="cp-convs">${recent.map((c) => convItem(c)).join('')}</ul>` : '<p class="empty">아직 대화가 없어요</p>') +
+    '</div>' +
     `<button type="button" class="btn violet cp-new" data-act="new">${ico('message-square-plus', 18)} 새 대화</button>` +
     '</div>';
   body.querySelectorAll('[data-q]').forEach((b) =>

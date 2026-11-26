@@ -23,6 +23,8 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 :is(#save,#planetForm,#charForm,#planetDel,#confirm,.authdlg,.cp-consent) .row > .btn.ghost{border-width:var(--line-btn)}
 :is(#save,#planetForm,#charForm,#planetDel,#confirm,.authdlg,.cp-consent) .row > .btn.ghost:not(:disabled){box-shadow:var(--drop-btn)}
 :is(#save,#planetForm,#charForm,#planetDel,#confirm,.authdlg,.cp-consent) .row > .btn.ghost:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 var(--ink)}
+/* 올리면 확정 버튼처럼 1px 떠오른다(바탕은 그대로: 고스트의 어두워짐을 쓰지 않는다) */
+@media (hover:hover){:is(#save,#planetForm,#charForm,#planetDel,#confirm,.authdlg,.cp-consent) .row > .btn.ghost:hover:not(:disabled):not(:active){transform:translateY(-1px);background-color:var(--panel-2)}}
 
 /* W-01 왼쪽 패널(스펙 6-8): 로고 · 요약 · 바로 날아가기 목록 · 조작 안내를 한 카드로. 아래 "W-01 왼쪽 패널"에 이어진다 */
 #help kbd{font-family:var(--f-mono);font-size:11px;background:var(--ink);color:var(--panel);border-radius:5px;padding:1px 6px;margin-right:3px}
