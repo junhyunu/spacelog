@@ -292,9 +292,11 @@ function paintDock() {
   const html = store.state.planets
       .map((p) => {
         const count = num(p.count_in_period);
+        // 지금 기간에 별이 없는 행성은 흐리게(app.css .dock button.zero): 우주에서도 가장 작은 크기다. 누를 수는 있다
+        const zero = !(Number(p.count_in_period) > 0);
         return (
           '<div class="drow">' +
-          `<button type="button" data-planet="${esc(p.id)}" aria-label="${esc(`'${p.name}' 행성으로 날아가기, ${periodCountLabel(store.state.period)} ${count}개`)}">` +
+          `<button type="button"${zero ? ' class="zero"' : ''} data-planet="${esc(p.id)}" aria-label="${esc(`'${p.name}' 행성으로 날아가기, ${periodCountLabel(store.state.period)} ${count}개`)}">` +
           `<span class="dot" style="background:${faceOf(p)}"></span><span class="t">${esc(p.name)}</span><span class="n">${count}</span></button>` +
           `<button type="button" class="more" data-more="${esc(p.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(`'${p.name}' 행성 메뉴`)}" title="행성 메뉴">${MORE}</button></div>`
         );
