@@ -9,12 +9,16 @@
 //                'data'                            다시 받았다 → 목록을 다시 그린다(우주 밖에 있을 때만)
 // 검색: 지금 고른 행성 · 기간 안에서 제목 · 메모를 찾는다. 범위 밖에도 맞는 별이 있으면 개수를 알려 주려고
 //   모든 별을 한 번 받아 둔다(서버에 검색 API가 없다. 우주 안 검색 search.js와 같은 방식). 'data'가 오면 버린다.
-// 별을 누르면: initHomeList의 openStar(star)를 부른다(지금은 우주로 들어가 그 별로 날아간다).
+// 별을 누르면: 목록 자리(#hDetail)에 상세가 펼쳐진다. 우주의 상세(detail.js)를 그대로 쓰고 머리만 다르다(이전 · 다음).
+//   그동안 거르기 줄 · 목록은 숨고 왼쪽 행성 패널은 그대로다. 이전 · 다음은 목록에 보이던 순서를 따른다(←/→ 키도).
+//   Esc · "목록으로"로 돌아오면 보던 스크롤 자리로 돌아간다. 상세의 "우주에서 보기"는 initHomeList의 openStar(star)를 부른다.
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { PLANET_COLORS, esc, ico, shortDate } from '../util.js';
+import { flushMemo, renderDetail } from './detail.js';
 import { contentLabel } from './detailLogic.js';
-import { PAGE, countTitle, emptyState, filterStars, firstLine, markHtml, matches, orderStars, pageOf, snipHtml } from './homeLogic.js';
+import { registerEscape } from './escape.js';
+import { PAGE, countTitle, emptyState, filterStars, firstLine, markHtml, matches, neighbors, orderStars, pageOf, snipHtml } from './homeLogic.js';
 import { defaultCustom } from './hudLogic.js';
 import { confirmDeletePlanet } from './planetDelete.js';
 import { openPlanetForm } from './planetForm.js';
@@ -32,13 +36,14 @@ const LAYERS =
 const SIDE_LABEL = { all: '전체 별', today: '오늘 별', week: '이번 주 별', custom: '이 기간 별' };
 
 // 고른 것. 기간은 store.state.period(우주와 같이 쓴다)
-const S = { planet: 'all', group: false, fav: false, q: '', limit: PAGE };
+const S = { planet: 'all', group: false, fav: false, q: '', limit: PAGE, detail: null }; // detail: 상세를 보고 있는 별 id
 const keep = new Set(); // "자주 찾음만" 보는 중에 ☆를 끈 별: 거르기가 바뀔 때까지 흐리게 남긴다
 let custom = defaultCustom(); // "직접 지정"의 날짜(hud.js가 알려 준다)
 let all = null; // 검색용: 모든 기간의 별. null이면 필요할 때 다시 받는다
 let allLoading = null;
 let ready = false;
 let onOpenStar = () => {};
+let backY = 0; // 상세를 열기 전의 스크롤 자리(목록으로 돌아올 때 되돌린다)
 
 /* ---------- 그리기 ---------- */
 // 내용이 바뀌었을 때만 갈아 끼우고, 초점은 같은 것(data-fk)으로 되돌린다
@@ -126,10 +131,14 @@ function emptyHtml(kind, elsewhere) {
   return `<div class="sempty"><b>이 기간에는 별이 없어요</b><p>기간을 넓히거나 다른 행성을 골라 보세요.</p>${btn('resetFilter', '전체 기간 · 전체 보기로')}</div>`;
 }
 
-function paintTable(planets, stars) {
+// 지금 거르기로 목록에 보이는 별(보이는 순서 그대로). 상세의 이전 · 다음도 이 순서를 쓴다
+function shownList(planets, stars) {
+  return orderStars(filterStars(stars, { planetId: S.planet, fav: S.fav, q: S.q.trim(), keep }), { group: S.group, planets, planetId: S.planet });
+}
+
+function paintTable(planets, stars, list) {
   const q = S.q.trim();
   const byId = new Map(planets.map((p) => [String(p.id), p]));
-  const list = orderStars(filterStars(stars, { planetId: S.planet, fav: S.fav, q, keep }), { group: S.group, planets, planetId: S.planet });
   const shown = list.filter((s) => !S.fav || s.fav).length; // 흐리게 남겨 둔 줄은 세지 않는다
   // 검색 중: 지금 범위(행성 · 기간 · 자주 찾음) 밖에서 맞는 별의 수(모든 별을 받아 둔 뒤에만 안다)
   const everywhere = q && all ? all.filter((s) => matches(s, q)).length : 0;
@@ -168,6 +177,8 @@ export function renderHomeList() {
   const stars = store.state.stars ?? [];
   if (S.planet !== 'all' && !planets.some((p) => same(p.id, S.planet))) S.planet = 'all'; // 고른 행성이 사라졌다
   if (S.q.trim() && !all) loadAll();
+  const list = shownList(planets, stars);
+  if (S.detail !== null && !list.some((s) => same(s.id, S.detail))) S.detail = null; // 보던 별이 목록에서 빠졌다(지움 · 옮김 · 기간)
   paintPeriod();
   paintSide(planets, stars);
   $('hGroupSw').hidden = S.planet !== 'all';
@@ -175,7 +186,80 @@ export function renderHomeList() {
   $('hFavSw').setAttribute('aria-checked', String(S.fav));
   if ($('hQ').value !== S.q) $('hQ').value = S.q;
   $('hQClear').hidden = !S.q;
-  paintTable(planets, stars);
+  paintTable(planets, stars, list);
+  paintDetail(planets, list);
+}
+
+// 상세를 보는 동안: 거르기 줄 · 목록을 숨기고 그 자리에 상세를 그린다(한 기록만 보고 있어 거를 것이 없다)
+function paintDetail(planets, list) {
+  const box = $('hDetail');
+  const star = S.detail === null ? null : list.find((s) => same(s.id, S.detail));
+  const head = document.querySelector('#hList .hl-head');
+  head.hidden = Boolean(star);
+  $('hTable').hidden = Boolean(star);
+  if (!star) {
+    if (!box.hidden) {
+      flushMemo(); // 쓰던 메모를 마저 저장한다
+      box.hidden = true;
+      box.textContent = '';
+    }
+    return;
+  }
+  const planet = planets.find((p) => same(p.id, star.planet_id));
+  const { index, total } = neighbors(list, star.id);
+  box.style.setProperty('--accent', PLANET_COLORS[planet?.color_index]?.deep ?? '');
+  box.hidden = false;
+  renderDetail(box, star, planet, {
+    onBack: () => closeDetail(),
+    home: {
+      index,
+      total,
+      onPrev: () => stepDetail(-1),
+      onNext: () => stepDetail(1),
+      onFly: () => flushMemo().then(() => onOpenStar(star)),
+      // 행성을 옮겼다: 다시 그리면 목록에 남았는지에 따라 상세에 머물거나 목록으로 돌아간다
+      onMoved: () => {
+        renderHomeList();
+        if (S.detail === null) $('home').scrollTo({ top: backY });
+      },
+    },
+  });
+}
+
+function openDetail(id) {
+  const home = $('home');
+  backY = home.scrollTop;
+  S.detail = String(id);
+  renderHomeList();
+  // 상세의 머리가 보이게 맞춘다: 긴 목록의 아래쪽에서 열었으면 올리고,
+  // 좁은 화면처럼 상세가 화면 아래쪽(행성 패널 밑)에 있으면 내린다
+  const fromTop = $('hList').getBoundingClientRect().top - home.getBoundingClientRect().top;
+  const top = fromTop + home.scrollTop - 82;
+  if (fromTop < 82 || fromTop > home.clientHeight * 0.6) home.scrollTo({ top: Math.max(0, top) });
+  $('hDetail').querySelector('[data-d="back"]')?.focus({ preventScroll: true });
+}
+
+function closeDetail() {
+  const id = S.detail;
+  if (id === null) return;
+  S.detail = null;
+  renderHomeList();
+  $('home').scrollTo({ top: backY });
+  $('hTable').querySelector(`[data-fk="open:${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+}
+
+// 이전(-1) · 다음(+1) 별로. 넘긴 뒤에도 같은 버튼에 초점을 둔다(끝에 닿아 잠기면 반대쪽 버튼)
+function stepDetail(d) {
+  if (S.detail === null) return;
+  const list = shownList(store.state.planets ?? [], store.state.stars ?? []);
+  const { prevId, nextId } = neighbors(list, S.detail);
+  const next = d < 0 ? prevId : nextId;
+  if (next === null) return;
+  S.detail = next;
+  renderHomeList();
+  const box = $('hDetail');
+  const btn = box.querySelector(`[data-d="${d < 0 ? 'prev' : 'next'}"]`);
+  (btn && !btn.disabled ? btn : box.querySelector(`[data-d="${d < 0 ? 'next' : 'prev'}"]`))?.focus({ preventScroll: true });
 }
 
 // 거르기(행성 · 묶기 · 자주 찾음 · 검색 · 기간)가 바뀌었다: 흐리게 남겨 둔 별을 빼고 첫 쪽부터 다시 보인다
@@ -249,8 +333,11 @@ function onDockClick(e) {
     openPlanetMenu(el);
     return;
   }
-  if (!el.dataset.planet || same(el.dataset.planet, S.planet)) return;
+  if (!el.dataset.planet) return;
+  // 상세를 보는 중에 행성을 고르면 상세를 닫고 그 행성의 목록을 보인다
+  if (same(el.dataset.planet, S.planet) && S.detail === null) return;
   S.planet = el.dataset.planet;
+  S.detail = null;
   refilter();
 }
 
@@ -283,7 +370,7 @@ function onTableClick(e) {
   if (!star) return;
   if (el.dataset.a === 'fav') toggleFav(star);
   else if (el.dataset.a === 'more') openStarMenu(el, star);
-  else if (el.dataset.a === 'open') onOpenStar(star);
+  else if (el.dataset.a === 'open') openDetail(star.id);
 }
 
 function clearQuery() {
@@ -340,6 +427,23 @@ export function initHomeList({ openStar } = {}) {
     if (p && p !== store.state.period) store.emit('setPeriod', { period: p });
   });
   for (const id of ['hFrom', 'hTo']) $(id).addEventListener('change', () => store.emit('setPeriod', { from: $('hFrom').value, to: $('hTo').value }));
+
+  // 상세를 보는 동안의 키: ←/→로 이전 · 다음(글을 쓰는 칸 · 창 안에서는 받지 않는다), Esc로 목록으로
+  document.addEventListener('keydown', (e) => {
+    if (S.detail === null || store.state.inWorld || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    const t = e.target;
+    if (!(t instanceof Element) || !(t === document.body || $('hDetail').contains(t))) return; // 다른 창에 초점이 있다
+    if (t.closest('input, textarea, select')) return;
+    e.preventDefault();
+    stepDetail(e.key === 'ArrowLeft' ? -1 : 1);
+  });
+  // 이미지 크게 보기(32)를 먼저 닫은 다음이다
+  registerEscape(29, () => {
+    if (S.detail === null || store.state.inWorld) return false;
+    closeDetail();
+    return true;
+  });
 
   store.on('period', (p) => {
     if (p?.custom) custom = p.custom;

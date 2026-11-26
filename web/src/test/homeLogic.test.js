@@ -7,6 +7,7 @@ import {
   firstLine,
   markHtml,
   matches,
+  neighbors,
   orderStars,
   pageOf,
   snipHtml,
@@ -58,6 +59,19 @@ describe('orderStars', () => {
     const input = [list[2], list[0]];
     orderStars(input, {});
     expect(input.map((s) => s.id)).toEqual([1, 3]);
+  });
+});
+
+describe('neighbors', () => {
+  const list = [star(3), star(2), star(1)];
+  test('position in the shown order with the ids before and after', () => {
+    expect(neighbors(list, 2)).toEqual({ index: 1, total: 3, prevId: '3', nextId: '1' });
+    expect(neighbors(list, '3')).toEqual({ index: 0, total: 3, prevId: null, nextId: '2' });
+    expect(neighbors(list, 1)).toEqual({ index: 2, total: 3, prevId: '2', nextId: null });
+  });
+  test('a star that is not in the list → index -1 and no neighbours', () => {
+    expect(neighbors(list, 9)).toEqual({ index: -1, total: 3, prevId: null, nextId: null });
+    expect(neighbors([], 1)).toEqual({ index: -1, total: 0, prevId: null, nextId: null });
   });
 });
 

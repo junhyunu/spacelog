@@ -124,6 +124,27 @@
 .sempty p{margin:0 0 14px;font-size:13.5px;color:var(--mute);line-height:1.6}
 .smore{display:flex;justify-content:center;padding:14px 4px 8px;border-top:1.5px solid #d6d1f2}
 
+/* ---------- 별 상세(#hDetail): 목록 자리에 펼쳐진다. 내용(첨부 · 정보 · 메모 · 옮기기 · 지우기)은 우주의 상세와 같은 조각 · 같은 규칙(detail.js · detail.css) ---------- */
+#hDetail{--accent:var(--violet);padding:14px 18px 18px;display:flex;flex-direction:column;gap:var(--gap-3)}
+#hDetail .body{display:flex;flex-direction:column;gap:var(--gap-3);min-width:0}
+#hDetail .lbl{color:var(--accent)}
+#hDetail *:focus-visible{outline:var(--line) solid var(--accent);outline-offset:2px}
+/* 머리: [← 목록으로] 행성 이름 · 제목 ··· [<] n / N [>]. 제목이 첫 줄에 온다 */
+#hDetail header{display:flex;align-items:center;gap:var(--gap-3)}
+#hDetail header .back{flex:none;display:inline-flex;align-items:center;gap:6px}
+#hDetail .hd{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+#hDetail .pname{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mute);min-width:0}
+#hDetail .pname .dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--ink);flex:none;box-sizing:border-box}
+#hDetail .pname .t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hDetail h2.h2s{margin:0;font-family:var(--f-display);font-weight:400;font-size:22px;line-height:1.25;overflow-wrap:anywhere}
+#hDetail .pager{flex:none;display:flex;align-items:center;gap:6px;font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+#hDetail .pager .btn{width:40px;height:40px;min-height:0;padding:0;display:grid;place-items:center}
+#hDetail .pager .btn:disabled{background:var(--panel-2);color:var(--ink);opacity:.35;cursor:default;transform:none;box-shadow:var(--drop-btn)}
+#hDetail .pager span{min-width:52px;text-align:center}
+/* 발: 우주에서 보기(왼쪽) · 이 별 지우기(오른쪽) */
+#hDetail .dfoot{display:flex;align-items:center;justify-content:space-between;gap:var(--gap-3);flex-wrap:wrap}
+#hDetail .dfoot .linkdel{align-self:center;min-height:44px}
+
 /* ---------- 폭에 따라 ---------- */
 @media (max-width:900px){
   .srow{grid-template-columns:36px minmax(0,1fr) 150px var(--dtw)}
@@ -152,6 +173,15 @@
   #hPeriod .range{flex:1 1 100%;padding:0 4px}
   #hPeriod .range input{flex:1;min-width:0}
   #hTable{padding:2px 10px 6px}
+  #hDetail{padding:12px 12px 16px}
+  /* 상세의 머리: "목록으로"는 ← 아이콘만(이전 · 다음과 같은 40px 네모). 이전 · 다음이 폭을 많이 써서 제목은 바로 아래 줄 전체에 둔다 */
+  #hDetail header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"back pname pager" "title title title";align-items:center;gap:var(--gap-2) 10px}
+  #hDetail header .back{grid-area:back;width:40px;height:40px;min-height:0;padding:0;justify-content:center}
+  #hDetail header .back .bt{display:none}
+  #hDetail .hd{display:contents}
+  #hDetail .pname{grid-area:pname}
+  #hDetail .pager{grid-area:pager}
+  #hDetail h2.h2s{grid-area:title}
   /* [☆][제목 · 종류 ··· 날짜][⋯]: 날짜는 종류 줄 오른쪽 끝, ⋯는 늘 보인다 */
   .srow{grid-template-columns:36px minmax(0,1fr) 36px;gap:var(--gap-2)}
   .srow > .c-pl{display:none}

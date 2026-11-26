@@ -40,6 +40,17 @@ export function orderStars(list, { group, planets, planetId } = {}) {
   return Array.from(planets ?? []).flatMap((p) => sorted.filter((s) => same(s.planet_id, p.id)));
 }
 
+/**
+ * 상세의 "n / N"과 이전 · 다음: 목록에 보이는 순서(orderStars)에서 그 별의 자리.
+ * @returns {{ index: number, total: number, prevId: string|null, nextId: string|null }} 목록에 없으면 index는 -1
+ */
+export function neighbors(list, id) {
+  const all = Array.from(list ?? []);
+  const index = all.findIndex((s) => same(s.id, id));
+  const idAt = (i) => (index >= 0 && i >= 0 && i < all.length ? String(all[i].id) : null);
+  return { index, total: all.length, prevId: idAt(index - 1), nextId: idAt(index + 1) };
+}
+
 /** 찾은 낱말을 <mark>로 감싼 HTML(나머지는 esc). 검색어가 비면 esc만. */
 export function markHtml(text, q) {
   const src = str(text);

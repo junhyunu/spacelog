@@ -3,6 +3,7 @@
 // 시안 715~759행(renderDetail · 메모 · moveRec · removeRec)을 옮겼다. 발(싣기 버튼)은 없다(탐사선 제외).
 // panel.js가 부르는 모양:
 //   renderDetail(container, star, planet, { onBack, onClose })  container(#panel)의 내용을 통째로 그린다
+// 홈의 별 목록(homeList.js)도 같은 상세를 목록 자리(#hDetail)에 그린다: { home }을 주면 머리가 이전 · 다음으로 바뀌고 "우주에서 보기"가 생긴다
 //   flushMemo() → Promise                                       대기 중인 메모 저장을 바로 끝낸다(던지지 않는다)
 //
 // 같은 별을 다시 그리라고 하면('data'가 왔을 때) 바뀐 조각만 갈아 끼운다. 메모 칸은 건드리지 않는다
@@ -176,7 +177,27 @@ store.on('data', () => {
 
 /* ---------- 조각 HTML ---------- */
 
-function headHtml(star, planet) {
+const CHEVRON = (d) =>
+  `<svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+
+// 홈의 목록 자리에 펼쳐질 때의 머리(home.css #hDetail header): [← 목록으로] 행성 이름 · 제목 ··· [<] n / N [>]
+// 좁은 화면에서는 "목록으로"가 ← 아이콘만 남는다(이름은 aria-label로 그대로).
+function homeHeadHtml(star, planet, home) {
+  const face = PLANET_COLORS[planet?.color_index]?.face ?? '#7a6cff';
+  const index = Number(home.index) || 0;
+  const total = Number(home.total) || 0;
+  return (
+    `<button type="button" class="btn ghost sm back" data-d="back" aria-label="목록으로">${ico('arrow-left', 16)}<span class="bt">목록으로</span></button>` +
+    `<div class="hd"><div class="pname"><span class="dot" style="background:${face}"></span><span class="t">${esc(planet?.name ?? '')}</span></div>` +
+    `<h2 class="h2s">${esc(star.title || '제목 없음')}</h2></div>` +
+    `<div class="pager"><button type="button" class="btn ghost" data-d="prev" aria-label="이전 기록"${index <= 0 ? ' disabled' : ''}>${CHEVRON('m15 18-6-6 6-6')}</button>` +
+    `<span aria-live="polite">${(index + 1).toLocaleString('ko-KR')} / ${total.toLocaleString('ko-KR')}</span>` +
+    `<button type="button" class="btn ghost" data-d="next" aria-label="다음 기록"${index >= total - 1 ? ' disabled' : ''}>${CHEVRON('m9 18 6-6-6-6')}</button></div>`
+  );
+}
+
+function headHtml(star, planet, home) {
+  if (home) return homeHeadHtml(star, planet, home);
   const face = PLANET_COLORS[planet?.color_index]?.face ?? '#7a6cff';
   const name = planet?.name ?? '';
   return (
@@ -273,7 +294,7 @@ function topHtml(ctx, star) {
   );
 }
 
-function bottomHtml(star) {
+function bottomHtml(star, home) {
   const planets = store.state.planets;
   const move =
     planets.length > 1
@@ -283,7 +304,10 @@ function bottomHtml(star) {
           .join('') +
         '</select></div>'
       : '';
-  return `${move}<button type="button" class="linkdel" data-a="del">이 별 지우기</button>`;
+  const del = '<button type="button" class="linkdel" data-a="del">이 별 지우기</button>';
+  // 홈에서는 "우주에서 보기"(우주로 들어가 이 별로 날아간다)를 지우기 왼쪽에 둔다
+  if (home?.onFly) return `${move}<div class="dfoot"><button type="button" class="btn ghost sm" data-a="fly">우주에서 보기</button>${del}</div>`;
+  return `${move}${del}`;
 }
 
 /* ---------- 행동 ---------- */
@@ -364,7 +388,9 @@ async function move(ctx, select) {
   if (inStore) inStore.planet_id = target; // 다시 받기 전에도 원래 행성 목록에서 빠지게
   if (live(ctx)) {
     clearGuestStar();
-    ctx.handlers.onBack?.(); // 원래 행성의 목록으로
+    // 우주: 원래 행성의 목록으로. 홈: 그 별이 목록에 남아 있으면 상세에 머문다(homeList.js가 정한다)
+    if (ctx.home?.onMoved) ctx.home.onMoved(target);
+    else ctx.handlers.onBack?.();
   }
   // 3D가 별의 새 행성을 알게 된 뒤에(다시 받기가 반영된 뒤에) 날린다
   const fly = () => {
@@ -442,15 +468,18 @@ function onThumbError(img) {
 /* ---------- 그리기 ---------- */
 
 function partHtml(ctx, part) {
-  if (part === 'head') return headHtml(ctx.star, ctx.planet);
+  if (part === 'head') return headHtml(ctx.star, ctx.planet, ctx.home);
   if (part === 'top') return topHtml(ctx, ctx.star);
-  return bottomHtml(ctx.star);
+  return bottomHtml(ctx.star, ctx.home);
 }
 
 function bindPart(ctx, part, el) {
   if (part === 'head') {
     el.querySelector('[data-d="back"]').addEventListener('click', () => ctx.handlers.onBack?.());
-    el.querySelector('[data-d="close"]').addEventListener('click', () => ctx.handlers.onClose?.());
+    el.querySelector('[data-d="close"]')?.addEventListener('click', () => ctx.handlers.onClose?.());
+    // 홈의 머리: 이전 · 다음
+    el.querySelector('[data-d="prev"]')?.addEventListener('click', () => ctx.home?.onPrev?.());
+    el.querySelector('[data-d="next"]')?.addEventListener('click', () => ctx.home?.onNext?.());
   } else if (part === 'top') {
     el.querySelector('.viewer .pv.img img')?.addEventListener('error', () => onViewError(ctx));
     for (const img of el.querySelectorAll('.ith img')) img.addEventListener('error', () => onThumbError(img), { once: true });
@@ -473,6 +502,7 @@ function bindPart(ctx, part, el) {
       sel.addEventListener('change', () => move(ctx, sel));
     }
     el.querySelector('[data-a="del"]').addEventListener('click', () => remove(ctx));
+    el.querySelector('[data-a="fly"]')?.addEventListener('click', () => ctx.home?.onFly?.());
   }
 }
 
@@ -518,9 +548,11 @@ function showCount(ctx) {
  * @param {HTMLElement} container  #panel. 머리까지 통째로 바꾼다
  * @param {object} star            별(서버가 준 모양)
  * @param {object} planet          그 별의 행성
- * @param {{ onBack?: () => void, onClose?: () => void }} handlers  ← 목록으로 / ✕ 패널 닫기
+ * @param {{ onBack?: () => void, onClose?: () => void, home?: object }} handlers  ← 목록으로 / ✕ 패널 닫기.
+ *   home을 주면 홈의 목록 자리에 펼치는 모양으로 그린다(homeList.js):
+ *   { index, total, onPrev, onNext } 머리의 "n / N"과 이전 · 다음, onFly "우주에서 보기", onMoved(planetId) 행성을 옮긴 뒤
  */
-export function renderDetail(container, star, planet, { onBack, onClose } = {}) {
+export function renderDetail(container, star, planet, { onBack, onClose, home = null } = {}) {
   const id = String(star.id);
   // 늦게 온 다시 받기가 옛 메모를 들고 왔으면 방금 저장한 메모를 쓴다(화면이 쥔 별도 그 자리에서 고친다)
   if (ledger.apply([star])) ledger.apply(store.state.stars);
@@ -531,6 +563,7 @@ export function renderDetail(container, star, planet, { onBack, onClose } = {}) 
     current.planet = planet;
     if (current.view && !groupAttachments(star).images.some((a) => same(a.id, current.view))) current.view = null;
     current.handlers = { onBack, onClose };
+    current.home = home;
     for (const part of ['head', 'top', 'bottom']) renderPart(current, part);
     return;
   }
@@ -544,6 +577,7 @@ export function renderDetail(container, star, planet, { onBack, onClose } = {}) 
     container,
     saver,
     handlers: { onBack, onClose },
+    home,
     html: {},
     busy: false,
     moving: false,
