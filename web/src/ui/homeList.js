@@ -9,6 +9,8 @@
 //                'data'                            다시 받았다 → 목록을 다시 그린다(우주 밖에 있을 때만)
 // 검색: 지금 고른 행성 · 기간 안에서 제목 · 메모를 찾는다. 범위 밖에도 맞는 별이 있으면 개수를 알려 주려고
 //   모든 별을 한 번 받아 둔다(서버에 검색 API가 없다. 우주 안 검색 search.js와 같은 방식). 'data'가 오면 버린다.
+// 좁은 화면(760px 이하): 행성 패널은 왼쪽에서 덮이는 서랍이다(로고 옆 아이콘 · 거르기 줄의 행성 버튼으로 연다).
+//   기간 바는 시계 버튼을 눌렀을 때만 거르기 줄 아래에 펼쳐진다. 우주의 왼쪽 서랍 · 🕐와 같은 규칙이다.
 // 별을 누르면: 목록 자리(#hDetail)에 상세가 펼쳐진다. 우주의 상세(detail.js)를 그대로 쓰고 머리만 다르다(이전 · 다음).
 //   그동안 거르기 줄 · 목록은 숨고 왼쪽 행성 패널은 그대로다. 이전 · 다음은 목록에 보이던 순서를 따른다(←/→ 키도).
 //   Esc · "목록으로"로 돌아오면 보던 스크롤 자리로 돌아간다. 상세의 "우주에서 보기"는 initHomeList의 openStar(star)를 부른다.
@@ -34,6 +36,8 @@ const faceOf = (planet) => PLANET_COLORS[planet?.color_index]?.face ?? '#7a6cff'
 const LAYERS =
   '<svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="m2 12 8.58 3.91a2 2 0 0 0 1.66 0L21 12"/><path d="m2 17 8.58 3.91a2 2 0 0 0 1.66 0L21 17"/></svg>';
 const SIDE_LABEL = { all: '전체 별', today: '오늘 별', week: '이번 주 별', custom: '이 기간 별' };
+const PERIOD_NAME = { all: '전체', today: '오늘', week: '이번 주', custom: '직접 지정' };
+const narrowMq = typeof matchMedia === 'function' ? matchMedia('(max-width: 760px)') : { matches: false };
 
 // 고른 것. 기간은 store.state.period(우주와 같이 쓴다)
 const S = { planet: 'all', group: false, fav: false, q: '', limit: PAGE, detail: null }; // detail: 상세를 보고 있는 별 id
@@ -44,6 +48,8 @@ let allLoading = null;
 let ready = false;
 let onOpenStar = () => {};
 let backY = 0; // 상세를 열기 전의 스크롤 자리(목록으로 돌아올 때 되돌린다)
+let sideOpen = false; // 좁은 화면의 행성 서랍이 열려 있는지
+let sideOpener = null; // 서랍을 연 버튼(로고 옆 아이콘 · 행성 버튼). 닫으면 초점을 거기로 돌린다
 
 /* ---------- 그리기 ---------- */
 // 내용이 바뀌었을 때만 갈아 끼우고, 초점은 같은 것(data-fk)으로 되돌린다
@@ -74,6 +80,34 @@ function paintPeriod() {
   $('hRange').hidden = period !== 'custom';
   if ($('hFrom').value !== custom.from) $('hFrom').value = custom.from;
   if ($('hTo').value !== custom.to) $('hTo').value = custom.to;
+  // 좁은 화면의 시계 버튼: 기간 바를 접어도 지금 기간을 알 수 있게 이름을 붙이고, "전체"가 아니면 분홍 점
+  const name = PERIOD_NAME[period] ?? '';
+  $('hPeriodBtn').setAttribute('aria-label', `기간: ${name}, 바꾸기`);
+  $('hPeriodBtn').title = `기간: ${name}`;
+  $('hPeriodBtn').classList.toggle('narrowed', period !== 'all');
+}
+
+/* ---------- 좁은 화면: 행성 서랍 · 기간 바 펼치기 ---------- */
+// 서랍을 열고 닫는다. 열려 있는 동안 뒤쪽(상단 줄 · 블랙홀 · 목록 · 챗봇)은 누를 수 없다(inert)
+function setSide(open, { focus = true } = {}) {
+  open = Boolean(open);
+  if (open === sideOpen) return;
+  if (open && $('hMain').hidden) return; // 목록 영역이 없는 상태(연결 끊김 등)
+  if (open) sideOpener = document.activeElement?.closest?.('#hSideOpen,#hPlanetBtn') ?? $('hSideOpen');
+  sideOpen = open;
+  document.body.classList.toggle('hside-open', open);
+  $('hScrim').hidden = !open;
+  for (const id of ['hSideOpen', 'hPlanetBtn']) $(id).setAttribute('aria-expanded', String(open));
+  for (const el of [document.querySelector('.home-top'), document.querySelector('#home .hero'), $('hList'), $('chatBtn'), $('chatPanel')]) if (el) el.inert = open;
+  if (open) $('hSideClose').focus({ preventScroll: true });
+  else if (focus) (sideOpener?.offsetParent ? sideOpener : $('hSideOpen')).focus({ preventScroll: true });
+}
+
+const isPeriodOpen = () => document.querySelector('#hList .hl-head').classList.contains('p-open');
+function setPeriodOpen(open, { focus = false } = {}) {
+  document.querySelector('#hList .hl-head').classList.toggle('p-open', Boolean(open));
+  $('hPeriodBtn').setAttribute('aria-expanded', String(Boolean(open)));
+  if (!open && focus) $('hPeriodBtn').focus({ preventScroll: true });
 }
 
 function paintSide(planets, stars) {
@@ -124,9 +158,12 @@ function emptyHtml(kind, elsewhere) {
   if (kind === 'search-elsewhere') return `<div class="sempty"><b>‘${q}’에 맞는 별이 없어요</b><p>다른 행성·기간에 ${num(elsewhere)}개 있어요.</p>${btn('qAll', '전체에서 찾기')}</div>`;
   if (kind === 'search-none') return `<div class="sempty"><b>‘${q}’에 맞는 별이 없어요</b><p>제목·메모에서 찾았어요. 다른 낱말로 찾아보세요.</p>${btn('qClear', '검색어 지우기')}</div>`;
   if (kind === 'fav') return `<div class="sempty"><b>자주 찾음으로 표시한 별이 없어요</b><p>목록의 ☆을 눌러 표시해 보세요.</p>${btn('favOff', '자주 찾음만 끄기')}</div>`;
+  // 별이 하나도 없다(처음 쓰는 사람): 어느 기간 · 행성을 보고 있든 첫 별을 띄우는 길을 알려 준다
+  const first = `<div class="sempty"><b>아직 별이 없어요</b><p>파일을 끌어다 놓거나 기록하기를 눌러 첫 별을 띄워 보세요.</p><button type="button" class="btn" data-act="log">${ico('plus', 16)} 기록하기</button></div>`;
+  if (!(Number(store.state.summary?.total) > 0)) return first;
   const everyPeriod = store.state.period === 'all';
   const everyPlanet = S.planet === 'all';
-  if (everyPeriod && everyPlanet) return '<div class="sempty"><b>아직 별이 없어요</b><p>기록하기를 눌러 첫 별을 띄워 보세요.</p></div>';
+  if (everyPeriod && everyPlanet) return first;
   if (everyPeriod) return `<div class="sempty"><b>이 행성에는 아직 별이 없어요</b><p>다른 행성을 골라 보세요.</p>${btn('resetFilter', '전체 보기로')}</div>`;
   return `<div class="sempty"><b>이 기간에는 별이 없어요</b><p>기간을 넓히거나 다른 행성을 골라 보세요.</p>${btn('resetFilter', '전체 기간 · 전체 보기로')}</div>`;
 }
@@ -181,6 +218,12 @@ export function renderHomeList() {
   if (S.detail !== null && !list.some((s) => same(s.id, S.detail))) S.detail = null; // 보던 별이 목록에서 빠졌다(지움 · 옮김 · 기간)
   paintPeriod();
   paintSide(planets, stars);
+  const picked = S.planet === 'all' ? null : planets.find((p) => same(p.id, S.planet));
+  $('hPlanetBtnName').textContent = picked ? picked.name : '전체 보기';
+  const pdot = $('hPlanetBtn').querySelector('.dot');
+  pdot.classList.toggle('all', !picked);
+  pdot.style.background = picked ? faceOf(picked) : '';
+  pdot.innerHTML = picked ? '' : LAYERS;
   $('hGroupSw').hidden = S.planet !== 'all';
   $('hGroupSw').setAttribute('aria-checked', String(S.group));
   $('hFavSw').setAttribute('aria-checked', String(S.fav));
@@ -321,8 +364,9 @@ function openPlanetMenu(button) {
   const planet = store.state.planets.find((p) => same(p.id, button.dataset.more));
   if (!planet) return;
   openRowMenu(button, `'${planet.name}' 행성 메뉴`, [
-    { key: 'edit', label: '꾸미기', run: () => openPlanetForm({ planet }) },
-    { key: 'del', label: '지우기', danger: true, run: () => confirmDeletePlanet(planet, store.state.planets.filter((p) => !same(p.id, planet.id))) },
+    // 좁은 화면: 서랍을 닫고 창을 띄운다(초점이 펼치기 버튼으로 간다 → 창을 닫으면 거기로 돌아온다)
+    { key: 'edit', label: '꾸미기', run: () => { setSide(false); openPlanetForm({ planet }); } },
+    { key: 'del', label: '지우기', danger: true, run: () => { setSide(false); confirmDeletePlanet(planet, store.state.planets.filter((p) => !same(p.id, planet.id))); } },
   ]);
 }
 
@@ -335,10 +379,14 @@ function onDockClick(e) {
   }
   if (!el.dataset.planet) return;
   // 상세를 보는 중에 행성을 고르면 상세를 닫고 그 행성의 목록을 보인다
-  if (same(el.dataset.planet, S.planet) && S.detail === null) return;
+  if (same(el.dataset.planet, S.planet) && S.detail === null) {
+    setSide(false); // 좁은 화면: 같은 행성을 다시 골라도 서랍은 닫는다
+    return;
+  }
   S.planet = el.dataset.planet;
   S.detail = null;
   refilter();
+  setSide(false); // 좁은 화면: 고르면 서랍을 닫고 목록을 보여 준다
 }
 
 function onTableClick(e) {
@@ -424,9 +472,38 @@ export function initHomeList({ openStar } = {}) {
   });
   $('hSeg').addEventListener('click', (e) => {
     const p = e.target instanceof Element ? e.target.closest('button')?.dataset.p : null;
+    // 좁은 화면: 전체 · 오늘 · 이번 주를 고르면 기간 바를 접는다(직접 지정은 날짜를 고르게 남긴다)
+    if (p && p !== 'custom' && narrowMq.matches) setPeriodOpen(false, { focus: true });
     if (p && p !== store.state.period) store.emit('setPeriod', { period: p });
   });
   for (const id of ['hFrom', 'hTo']) $(id).addEventListener('change', () => store.emit('setPeriod', { from: $('hFrom').value, to: $('hTo').value }));
+
+  // 좁은 화면: 행성 서랍 · 기간 바 펼치기
+  $('hSideOpen').addEventListener('click', () => setSide(true));
+  $('hPlanetBtn').addEventListener('click', () => setSide(true));
+  $('hSideClose').addEventListener('click', () => setSide(false));
+  $('hScrim').addEventListener('click', () => setSide(false));
+  $('hsNew').addEventListener('click', () => setSide(false)); // 새 행성 창은 home.js가 띄운다
+  $('hPeriodBtn').addEventListener('click', () => {
+    const open = !isPeriodOpen();
+    setPeriodOpen(open);
+    if (open) $('hSeg').querySelector('button.on')?.focus({ preventScroll: true });
+  });
+  narrowMq.addEventListener?.('change', () => {
+    setSide(false, { focus: false });
+    setPeriodOpen(false);
+  });
+  // Esc: 서랍(맨 위 층) → 펼친 기간 바. 우주의 왼쪽 서랍(35) · 기간 바(34)와 같은 자리다
+  registerEscape(35, () => {
+    if (!sideOpen || store.state.inWorld) return false;
+    setSide(false);
+    return true;
+  });
+  registerEscape(34, () => {
+    if (store.state.inWorld || !narrowMq.matches || !isPeriodOpen()) return false;
+    setPeriodOpen(false, { focus: true });
+    return true;
+  });
 
   // 상세를 보는 동안의 키: ←/→로 이전 · 다음(글을 쓰는 칸 · 창 안에서는 받지 않는다), Esc로 목록으로
   document.addEventListener('keydown', (e) => {

@@ -13,8 +13,8 @@
 html{-webkit-tap-highlight-color:transparent}
 
 /* ① 꺼짐 */
-.dock button,#sideOpen,.tbtn{transition:transform .15s ease-out,box-shadow .15s ease-out}
-.dock button:active,#sideOpen:active,.tbtn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink);transition-duration:0s}
+.dock button,#sideOpen,.tbtn,.fbtn,#hSideOpen{transition:transform .15s ease-out,box-shadow .15s ease-out}
+.dock button:active,#sideOpen:active,.tbtn:active,.fbtn:active,#hSideOpen:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink);transition-duration:0s}
 
 /* ② 어두워짐 */
 :where(.rec,.wsr,#rowMenu button,.menu button,.me-menu button,button.src,.cvb,#planetDel .opt,.authdlg .leave,#hsNew){transition:box-shadow .15s ease-out}
@@ -28,7 +28,7 @@ html{-webkit-tap-highlight-color:transparent}
 
 /* 움직임 줄이기: 꺼짐 · 줄어듦은 빼고 색만 바뀐다 */
 @media (prefers-reduced-motion:reduce){
-  .dock button:active,#sideOpen:active,.tbtn:active{transform:none}
+  .dock button:active,#sideOpen:active,.tbtn:active,.fbtn:active,#hSideOpen:active{transform:none}
   :where(.ic,.seg button,.tabs button,.cp-tabs button,#wSearch .qx,.more,#helpToggle,#wNewPlanet,.linkdel,#planetForm .chip,#planetForm .sw,#charForm .chip,#charForm .sw,.gsw,.sfav,#hSearch .qx,.sqmore button):active:not(:disabled){transform:none}
   :is(.drow,.recw) .more:active:not(:disabled){transform:translateY(-50%)}
 }

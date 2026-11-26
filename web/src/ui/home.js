@@ -14,7 +14,7 @@
 // 연결 실패 상태는 main.js(showOffline)가 그린다. 여기서는 그 카드를 건드리지 않는다.
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { esc, ico, periodRange } from '../util.js';
+import { esc, periodRange } from '../util.js';
 import { accountName, isSignedIn } from './account.js';
 import { initHomeList, renderHomeList } from './homeList.js';
 import { toast } from './toast.js';
@@ -43,25 +43,16 @@ function paint({ summary }) {
       : '오늘은 아직 별이 없어요';
   $('hStats').innerHTML = `<b>${num(total)}</b>개의 별 <b>${num(planetCount)}</b>개의 행성`;
 
-  // 아래 영역(행성 패널 + 별 목록, homeList.js): 별도 행성도 없으면 숨긴다(빈 우주 카드만 보인다)
-  $('hMain').hidden = empty && planetCount === 0;
+  // 아래 영역(행성 패널 + 별 목록, homeList.js): 별이 하나도 없어도 같은 화면이다(목록 자리에 첫 별을 띄우는 안내가 나온다)
+  $('hMain').hidden = false;
   renderHomeList();
 
   home.querySelector('.hero').hidden = false;
   $('hLog').hidden = false;
 
-  // 빈 우주 카드
+  // #hState는 연결 실패 카드(main.js)만 쓴다. 그 카드가 아니면 비운다
   const st = $('hState');
-  if (empty) {
-    st.innerHTML =
-      '<span class="eyebrow">빈 우주</span><h3>아직 별이 없어요</h3>' +
-      '<p>파일을 끌어다 놓거나 기록하기를 눌러 첫 별을 띄워 보세요.</p>' +
-      // 두 버튼은 같은 크기. 주된 행동(기록하기)을 오른쪽 끝에 둔다
-      '<div class="hrow eq">' +
-      `<button type="button" class="btn ghost" id="hNewPlanet" data-act="newPlanet">${ico('plus', 16)} 새 행성</button>` +
-      `<button type="button" class="btn" data-act="log">${ico('plus', 16)} 기록하기</button></div>`;
-    st.hidden = false;
-  } else {
+  if (!st.querySelector('[data-retry]')) {
     st.hidden = true;
     st.textContent = '';
   }
