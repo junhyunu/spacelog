@@ -7,7 +7,7 @@
 // Esc(37): 전체 화면 검색 → 결과 목록 → 검색 줄 순으로 닫는다. 화면을 덮는 맨 위 층이라 서랍(35)보다 먼저.
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { PLANET_COLORS, esc } from '../util.js';
+import { PLANET_COLORS, esc, shortDate } from '../util.js';
 import { registerEscape } from './escape.js';
 import { isOutsidePeriod } from './hudLogic.js';
 import { flyToStar, setPeriodOpen } from './hud.js';
@@ -51,10 +51,8 @@ function memoSnip(memo, q) {
   return (from ? '…' : '') + markQ(m.slice(from), q);
 }
 
-const md = (iso) => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : `${d.getMonth() + 1}월 ${d.getDate()}일`;
-};
+// 날짜는 목록과 같은 표기('11.26', util.js shortDate)
+const md = shortDate;
 
 function loadAll() {
   if (all) return Promise.resolve(all);
