@@ -145,6 +145,7 @@
 | 날짜 · 숫자 | mono 또는 body + `tabular-nums` | 11.5 ~ 13.5px | 목록 날짜, 글자 수 |
 
 - 제목은 Black Han Sans, 본문은 Pretendard, 날짜 · 글자 수 · 주소는 IBM Plex Mono.
+- **Black Han Sans는 18px 이상 제목에만 쓴다.** 획이 두꺼워 16px 이하에서는 받침이 메워져 뭉개진다. 버튼 · 라벨 · 배지 · 탭 같은 작은 글씨는 Pretendard 800.
 - 한글은 단어 단위로 줄을 바꾼다(`word-break: keep-all`, `body`에 들어 있다). 버튼 · 탭 · 키 표시는 줄바꿈하지 않는다(`white-space: nowrap`).
 - 인터넷 없이도 열려야 한다. 서체는 npm 패키지에서 번들로 넣고 CDN에 의존하지 않는다.
 

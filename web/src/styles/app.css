@@ -6,7 +6,7 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 #stage canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
 #stage canvas:active{cursor:grabbing}
 .card{background:var(--panel);color:var(--ink);border:3px solid var(--ink);border-radius:16px;box-shadow:0 5px 0 var(--ink)}
-.btn{font-family:var(--f-display);font-size:15px;letter-spacing:.02em;border:3px solid var(--ink);border-radius:12px;background:var(--yellow);color:var(--ink);padding:8px 14px;box-shadow:0 4px 0 var(--ink);cursor:pointer;transition:transform .08s,box-shadow .08s}
+.btn{font-family:var(--f-body);font-weight:800;font-size:15px;letter-spacing:.02em;border:3px solid var(--ink);border-radius:12px;background:var(--yellow);color:var(--ink);padding:8px 14px;box-shadow:0 4px 0 var(--ink);cursor:pointer;transition:transform .08s,box-shadow .08s}
 @media (hover:hover){.btn:hover{transform:translateY(-1px)}}
 .btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
 .btn:focus-visible,.dock button:focus-visible,.rec:focus-visible,input:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
@@ -18,7 +18,7 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 #help kbd{font-family:var(--f-mono);font-size:11px;background:var(--ink);color:var(--panel);border-radius:5px;padding:1px 6px;margin-right:3px}
 .dock button{display:flex;align-items:center;gap:10px;font:600 14px var(--f-body);color:var(--ink);background:var(--panel);border:3px solid var(--ink);border-radius:14px;padding:7px 12px 7px 8px;box-shadow:0 4px 0 var(--ink);cursor:pointer;text-align:left;white-space:nowrap}
 .dock button .dot{width:22px;height:22px;border-radius:50%;border:3px solid var(--ink);flex:none}
-.dock button .n{margin-left:auto;font-family:var(--f-display);font-size:13px;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px;font-variant-numeric:tabular-nums}
+.dock button .n{margin-left:auto;font-family:var(--f-body);font-weight:800;font-size:13px;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px;font-variant-numeric:tabular-nums}
 .dock button.here{background:var(--yellow)}
 /* 지금 기간에 별이 없는 행성(hud.js가 .zero를 붙인다): 비활성이 아니라 "이 기간엔 비어 있음".
    배지는 속이 빈 테두리 · 흐린 숫자, 색 점은 45%, 이름은 흐린 글자색. 테두리 · 그림자 · 누르는 반응은 그대로 */
@@ -53,7 +53,7 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 #panel .sub{font-size:12.5px;color:var(--mute);margin-top:3px}
 #panel .x{margin-left:auto;align-self:flex-start;width:34px;height:34px;padding:0;font-size:18px;background:var(--panel-2)}
 #panel .body{flex:1;overflow:auto;padding:12px 16px;display:flex;flex-direction:column;gap:12px;min-height:0}
-#panel .eyebrow{font-family:var(--f-display);font-size:12px;color:var(--violet);letter-spacing:.06em}
+#panel .eyebrow{font-family:var(--f-body);font-weight:800;font-size:12px;color:var(--violet);letter-spacing:.06em}
 .recs{display:flex;flex-direction:column;gap:7px}
 .rec{display:flex;gap:10px;align-items:center;text-align:left;font:600 14px var(--f-body);color:var(--ink);background:var(--white);border:2.5px solid var(--ink);border-radius:12px;padding:8px 10px;cursor:pointer}
 .rec .d{margin-left:auto;font:500 11.5px var(--f-mono);color:var(--mute);flex:none;font-variant-numeric:tabular-nums}
@@ -96,13 +96,13 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 #enterBtn{position:relative;font-size:16px;padding:8px 14px;min-height:44px;box-sizing:border-box;box-shadow:0 5px 0 var(--ink)}
 .hero .hint{margin:0;font-size:13px;color:#b9b3e6}
 .hcard{padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
-.hcard .eyebrow{font-family:var(--f-display);font-size:12px;color:var(--violet);letter-spacing:.06em}
+.hcard .eyebrow{font-family:var(--f-body);font-weight:800;font-size:12px;color:var(--violet);letter-spacing:.06em}
 .hcard h3{margin:0;font-size:16px;line-height:1.35}
 .hcard p{margin:0;font-size:13.5px;line-height:1.6;color:var(--mute)}
 .hcard .btn{align-self:flex-start;display:flex;align-items:center;gap:8px;font-size:14px}
 .hlist{display:flex;flex-direction:column;gap:7px}
 .pdot{width:16px;height:16px;border-radius:50%;border:2.5px solid var(--ink);flex:none}
-.rec .n2{margin-left:auto;font-family:var(--f-display);font-size:12px;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px;font-variant-numeric:tabular-nums}
+.rec .n2{margin-left:auto;font-family:var(--f-body);font-weight:800;font-size:12px;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px;font-variant-numeric:tabular-nums}
 .hlist .rec{min-height:44px}
 .btn.sm{font-size:13px;padding:6px 10px;gap:6px}
 .hcard .btn{max-width:100%}
@@ -142,7 +142,7 @@ body:has(#side:not([hidden])) #period{--left-w:280px}
 #wLog{position:fixed;right:calc(14px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:2;font-size:16px;padding:10px 16px}
 #worldMsg{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;padding:20px 22px;width:min(380px,calc(100vw - 32px));display:flex;flex-direction:column;gap:10px;text-align:center;align-items:center;box-sizing:border-box}
 #worldMsg h3{margin:0;font-size:16px;line-height:1.5}
-#worldMsg .eyebrow,#hState .eyebrow{font-family:var(--f-display);font-size:12px;color:var(--violet);letter-spacing:.06em}
+#worldMsg .eyebrow,#hState .eyebrow{font-family:var(--f-body);font-weight:800;font-size:12px;color:var(--violet);letter-spacing:.06em}
 /* 연결이 끊긴 뒤에 처음 그리는 글자는 서체 조각을 내려받지 못해 다른 서체로 섞여 보인다. 이 카드는 이미 받아 둔 본문 서체(한 파일)로만 쓴다. */
 #worldMsg:has([data-retry]) .eyebrow,#hState:has([data-retry]) .eyebrow,#worldMsg:has([data-retry]) h3,#hState:has([data-retry]) h3{font-family:var(--f-body);font-weight:700}
 #hState{max-width:460px;width:100%;margin:24px auto 0;align-items:center;text-align:center;padding:24px;box-sizing:border-box}
@@ -161,7 +161,7 @@ body:has(#side:not([hidden])) #period{--left-w:280px}
 .menu button:first-child{border-top:0}
 @media (hover:hover){.menu button:hover:not(:disabled){background:var(--yellow)}}
 .menu button:disabled{color:#9a94bd;cursor:not-allowed}
-.lbl{font-family:var(--f-display);font-size:12px;color:var(--violet);letter-spacing:.06em}
+.lbl{font-family:var(--f-body);font-weight:800;font-size:12px;color:var(--violet);letter-spacing:.06em}
 .lockline{font-size:13px;line-height:1.5;color:var(--mute);margin:0 0 10px}
 /* 여러 개 골라 옮기기(panel.js · homeList.js가 같이 쓴다). 체크칸 = 20px 흰 네모, 고르면 노랑 + 잉크 체크 */
 .cb{position:relative;width:20px;height:20px;flex:none;box-sizing:border-box;border:var(--line-thin) solid var(--ink);border-radius:6px;background:var(--white)}
@@ -267,12 +267,12 @@ body{word-break:keep-all}
 #side .btn.x:active,#wHint .btn.x:active{box-shadow:0 1px 0 var(--ink)}
 #side .sd-sum{flex:none;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--gap-2);padding:6px 16px 14px}
 #side .stats{font-size:12.5px;font-weight:700;line-height:1.8}
-#side .stats b{display:inline-block;margin:0 2px 0 4px;line-height:1.35;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px;font-family:var(--f-display);font-weight:400;font-size:12px;font-variant-numeric:tabular-nums}
+#side .stats b{display:inline-block;margin:0 2px 0 4px;line-height:1.35;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px;font-family:var(--f-body);font-weight:800;font-size:12px;font-variant-numeric:tabular-nums}
 /* 요약 둘째 줄: 홈 · 캐릭터 꾸미기를 같은 폭으로 나란히 */
 #side .sd-acts{flex:1 0 100%;display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-2)}
 #goHome{font-size:13px;padding:6px 10px;display:flex;align-items:center;justify-content:center;gap:4px;min-width:0;min-height:44px;box-sizing:border-box;white-space:nowrap}
 #side .sd-planets{flex:0 1 auto;min-height:0;display:flex;flex-direction:column;gap:var(--gap-2);padding:12px 16px 0;border-top:var(--line) solid var(--ink)}
-#side .label{flex:none;font-family:var(--f-display);font-size:12px;color:var(--violet);letter-spacing:.06em}
+#side .label{flex:none;font-family:var(--f-body);font-weight:800;font-size:12px;color:var(--violet);letter-spacing:.06em}
 /* "+ 새 행성": 아래 목록 항목과 같은 폭 · 높이. 점선 테두리 · --panel-2 바탕, 색 원 자리에 plus 아이콘.
    목록에 스크롤 막대가 생기면 항목이 그만큼 좁아진다: hud.js가 --dock-sbw로 알려 준다 */
 #wNewPlanet{flex:none;display:flex;align-items:center;gap:10px;width:calc(100% - var(--dock-sbw,0px));min-width:0;min-height:44px;box-sizing:border-box;font:600 14px var(--f-body);color:var(--ink);background:color-mix(in srgb,var(--panel-2) 60%,var(--white));border:var(--line-thin) dashed var(--ink);border-radius:14px;padding:7px 12px 7px 8px;cursor:pointer;text-align:left;white-space:nowrap}
@@ -290,7 +290,7 @@ body{word-break:keep-all}
 #help{flex:none;margin-top:8px;padding:4px 8px 8px;border-top:2.5px dashed #b7b0e0;font-size:12.5px}
 #helpToggle{width:100%;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:var(--gap-2);border:0;border-radius:10px;background:transparent;color:var(--ink);padding:0 8px;cursor:pointer;text-align:left}
 @media (hover:hover){#helpToggle:hover{background:var(--panel-2)}}
-#helpToggle .ht{font-family:var(--f-display);font-weight:400;font-size:14px}
+#helpToggle .ht{font-family:var(--f-body);font-weight:800;font-size:14px}
 #helpToggle .i{transition:transform .2s}
 #help.big #helpToggle .i{transform:rotate(180deg)}
 #help .keys{display:none;grid-template-columns:repeat(2,auto);justify-content:start;gap:7px 16px;padding:4px 8px 6px}
@@ -311,7 +311,7 @@ body{word-break:keep-all}
 /* 빈 우주 말풍선: 기록하기(#wLog) 바로 위, 꼬리가 아래로 버튼 가운데를 가리킨다 */
 #wHint{position:fixed;right:calc(var(--edge) + env(safe-area-inset-right,0px));bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:2;width:min(296px,calc(100vw - 2 * var(--edge)));box-sizing:border-box;padding:12px 50px 13px 15px}
 #wHint p{margin:0;display:flex;flex-direction:column;gap:4px}
-#wHint b{font-family:var(--f-display);font-weight:400;font-size:16px;line-height:1.2}
+#wHint b{font-family:var(--f-body);font-weight:800;font-size:16px;line-height:1.2}
 #wHint p span{font-size:13.5px;line-height:1.5;color:var(--mute);text-wrap:pretty}
 #wHint .btn.x{position:absolute;top:8px;right:8px;width:30px;height:30px}
 #wHint::before,#wHint::after{content:"";position:absolute;width:0;height:0;border-style:solid;border-color:transparent;pointer-events:none}
