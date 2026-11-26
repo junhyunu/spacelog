@@ -42,7 +42,7 @@ body:not(.signed-out) .auth-out{display:none!important}
 .me-menu hr{margin:6px 4px;border:0;border-top:1.5px solid #d6d1f2}
 .me-menu button{display:flex;align-items:center;gap:10px;font:600 14px var(--f-body);text-align:left;min-height:44px;padding:0 10px;border:0;border-radius:10px;background:transparent;color:var(--ink);cursor:pointer}
 .me-menu button .i{flex:none;color:var(--mute)}
-@media (hover:hover){.me-menu button:hover{background:var(--panel-2)}}
+@media (hover:hover){.me-menu button:hover{background:var(--hover)}}
 .me-menu button:focus-visible{outline:var(--ring) solid var(--sky);outline-offset:-3px}
 @media (prefers-reduced-motion:reduce){.me-menu{animation:none}}
 

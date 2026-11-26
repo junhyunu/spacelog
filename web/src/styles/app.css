@@ -18,11 +18,17 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 .btn:is(.ghost,.x){border-width:var(--line);box-shadow:none}
 @media (hover:hover){.btn:is(.ghost,.x):hover:not(:disabled){transform:none;background-color:color-mix(in srgb,var(--ink) 7%,var(--panel-2))}}
 .btn:is(.ghost,.x):active:not(:disabled){transform:translateY(1px);box-shadow:inset 0 0 0 100vmax rgba(20,12,50,.10)}
+/* 창 아래 결정 버튼 짝(취소 | 확정): 취소도 확정과 같은 무게(2.5px 잉크 테두리 · 0 3px 그림자 · 누르면 꺼짐). 바탕은 고스트(--panel-2) 그대로.
+   쓰는 곳: 기록하기 · 행성 꾸미기 · 캐릭터 꾸미기 · 행성 지우기 · 확인 · 로그인 · 계정 창, 챗봇 켜기 확인. 아래 줄(.row) 바로 안의 고스트만 맞춘다(DESIGN.md 5-2) */
+:is(#save,#planetForm,#charForm,#planetDel,#confirm,.authdlg,.cp-consent) .row > .btn.ghost{border-width:var(--line-btn)}
+:is(#save,#planetForm,#charForm,#planetDel,#confirm,.authdlg,.cp-consent) .row > .btn.ghost:not(:disabled){box-shadow:var(--drop-btn)}
+:is(#save,#planetForm,#charForm,#planetDel,#confirm,.authdlg,.cp-consent) .row > .btn.ghost:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 var(--ink)}
 
 /* W-01 왼쪽 패널(스펙 6-8): 로고 · 요약 · 바로 날아가기 목록 · 조작 안내를 한 카드로. 아래 "W-01 왼쪽 패널"에 이어진다 */
 #help kbd{font-family:var(--f-mono);font-size:11px;background:var(--ink);color:var(--panel);border-radius:5px;padding:1px 6px;margin-right:3px}
 .dock button{display:flex;align-items:center;gap:10px;font:600 14px var(--f-body);color:var(--ink);background:var(--panel);border:var(--line-row) solid var(--row-line);border-radius:14px;padding:7px 12px 7px 8px;box-shadow:none;cursor:pointer;text-align:left;white-space:nowrap}
-@media (hover:hover){.dock button:not(.here):not([aria-pressed="true"]):hover{background:var(--panel-2)}}
+/* 올림: 줄 위 어디든(⋯ 위 포함) 줄 바탕이 연보라. ⋯는 rowmenu.css가 따로(--hover-2) */
+@media (hover:hover){:is(.dock button:hover,.drow:hover > button):not(.more):not(.here):not([aria-pressed="true"]){background:var(--hover)}}
 .dock button .dot{width:22px;height:22px;border-radius:50%;border:3px solid var(--ink);flex:none}
 .dock button .n{margin-left:auto;font-family:var(--f-body);font-weight:800;font-size:13px;background:var(--ink);color:var(--yellow);border-radius:999px;padding:1px 8px;font-variant-numeric:tabular-nums}
 .dock button.here{background:var(--sel);border-color:var(--ink)}
@@ -138,7 +144,7 @@ body:has(#side:not([hidden])) #period{--left-w:280px}
 /* 기간 버튼: 모서리는 바깥 카드에 맞춘 8px(카드 16 - 테두리 3 - 바 안쪽 여백 5). 알약이면 둥근 사각형 카드 안에서 곡선이 어긋난다.
    높이는 글자대로(약 28px): 바(.pbar) 안쪽 여백이 위아래 · 좌우 5px로 고르고, 바 높이가 옆의 찾기 버튼과 맞는다 */
 .seg button{font:700 13px var(--f-body);border:0;border-radius:8px;padding:6px 12px;background:transparent;color:var(--ink);cursor:pointer}
-@media (hover:hover){.seg button:hover{background:var(--panel-2)}}
+@media (hover:hover){.seg button:hover{background:var(--hover)}}
 .seg button.on{background:var(--ink);color:var(--yellow)}
 .seg button:focus-visible{outline:3px solid var(--sky);outline-offset:1px}
 .range{display:flex;gap:4px;align-items:center;font-size:12px;padding-right:4px}
@@ -160,12 +166,13 @@ body:has(#side:not([hidden])) #period{--left-w:280px}
 #panel .x{margin-left:0;flex:none}
 #panel h2.h2s{font-size:19px;line-height:1.25;overflow-wrap:anywhere}
 .ic{border:0;background:transparent;font-size:15px;cursor:pointer;color:var(--mute);padding:2px 5px;border-radius:6px;vertical-align:3px}
-@media (hover:hover){.ic:hover{background:var(--panel-2);color:var(--ink)}}
+@media (hover:hover){.ic:hover{background:var(--hover);color:var(--ink)}}
 .ic:focus-visible{outline:3px solid var(--sky)}
 .menu{display:flex;flex-direction:column;border-bottom:var(--line) solid var(--ink);background:var(--panel-2)}
 .menu button{font:600 14px var(--f-body);text-align:left;padding:10px 16px;border:0;border-top:1.5px dashed #b7b0e0;background:transparent;color:var(--ink);cursor:pointer}
 .menu button:first-child{border-top:0}
-@media (hover:hover){.menu button:hover:not(:disabled){background:var(--yellow)}}
+/* 메뉴 바탕이 --panel-2라 올림은 한 단계 진한 --hover-2 */
+@media (hover:hover){.menu button:hover:not(:disabled){background:var(--hover-2)}}
 .menu button:disabled{color:#9a94bd;cursor:not-allowed}
 .lbl{font-family:var(--f-body);font-weight:800;font-size:12px;color:var(--violet-text);letter-spacing:.06em}
 .lockline{font-size:13px;line-height:1.5;color:var(--mute);margin:0 0 10px}
@@ -177,13 +184,14 @@ body:has(#side:not([hidden])) #period{--left-w:280px}
 [aria-checked="mixed"] > .cb{background:var(--yellow);display:grid;place-items:center;font:800 16px/1 var(--f-body);color:var(--ink)}
 /* 체크칸 버튼(홈 목록의 행 · 두 화면의 머리 전체 선택): 누르는 영역 36px */
 .pickcb{flex:none;width:36px;height:36px;padding:0;border:0;border-radius:10px;background:transparent;display:grid;place-items:center;cursor:pointer}
-@media (hover:hover){.pickcb:hover{background:var(--panel-2)}}
+@media (hover:hover){.pickcb:hover{background:var(--hover-2)}}
 .pickcb:focus-visible{outline:var(--ring) solid var(--sky);outline-offset:1px}
 /* 아래 바: 잉크 바탕 · 노랑 굵은 개수 · 오른쪽에 [행성 옮기기](노랑) [지우기](흰 바탕 · 분홍 글자) */
 .pickbar{display:flex;align-items:center;justify-content:space-between;gap:var(--gap-3);background:var(--ink);color:var(--panel);font:600 14px var(--f-body);padding:10px 12px 10px 16px}
 .pickbar b{color:var(--yellow);font-weight:800;font-variant-numeric:tabular-nums;margin-right:1px}
 .pickbar .pk-acts{display:flex;gap:var(--gap-2);flex:none}
-.pickbar .btn{flex:none;box-shadow:none}
+/* 두 버튼 모두 기본 버튼의 무게(2.5px 테두리 · 0 3px 그림자 · 누르면 꺼짐): 결정 버튼 짝(DESIGN.md 5-2) */
+.pickbar .btn{flex:none}
 .pickbar .pkdel{background:var(--white);color:var(--danger-text)}
 .pickbar .btn:disabled{background:#3a3260;color:#9a94bd}
 .pickbar .btn:focus-visible{outline-offset:2px}
@@ -198,7 +206,7 @@ body:has(#side:not([hidden])) #period{--left-w:280px}
 .lblrow{display:flex;align-items:center;justify-content:space-between;gap:var(--gap-2);min-height:30px}
 .pickbtn{position:relative;flex:none;font:700 12.5px var(--f-body);color:var(--ink);background:var(--panel-2);border:2px solid var(--ink);border-radius:var(--r-pill);padding:4px 11px;cursor:pointer;white-space:nowrap}
 .pickbtn::after{content:"";position:absolute;left:0;right:0;top:50%;height:44px;transform:translateY(-50%)}
-@media (hover:hover){.pickbtn:hover{background:var(--yellow)}}
+@media (hover:hover){.pickbtn:hover{background:var(--hover-2)}}
 .pickbtn:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
 #panel .pickbar{flex:none;border-top:var(--line) solid var(--ink)}
 /* 고르는 중의 행: 행 전체가 체크칸. ⋯이 없으니 날짜는 늘 보이고 오른쪽 여백도 줄이지 않는다 */
@@ -281,10 +289,10 @@ body{word-break:keep-all}
 #side .label{flex:none;font-family:var(--f-body);font-weight:800;font-size:12px;color:var(--violet-text);letter-spacing:.06em}
 /* "+ 새 행성": 아래 목록 항목과 같은 폭 · 높이. 점선 테두리 · --panel-2 바탕, 색 원 자리에 plus 아이콘.
    목록에 스크롤 막대가 생기면 항목이 그만큼 좁아진다: hud.js가 --dock-sbw로 알려 준다 */
-#wNewPlanet{flex:none;display:flex;align-items:center;gap:10px;width:calc(100% - var(--dock-sbw,0px));min-width:0;min-height:44px;box-sizing:border-box;font:600 14px var(--f-body);color:var(--ink);background:color-mix(in srgb,var(--panel-2) 60%,var(--white));border:var(--line-thin) dashed var(--ink);border-radius:14px;padding:7px 12px 7px 8px;cursor:pointer;text-align:left;white-space:nowrap}
+#wNewPlanet{flex:none;display:flex;align-items:center;gap:10px;width:calc(100% - var(--dock-sbw,0px));min-width:0;min-height:44px;box-sizing:border-box;font:600 14px var(--f-body);color:var(--ink);background:color-mix(in srgb,var(--panel-2) 60%,var(--white));border:var(--line-thin) dashed var(--row-line);border-radius:14px;padding:7px 12px 7px 8px;cursor:pointer;text-align:left;white-space:nowrap}
 #wNewPlanet .dot{width:28px;height:28px;flex:none;display:grid;place-items:center}
 #wNewPlanet:focus-visible{background:var(--panel-2)}
-@media (hover:hover){#wNewPlanet:hover{background:var(--panel-2)}}
+@media (hover:hover){#wNewPlanet:hover{background:var(--hover)}}
 #wNewPlanet:active{transform:translateY(2px)}
 #wNewPlanet:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
 /* 행성 목록만 스크롤한다. 안쪽 여백은 그림자 · 포커스 링이 잘리지 않게 */
@@ -295,7 +303,7 @@ body{word-break:keep-all}
 /* 조작 안내: 접히는 줄. 처음엔 펼쳐져 있고 이동 키를 누르면 접힌다 */
 #help{flex:none;margin-top:8px;padding:4px 8px 8px;border-top:2.5px dashed #b7b0e0;font-size:12.5px}
 #helpToggle{width:100%;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:var(--gap-2);border:0;border-radius:10px;background:transparent;color:var(--ink);padding:0 8px;cursor:pointer;text-align:left}
-@media (hover:hover){#helpToggle:hover{background:var(--panel-2)}}
+@media (hover:hover){#helpToggle:hover{background:var(--hover)}}
 #helpToggle .ht{font-family:var(--f-body);font-weight:800;font-size:14px}
 #helpToggle .i{transition:transform .2s}
 #help.big #helpToggle .i{transform:rotate(180deg)}
@@ -310,7 +318,7 @@ body{word-break:keep-all}
 }
 #sideOpen{display:flex;align-items:center;gap:var(--gap-2);min-height:44px;padding:6px 10px 6px 14px;color:var(--ink);cursor:pointer;box-sizing:border-box}
 #sideOpen .logo{font-family:var(--f-display);font-size:20px;line-height:1}
-@media (hover:hover){#sideOpen:hover{background:var(--panel-2)}}
+@media (hover:hover){#sideOpen:hover{background:var(--hover)}}
 :is(#sideOpen,#helpToggle):focus-visible{outline:3px solid var(--sky);outline-offset:2px}
 #sideScrim{position:fixed;inset:0;background:rgba(10,6,30,.55)}
 
@@ -401,7 +409,7 @@ body:has(#panel:not([hidden])) #wHint{visibility:hidden}
 #wQ::placeholder{color:var(--mute);font-weight:500}
 #wQ::-webkit-search-cancel-button{display:none}
 #wSearch .qx{flex:none;width:36px;height:36px;border:0;border-radius:50%;background:var(--panel-2);color:var(--ink);display:grid;place-items:center;cursor:pointer}
-@media (hover:hover){#wSearch .qx:hover{background:var(--hair,#d6d1f2)}}
+@media (hover:hover){#wSearch .qx:hover{background:var(--hover-2)}}
 #wQClose{display:none}
 /* 결과 목록(최근 별 포함)은 행성 패널(2 · 좁은 화면 4) · 챗봇 창(22) · 손잡이(23) · 내려온 막대(24)보다 위 */
 body:has(#wResults:not([hidden])) #period{z-index:25}
@@ -409,7 +417,7 @@ body:has(#wResults:not([hidden])) #period{z-index:25}
 #wResults ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 #wResults li + li{border-top:1.5px solid var(--hair,#d6d1f2)}
 .wsr{display:flex;align-items:flex-start;gap:10px;width:100%;min-height:44px;padding:9px 8px;border:0;border-radius:10px;background:transparent;color:var(--ink);text-align:left;cursor:pointer;font-family:var(--f-body)}
-@media (hover:hover){.wsr:hover{background:var(--panel-2)}}
+@media (hover:hover){.wsr:hover{background:var(--hover)}}
 .wsr:focus-visible{outline-offset:-3px}
 .wsr .pdot{width:12px;height:12px;border-width:2px;margin-top:4px}
 .wsr .tx{display:flex;flex-direction:column;gap:2px;min-width:0}
@@ -428,7 +436,7 @@ body:has(#wResults:not([hidden])) #period{z-index:25}
 #wSearchBtn{border-radius:50%;width:43px;height:43px}
 #wPeriodBtn{display:none}
 body.wsearch-open #wSearch{display:flex}
-@media (hover:hover){.tbtn:hover{background:var(--panel-2)}}
+@media (hover:hover){.tbtn:hover{background:var(--hover)}}
 .tbtn[aria-expanded="true"]{background:var(--yellow)}
 @media (max-width:760px){
   /* 로고 옆 한 줄에 아이콘 두 개만. #period 상자가 화면 폭을 다 써도 빈 곳은 누르기를 받지 않는다(로고 버튼을 가리지 않게) */
