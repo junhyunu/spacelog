@@ -153,8 +153,9 @@
 </div>
 
 <!-- 위쪽 막대 손잡이: 행성 패널 · 챗봇 창이 열려 막대(#period)가 위로 숨은 동안만 보인다. 누르면 막대가 창 위로 내려오고(topbar.js · app.css)
-     손잡이는 숨는다(접기는 막대 줄 오른쪽 끝의 #topFold). 위 끝에 매달린 카드 탭: 🔍 · 🕐 · "검색 · 기간" · 아래 화살표 -->
-<button type="button" id="topHandle" class="card" aria-label="검색과 기간 펼치기" aria-expanded="false" aria-controls="period" hidden><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span class="tl" aria-hidden="true">검색 · 기간</span><svg class="i chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+     손잡이는 숨는다(접기는 막대 줄 오른쪽 끝의 #topFold). 보이는 것은 위 끝에 매달린 글자 없는 노랑 홈(::before, 64×17).
+     마우스를 올리거나 키보드로 오면 조금 길어지고 아래에 "검색 · 기간" 말풍선(꾸밈, 읽지 않음)이 뜬다. 누르는 자리는 96×28(창 위 끝에서 멈춘다) -->
+<button type="button" id="topHandle" aria-label="검색과 기간 펼치기" aria-expanded="false" aria-controls="period" hidden><span class="tip" aria-hidden="true">검색 · 기간</span></button>
 
 <button type="button" id="near" class="btn" hidden></button>
 
