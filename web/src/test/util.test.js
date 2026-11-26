@@ -2,12 +2,16 @@ import { describe, expect, test } from 'vitest';
 import {
   DECO_NAMES,
   PLANET_COLORS,
+  UNSORTED_ID,
+  planetDeep,
+  planetFace,
   daysAgo,
   esc,
   fileSize,
   firstLine,
   fullDate,
   ico,
+  isUnsorted,
   periodRange,
   shortDate,
 } from '../util.js';
@@ -176,5 +180,33 @@ describe('planet looks', () => {
     expect(Object.keys(DECO_NAMES)).toHaveLength(10);
     expect(Object.keys(DECO_NAMES)).toEqual(['town', 'crystal', 'forest', 'rock', 'ice', 'volcano', 'mushroom', 'cactus', 'flower', 'cloud']);
     expect(DECO_NAMES).toMatchObject({ town: '마을', cloud: '구름', cactus: '선인장' });
+  });
+});
+
+describe('UNSORTED_ID / isUnsorted', () => {
+  test('constant is "unsorted"', () => {
+    expect(UNSORTED_ID).toBe('unsorted');
+  });
+  test('accepts a planet object or an id', () => {
+    expect(isUnsorted({ id: 'unsorted' })).toBe(true);
+    expect(isUnsorted('unsorted')).toBe(true);
+    expect(isUnsorted({ id: 3 })).toBe(false);
+    expect(isUnsorted(3)).toBe(false);
+    expect(isUnsorted(null)).toBe(false);
+    expect(isUnsorted(undefined)).toBe(false);
+  });
+});
+
+describe('planetFace / planetDeep', () => {
+  test('미분류는 슬레이트색', () => {
+    expect(planetFace({ id: 'unsorted', color_index: 1 })).toBe('#4c5b6b');
+    expect(planetDeep({ id: 'unsorted' })).toBe('#26303c');
+  });
+  test('보통 행성은 팔레트, 없으면 fallback', () => {
+    expect(planetFace({ id: 'a', color_index: 1 })).toBe('#ff7a59');
+    expect(planetDeep({ id: 'a', color_index: 1 })).toBe('#b23a1c');
+    expect(planetFace(null)).toBe('#7a6cff');
+    expect(planetDeep(null)).toBe('');
+    expect(planetFace({ id: 'a', color_index: 99 }, '#000')).toBe('#000');
   });
 });

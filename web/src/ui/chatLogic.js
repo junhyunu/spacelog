@@ -1,5 +1,5 @@
 // 챗봇 화면의 순수 함수(테스트 대상). DOM을 건드리지 않는다.
-import { PLANET_COLORS, shortDate } from '../util.js';
+import { planetFace, shortDate } from '../util.js';
 
 export const QUESTION_MAX = 2000; // 서버(chat.js QUESTION_MAX)와 같다. 코드 포인트로 센다
 export const COUNTER_FROM = 1800; // 이만큼부터 글자 수를 보여 준다
@@ -61,7 +61,7 @@ export function sourceCardModel(source, planets = []) {
   const title = gone ? '지워진 별' : String(source.title ?? '').trim() || '제목 없음';
   return {
     title,
-    color: PLANET_COLORS[planet?.color_index]?.face ?? MUTE,
+    color: planetFace(planet, MUTE),
     date: gone || !has(source.created_at) ? '' : shortDate(source.created_at),
     file: has(source?.file_name) ? String(source.file_name) : '',
     gone,

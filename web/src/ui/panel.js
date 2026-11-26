@@ -5,7 +5,6 @@
 // store에서 듣는 것:
 //   'land'            planetId               그 행성의 목록을 연다
 //   'openStar'        { planetId, starId }   그 행성을 열고 그 별의 상세로
-//   'pickStar'        starId                 위와 같다(행성은 별에서 찾는다)
 //   'leftPanelPlanet'                        멀어졌다 → 닫는다(조망으로 돌아가지 않는다)
 //   'leavingWorld' · 'leaveWorld'            닫는다
 //   'planetDeleted'   planetId               그 행성 패널이면 닫고 조망으로
@@ -18,16 +17,16 @@ import { api } from '../api.js';
 import { store } from '../store.js';
 import { enterOverview } from '../three/controls.js';
 import { setSelectedStar } from '../three/planets.js';
-import { PLANET_COLORS, esc, ico, shortDate } from '../util.js';
+import { planetDeep, planetFace, esc, ico, shortDate } from '../util.js';
 import { ask } from './confirm.js';
 import { flushMemo, renderDetail } from './detail.js';
 import { registerEscape } from './escape.js';
 import { clearGuestStar } from './hud.js';
 import { confirmDeletePlanet } from './planetDelete.js';
 import { openPlanetForm } from './planetForm.js';
-import { detailKey, mergeDesc, mergeErrorText, mergeFailure, panelStars, thumbKind } from './planetLogic.js';
+import { detailKey, keepPicked, mergeDesc, mergeErrorText, mergeFailure, moveTargets, panelStars, pickAllHtml, pickAllState, pickBarHtml, pickButtonHtml, planetLocked, thumbKind, toggleAll, togglePickedId } from './planetLogic.js';
 import { openRowMenu } from './rowMenu.js';
-import { deleteStar, moveStar } from './starActions.js';
+import { deletePickedStars, deleteStar, movePickedStars, moveStar, setPickingUi } from './starActions.js';
 import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
@@ -42,6 +41,9 @@ let detailStar = null; // 상세에 그려진 별
 let shownKey = ''; // 상세를 마지막으로 그린 내용(detailKey). 같으면 renderDetail을 부르지 않는다
 let menuOpen = false;
 let openSeq = 0;
+// 여러 개 골라 옮기기: 고르는 중인지 · 고른 별 id. 행성을 바꾸거나 패널을 닫으면 둘 다 비운다
+let picking = false;
+let pickedIds = new Set();
 const flashing = new Map(); // 별 id → 강조가 끝나는 시각
 
 const panelEl = () => $('panel');
@@ -65,12 +67,25 @@ function clip(star) {
 }
 
 function listHtml(planet, stars) {
-  const face = PLANET_COLORS[planet.color_index]?.face ?? '#7a6cff';
+  const face = planetFace(planet);
   const only = store.state.planets.length < 2;
+  const locked = planetLocked(planet);
   const now = Date.now();
+  // 고르기 버튼: 별이 2개 이상이면(행성이 하나뿐이어도 지우기는 된다). 고르는 중에는 같은 자리가 "취소"
+  const pickBtn = pickButtonHtml({ picking, canPick: stars.length >= 2, focusAttr: 'data-focus' });
   const items = stars
     .map((s) => {
       const fresh = (flashing.get(String(s.id)) ?? 0) > now;
+      const title = s.title || '제목 없음';
+      if (picking) {
+        // 고르는 중: 행 전체가 체크칸 하나(누르면 고르기 · 풀기). ⋯ 메뉴는 없다
+        const on = pickedIds.has(String(s.id));
+        return (
+          '<div class="recw pick">' +
+          `<button type="button" class="rec${on ? ' on' : ''}" role="checkbox" aria-checked="${on}" data-pick="${esc(s.id)}" data-focus="pick:${esc(s.id)}">` +
+          `<span class="cb" aria-hidden="true"></span>${thumb(s)}<span class="t">${esc(title)}</span>${clip(s)}<span class="d">${esc(shortDate(s.created_at))}</span></button></div>`
+        );
+      }
       return (
         // 한 행 = 상세 열기 버튼 + ⋯ 버튼. ⋯은 마우스를 올리거나 키보드로 오면 날짜 자리에 나타난다(터치는 늘)
         '<div class="recw">' +
@@ -83,23 +98,29 @@ function listHtml(planet, stars) {
   return (
     `<header><div class="planet-ico" style="background:${face}" aria-hidden="true"></div>` +
     `<div class="hd"><h2><span class="pn">${esc(planet.name)}</span> ` +
-    `<button type="button" class="ic" data-act="edit" data-focus="edit" aria-label="행성 꾸미기" title="행성 꾸미기">${ico('pencil', 16)}</button></h2>` +
+    (locked ? '' : `<button type="button" class="ic" data-act="edit" data-focus="edit" aria-label="행성 꾸미기" title="행성 꾸미기">${ico('pencil', 16)}</button>`) +
+    '</h2>' +
     `<div class="sub">${store.state.period === 'all' ? `전체 별 ${num(planet.count_total)}개` : `이 기간 별 ${num(stars.length)}개 · 전체 ${num(planet.count_total)}개`}</div></div>` +
-    `<button type="button" class="btn x ghost" data-act="menu" data-focus="menu" aria-label="행성 메뉴" aria-expanded="${menuOpen}" aria-controls="pMenu">${ico('ellipsis')}</button>` +
+    (locked ? '' : `<button type="button" class="btn x ghost" data-act="menu" data-focus="menu" aria-label="행성 메뉴" aria-expanded="${menuOpen}" aria-controls="pMenu">${ico('ellipsis')}</button>`) +
     `<button type="button" class="btn x" data-act="close" data-focus="close" aria-label="닫기">${ico('x')}</button></header>` +
-    (menuOpen
+    (menuOpen && !locked
       ? '<div class="menu" id="pMenu">' +
         '<button type="button" data-m="edit" data-focus="m:edit">행성 꾸미기</button>' +
         `<button type="button" data-m="merge" data-focus="m:merge"${only ? ' disabled' : ''}>다른 행성과 합치기</button>` +
         '<button type="button" data-m="del" data-focus="m:del">행성 삭제</button></div>'
       : '') +
-    '<div class="body"><div class="lbl">이 행성을 도는 별들</div>' +
+    '<div class="body">' +
+    (locked ? '<div class="lockline">기본 행성이라 이름을 바꾸거나 지울 수 없어요</div>' : '') +
+    // 고르는 중: 라벨 왼쪽에 전체 선택 체크칸(보이는 별 = 이 목록), 오른쪽은 "취소"
+    `<div class="lblrow">${picking ? `<div class="lblpick">${pickAllHtml({ state: pickAllState(pickedIds, stars.map((s) => s.id)), focusAttr: 'data-focus' })}<div class="lbl">이 행성을 도는 별들</div></div>` : '<div class="lbl">이 행성을 도는 별들</div>'}${pickBtn}</div>` +
     (stars.length
       ? `<div class="recs">${items}</div>`
       : store.state.period === 'all'
         ? '<div class="empty">이 행성에는 아직 별이 없어요.</div>'
         : '<div class="empty">이 기간에는 이 행성에 별이 없어요.<br>위쪽에서 기간을 넓혀 보세요.</div>') +
-    '</div>'
+    '</div>' +
+    // "행성 옮기기"는 옮길 행성이 없으면(행성이 이것 하나뿐) 잠긴다. "지우기"는 고른 것이 있으면 늘 된다
+    (picking ? pickBarHtml({ count: pickedIds.size, canMove: moveTargets(stars.filter((s) => pickedIds.has(String(s.id))), store.state.planets).length > 0, focusAttr: 'data-focus' }) : '')
   );
 }
 
@@ -109,6 +130,7 @@ function renderList(planet) {
   const focusKey = el.contains(document.activeElement) ? document.activeElement.dataset?.focus : undefined;
   const scroll = el.querySelector('.body')?.scrollTop ?? 0;
   const stars = panelStars(store.state.stars, planet.id);
+  pickedIds = keepPicked(pickedIds, stars); // 목록에서 사라진 별(옮김 · 지움 · 기간)은 선택에서도 뺀다
   el.innerHTML = listHtml(planet, stars);
   const body = el.querySelector('.body');
   if (body) body.scrollTop = scroll;
@@ -129,6 +151,7 @@ function showDetail(planet) {
 }
 
 function setDetail(star) {
+  endPick();
   view = 'detail';
   detailStar = star;
   shownKey = '';
@@ -166,7 +189,7 @@ export function renderPanel() {
     closePanel({ overview: true }); // 다른 곳에서 지워진 행성
     return;
   }
-  panelEl().style.setProperty('--accent', PLANET_COLORS[planet.color_index]?.deep ?? '');
+  panelEl().style.setProperty('--accent', planetDeep(planet));
   if (view === 'detail' && detailStar) {
     // 다시 받은 목록에 그 별이 있으면 새 값으로 바꾼다. 없으면(기간 밖 손님 별 등) 가진 것을 그대로 쓴다
     const fresh = store.state.stars.find((s) => same(s.id, detailStar.id));
@@ -194,7 +217,10 @@ export function openPanel(id, starId) {
     leaveDetail();
     setSelectedStar(null);
   }
-  if (!same(planetId, planet.id)) menuOpen = false;
+  if (!same(planetId, planet.id)) {
+    menuOpen = false;
+    endPick();
+  }
   planetId = String(planet.id);
   store.state.panelPlanetId = planetId;
 
@@ -238,6 +264,7 @@ export function closePanel({ overview = false, keepPosition = false } = {}) {
   leaveDetail();
   planetId = null;
   menuOpen = false;
+  endPick();
   store.state.panelPlanetId = null;
   const el = panelEl();
   // 초점이 패널 안에 남아 있으면 뺀다(숨은 버튼에 남은 초점이 Space · Enter를 받지 않게)
@@ -346,6 +373,68 @@ function menuAct(act, planet) {
   }
 }
 
+/* ---------- 여러 개 골라 옮기기 ---------- */
+
+function endPick() {
+  if (picking) setPickingUi(false);
+  picking = false;
+  pickedIds = new Set();
+}
+
+// 고르기를 켜고 끈다. 끄면 고른 것도 비운다. 초점은 같은 자리의 버튼(여러 개 고르기 ↔ 취소)에 남는다
+function togglePick() {
+  if (picking) endPick();
+  else {
+    picking = true;
+    pickedIds = new Set();
+    menuOpen = false;
+    setPickingUi(true);
+  }
+  renderPanel();
+  panelEl().querySelector('[data-act="pick"]')?.focus({ preventScroll: true });
+}
+
+function togglePicked(id) {
+  pickedIds = togglePickedId(pickedIds, id);
+  renderPanel();
+}
+
+// 옮기기 · 지우기가 끝난 뒤. result = movePickedStars · deletePickedStars의 값, pid = 누를 때의 행성, act = 누른 바 버튼
+function afterPickAction(result, pid, act) {
+  if (result === null || result === undefined || !same(planetId, pid)) return;
+  if (result.partial) {
+    if (!picking) return;
+    // 앞 묶음만 처리됐다: 처리된 별은 선택에서 빼고 바로 다시 그린다. 고르기는 이어 간다(남은 것을 다시 누를 수 있게)
+    const done = new Set(result.doneIds);
+    pickedIds = new Set([...pickedIds].filter((id) => !done.has(id)));
+    renderPanel();
+    const el = panelEl();
+    (el.querySelector(`.pickbar [data-act="${act}"]:not(:disabled)`) ?? el.querySelector('.pickall, [data-act="pick"], [data-act="close"]'))?.focus({ preventScroll: true });
+    return;
+  }
+  endPick();
+  renderPanel();
+  panelEl().querySelector('[data-act="pick"], .rec, [data-act="close"]')?.focus({ preventScroll: true });
+}
+
+async function movePicked() {
+  const pid = planetId;
+  afterPickAction(await movePickedStars(pickedIds), pid, 'movePicked');
+}
+
+// 머리의 전체 선택: 이 목록(보이는 별)을 모두 고르거나 비운다. 초점은 체크칸에 남는다(renderList가 data-focus로 되찾는다)
+function togglePickAll() {
+  const planet = planetOf();
+  if (!planet) return;
+  pickedIds = toggleAll(pickedIds, panelStars(store.state.stars, planet.id).map((s) => s.id));
+  renderPanel();
+}
+
+async function deletePicked() {
+  const pid = planetId;
+  afterPickAction(await deletePickedStars(pickedIds), pid, 'pickdel');
+}
+
 /* ---------- 누르기 ---------- */
 
 function onClick(e) {
@@ -359,6 +448,27 @@ function onClick(e) {
   }
   const actEl = e.target.closest('[data-act]');
   const act = actEl?.dataset.act;
+  if (act === 'pick') {
+    togglePick();
+    return;
+  }
+  if (act === 'movePicked') {
+    if (!actEl.disabled) movePicked();
+    return;
+  }
+  if (act === 'pickdel') {
+    if (!actEl.disabled) deletePicked();
+    return;
+  }
+  if (act === 'pickall') {
+    if (picking) togglePickAll();
+    return;
+  }
+  const pickEl = e.target.closest('[data-pick]');
+  if (pickEl) {
+    if (picking) togglePicked(pickEl.dataset.pick);
+    return;
+  }
   if (act === 'close') closePanel({ overview: true, keepPosition: true });
   else if (act === 'edit') {
     actEl.focus({ preventScroll: true }); // 창이 닫히면 ✎로 돌아오게(누른 버튼에 초점이 가지 않는 브라우저도 있다)
@@ -407,25 +517,6 @@ function onImgError(e) {
   if (box) box.innerHTML = ico(img.dataset.fallback, 17);
 }
 
-// 별을 눌렀다. 목록에 없는 별은 서버에서 받는데, 그사이 패널을 닫았거나 다른 별 · 행성을 골랐으면
-// (openSeq가 바뀐다) 뒤늦게 온 답으로 패널을 열지 않는다
-async function onPickStar(starId) {
-  if (starId === null || starId === undefined || !store.state.inWorld) return;
-  const seq = ++openSeq;
-  let star = store.state.stars.find((s) => same(s.id, starId));
-  if (!star) {
-    try {
-      star = await api.star(starId);
-    } catch (err) {
-      // 연결이 끊긴 것은 연결 실패 카드가 알린다
-      if (seq === openSeq && store.state.inWorld && err?.code !== 'offline') toast('그 별을 찾지 못했어요');
-      return;
-    }
-  }
-  if (!star || seq !== openSeq || !store.state.inWorld) return;
-  openPanel(star.planet_id, star.id);
-}
-
 // 상세에 열린 별이 다시 받은 목록에 없다: 기간 밖 손님 별일 수도, 다른 곳에서 지워졌을 수도 있다.
 // 서버에 물어 지워졌으면(404) 목록으로 돌아간다
 function checkDetailStar() {
@@ -457,7 +548,6 @@ export function initPanel() {
 
   store.on('land', (id) => openPanel(id));
   store.on('openStar', (e) => e && openPanel(e.planetId, e.starId));
-  store.on('pickStar', onPickStar);
   store.on('leftPanelPlanet', () => closePanel());
   store.on('leavingWorld', () => closePanel());
   store.on('leaveWorld', () => closePanel());
@@ -473,7 +563,7 @@ export function initPanel() {
   });
   document.addEventListener('pointerdown', onPointerDownOutside, true);
 
-  // Esc: 상세에서 목록(30) → 패널 닫기(20, 메뉴가 열려 있으면 메뉴부터)
+  // Esc: 상세에서 목록(30) → 패널 닫기(20, 메뉴가 열려 있으면 메뉴부터, 고르는 중이면 고르기부터 끝낸다)
   registerEscape(30, () => {
     if (planetId === null || view !== 'detail') return false;
     backToList();
@@ -482,6 +572,7 @@ export function initPanel() {
   registerEscape(20, () => {
     if (planetId === null) return false;
     if (menuOpen) closeMenu({ focus: true });
+    else if (picking && view === 'list') togglePick();
     else closePanel({ overview: true, keepPosition: true });
     return true;
   });

@@ -407,22 +407,24 @@ describe('planet name', () => {
 });
 
 describe('defaultPlanetId', () => {
-  const planets = [{ id: 1 }, { id: 2 }, { id: 3 }];
-  test('defaultPlanetId: panel planet first, then last saved, then new', () => {
-    expect(defaultPlanetId({ panelPlanetId: 2, lastPlanetId: '3', planets })).toBe('2');
-    expect(defaultPlanetId({ panelPlanetId: null, lastPlanetId: '3', planets })).toBe('3');
-    expect(defaultPlanetId({ panelPlanetId: null, lastPlanetId: null, planets: [] })).toBe('new');
+  const ps = [{ id: 'unsorted' }, { id: 'a' }, { id: 'b' }];
+  test('defaultPlanetId: panel planet first, then unsorted', () => {
+    expect(defaultPlanetId({ panelPlanetId: 'b', planets: ps })).toBe('b');
+    expect(defaultPlanetId({ panelPlanetId: null, planets: ps })).toBe('unsorted');
+    expect(defaultPlanetId({ panelPlanetId: 'gone', planets: ps })).toBe('unsorted');
   });
-  test('defaultPlanetId: last saved planet that no longer exists → first planet', () => {
-    expect(defaultPlanetId({ panelPlanetId: null, lastPlanetId: '9', planets })).toBe('1');
-    expect(defaultPlanetId({ panelPlanetId: 9, lastPlanetId: null, planets })).toBe('1');
-    expect(defaultPlanetId({ panelPlanetId: 9, lastPlanetId: '2', planets })).toBe('2');
+  test('defaultPlanetId: lastPlanetId is not used', () => {
+    expect(defaultPlanetId({ panelPlanetId: null, lastPlanetId: 'b', planets: ps })).toBe('unsorted');
   });
-  test('defaultPlanetId: planets but nothing saved yet → first planet', () => {
-    expect(defaultPlanetId({ panelPlanetId: null, lastPlanetId: null, planets })).toBe('1');
+  test('defaultPlanetId: numeric panel id matches as a string', () => {
+    expect(defaultPlanetId({ panelPlanetId: 2, planets: [{ id: 'unsorted' }, { id: 2 }] })).toBe('2');
+  });
+  test('defaultPlanetId: old server without unsorted → first planet', () => {
+    expect(defaultPlanetId({ planets: [{ id: 'a' }] })).toBe('a');
   });
   test('defaultPlanetId: no planets → "new"', () => {
-    expect(defaultPlanetId({ panelPlanetId: 1, lastPlanetId: '1', planets: [] })).toBe('new');
+    expect(defaultPlanetId({ planets: [] })).toBe('new');
+    expect(defaultPlanetId({ panelPlanetId: 1, planets: [] })).toBe('new');
     expect(defaultPlanetId()).toBe('new');
   });
 });

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { fetchLinkTitle } from '../linkTitle.js';
 import { createPlanet } from '../planets.js';
 import { MEMO_MAX, buildSearchText, insertStar, toStarJson } from '../stars.js';
@@ -553,7 +553,7 @@ test('title with <script> is stored verbatim', async () => {
 test('summary counts', async () => {
   const empty = await call('GET', '/api/summary');
   expect(empty.statusCode).toBe(200);
-  expect(empty.json()).toEqual({ in_period: 0, total: 0, planets: 1 });
+  expect(empty.json()).toEqual({ in_period: 0, total: 0, planets: 2 });
 
   createPlanet(app.db, { name: '빈 행성' });
   seed('2026-11-10T00:00:00.000Z');
@@ -562,11 +562,11 @@ test('summary counts', async () => {
   seed('2026-10-01T00:00:00.000Z');
 
   const period = await call('GET', '/api/summary?from=2026-11-10T00:00:00.000Z&to=2026-11-11T00:00:00.000Z');
-  expect(period.json()).toEqual({ in_period: 2, total: 4, planets: 2 });
+  expect(period.json()).toEqual({ in_period: 2, total: 4, planets: 3 });
   const all = await call('GET', '/api/summary');
-  expect(all.json()).toEqual({ in_period: 4, total: 4, planets: 2 });
+  expect(all.json()).toEqual({ in_period: 4, total: 4, planets: 3 });
   const fromOnly = await call('GET', '/api/summary?from=2026-11-11T00:00:00.000Z');
-  expect(fromOnly.json()).toEqual({ in_period: 1, total: 4, planets: 2 });
+  expect(fromOnly.json()).toEqual({ in_period: 1, total: 4, planets: 3 });
 });
 
 test('"/api/stars/<word>" is a star id lookup: unknown words are 404 and /api/summary is unaffected', async () => {
@@ -574,7 +574,7 @@ test('"/api/stars/<word>" is a star id lookup: unknown words are 404 and /api/su
   expect(res.statusCode).toBe(404);
   expect(res.json()).toEqual({ error: 'not_found' });
   expect((await call('GET', '/api/stars/summary')).statusCode).toBe(404);
-  expect((await call('GET', '/api/summary')).json()).toEqual({ in_period: 0, total: 0, planets: 1 });
+  expect((await call('GET', '/api/summary')).json()).toEqual({ in_period: 0, total: 0, planets: 2 });
 });
 
 // --- 검토에서 나온 경우들 ---
@@ -597,4 +597,90 @@ test('oversized, malformed and repeated inputs get { error: code }', async () =>
   const arr = await app.inject({ url: '/api/stars?planet_id=a&planet_id=b', headers: { host: '127.0.0.1:4747' } });
   expect(arr.statusCode).toBe(400);
   expect(arr.json()).toEqual({ error: 'invalid_query' });
+});
+
+// ---- POST /api/stars/move ----
+const mk = (planetId, title = 't') => insertStar(app.db, { title, planet_id: planetId }).id;
+
+test('move many stars in one call', async () => {
+  const ids = [mk('unsorted'), mk('unsorted'), mk('unsorted')];
+  const res = await call('POST', '/api/stars/move', { ids, planet_id: planet.id });
+  expect(res.statusCode, res.body).toBe(200);
+  expect(res.json()).toEqual({ moved: 3 });
+  for (const id of ids) expect(dbRow(id).planet_id).toBe(planet.id);
+});
+
+test('missing, duplicate and already-there ids are skipped', async () => {
+  const a = mk('unsorted');
+  const b = mk(planet.id);
+  const marked = [];
+  app.ragSync = { markStars: (ids, reason) => marked.push([ids, reason]) };
+  const res = await call('POST', '/api/stars/move', { ids: [a, a, 'nope', b], planet_id: planet.id });
+  expect(res.json()).toEqual({ moved: 1 });
+  expect(dbRow(a).planet_id).toBe(planet.id);
+  expect(marked).toEqual([[[a], 'patch']]);
+});
+
+test('bad bodies are 400', async () => {
+  const a = mk('unsorted');
+  const bad = async (body) => {
+    const res = await call('POST', '/api/stars/move', body);
+    expect(res.statusCode).toBe(400);
+    return res.json();
+  };
+  expect(await bad({ ids: [], planet_id: planet.id })).toEqual({ error: 'invalid_ids' });
+  expect(await bad({ ids: 'a', planet_id: planet.id })).toEqual({ error: 'invalid_ids' });
+  expect(await bad({ ids: [1], planet_id: planet.id })).toEqual({ error: 'invalid_ids' });
+  expect(await bad({ ids: Array.from({ length: 501 }, (_, i) => `s${i}`), planet_id: planet.id })).toEqual({ error: 'invalid_ids' });
+  expect(await bad({ ids: [a] })).toEqual({ error: 'unknown_planet' });
+  expect(await bad({ ids: [a], planet_id: 'nope' })).toEqual({ error: 'unknown_planet' });
+  expect(dbRow(a).planet_id).toBe('unsorted');
+});
+
+// ---- POST /api/stars/delete ----
+test('delete many stars in one call', async () => {
+  const ids = [mk('unsorted'), mk(planet.id), mk('unsorted')];
+  const marked = [];
+  const files = [];
+  app.ragSync = { markStars: (i, reason) => marked.push([i, reason]) };
+  app.removeStarFiles = (s) => { files.push(s.id); };
+  const res = await call('POST', '/api/stars/delete', { ids });
+  expect(res.statusCode, res.body).toBe(200);
+  expect(res.json()).toEqual({ deleted: 3 });
+  for (const id of ids) expect(dbRow(id)).toBeUndefined();
+  expect(marked).toEqual([[ids, 'delete']]);
+  expect(files.sort()).toEqual([...ids].sort());
+});
+
+test('delete skips missing and duplicate ids and counts only real deletions', async () => {
+  const a = mk('unsorted');
+  const b = mk('unsorted');
+  const marked = [];
+  const files = [];
+  app.ragSync = { markStars: (i, reason) => marked.push([i, reason]) };
+  app.removeStarFiles = (s) => { files.push(s.id); };
+  const res = await call('POST', '/api/stars/delete', { ids: [a, a, 'nope', b] });
+  expect(res.json()).toEqual({ deleted: 2 });
+  expect(marked).toEqual([[[a, b], 'delete']]);
+  expect(files).toEqual([a, b]);
+});
+
+test('delete: removeStarFiles failure does not fail the request', async () => {
+  const a = mk('unsorted');
+  app.removeStarFiles = async () => { throw new Error('disk says no'); };
+  const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const res = await call('POST', '/api/stars/delete', { ids: [a] });
+  err.mockRestore();
+  expect(res.json()).toEqual({ deleted: 1 });
+  expect(dbRow(a)).toBeUndefined();
+});
+
+test('delete: bad bodies are 400 invalid_ids and nothing is deleted', async () => {
+  const a = mk('unsorted');
+  for (const body of [{ ids: [] }, { ids: 'a' }, { ids: [1] }, { ids: Array.from({ length: 501 }, (_, i) => `s${i}`) }, {}]) {
+    const res = await call('POST', '/api/stars/delete', body);
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: 'invalid_ids' });
+  }
+  expect(dbRow(a)).toBeDefined();
 });

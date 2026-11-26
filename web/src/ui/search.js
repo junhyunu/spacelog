@@ -7,7 +7,7 @@
 // Esc(37): 전체 화면 검색 → 결과 목록 → 검색 줄 순으로 닫는다. 화면을 덮는 맨 위 층이라 서랍(35)보다 먼저.
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { PLANET_COLORS, esc, shortDate } from '../util.js';
+import { planetFace, esc, shortDate } from '../util.js';
 import { registerEscape } from './escape.js';
 import { isOutsidePeriod } from './hudLogic.js';
 import { flyToStar, setPeriodOpen } from './hud.js';
@@ -17,7 +17,7 @@ const narrowMq = typeof matchMedia === 'function' ? matchMedia('(max-width: 760p
 const MAX = 30; // 결과는 최신순 30개까지
 const faceOf = (planetId) => {
   const p = store.state.planets.find((x) => String(x.id) === String(planetId));
-  return { name: p?.name ?? '', face: PLANET_COLORS[p?.color_index]?.face ?? '#7a6cff' };
+  return { name: p?.name ?? '', face: planetFace(p) };
 };
 
 let all = null; // 받아 둔 모든 별(최신순). null이면 다음 검색 때 다시 받는다

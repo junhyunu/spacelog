@@ -16,7 +16,7 @@
 //   'reachable'(다시 연결되면 읽지 않음 확인). 알리는 것: 'openSave' { text }(chatThread.js), 'openStar'(hud.js의 flyToStar)
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { esc, ico, PLANET_COLORS } from '../util.js';
+import { esc, ico, planetFace } from '../util.js';
 import { initChatButton } from './chatButton.js';
 import {
   contextFor,
@@ -44,7 +44,7 @@ const sideBySideMq = typeof matchMedia === 'function' ? matchMedia('(min-width: 
 const POLL_MS = 30_000;
 const INDEX_POLL_MS = 2_000;
 const num = (v) => (Number(v) || 0).toLocaleString('ko-KR');
-const faceOf = (p) => PLANET_COLORS[p?.color_index]?.face ?? '#7a6cff';
+const faceOf = (p) => planetFace(p);
 
 const NOTICE = '챗봇을 켜면 질문에 필요한 기록 내용이 OpenAI로 보내져요.';
 const PRIVACY =
@@ -234,8 +234,21 @@ export function closeChat({ focus = true } = {}) {
   const had = el.contains(document.activeElement);
   el.hidden = true;
   btn.setOpen(false);
-  if (had && focus) btn.el.focus({ preventScroll: true });
+  const target = had && focus ? closeFocusTarget() : null;
+  if (target) target.focus({ preventScroll: true });
   else if (had) document.activeElement.blur();
+}
+
+// 창을 닫은 뒤 초점을 둘 곳: 보통은 물어보기 버튼. 여러 개 고르는 중(body.picking)에는 버튼이 숨어 있으니
+// 보이는 아래 바의 첫 버튼(잠기지 않은 것) → 머리의 전체 선택 체크칸 순으로 고른다. 없으면 null(초점을 뺀다)
+function closeFocusTarget() {
+  if (!document.body.classList.contains('picking')) return btn.el;
+  const usable = (el) => el instanceof HTMLElement && !el.disabled && el.getClientRects().length > 0;
+  return (
+    [...document.querySelectorAll('.pickbar button')].find(usable) ??
+    [...document.querySelectorAll('.pickall')].find(usable) ??
+    (usable(btn.el) ? btn.el : null)
+  );
 }
 
 function toggle() {

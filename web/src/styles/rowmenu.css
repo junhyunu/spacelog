@@ -16,14 +16,14 @@
 /* 보이기: 마우스를 올렸을 때 · 키보드로 그 행에 왔을 때 · 메뉴가 열려 있을 때. 그동안 개수 · 날짜는 숨는다 */
 :is(.drow,.recw):is(:hover,:focus-within) .more,
 .more[aria-expanded="true"]{opacity:1;pointer-events:auto}
-.drow:is(:hover,:focus-within) .n,.drow:has(.more[aria-expanded="true"]) .n,
+.drow:has(.more):is(:hover,:focus-within) .n,.drow:has(.more[aria-expanded="true"]) .n,
 .recw:is(:hover,:focus-within) .d,.recw:has(.more[aria-expanded="true"]) .d{visibility:hidden}
 
 /* 터치 화면: 늘 보이고, 행 오른쪽을 비워 개수 · 날짜는 그 왼쪽에 그대로 둔다 */
 @media (hover:none){
   .drow .more,.recw .more{opacity:1;pointer-events:auto}
-  .drow > button[data-planet],.recw > .rec{padding-right:48px}
-  .drow:is(:hover,:focus-within) .n,.recw:is(:hover,:focus-within) .d{visibility:visible}
+  .drow:has(.more) > button[data-planet],.recw > .rec{padding-right:48px}
+  .drow:has(.more):is(:hover,:focus-within) .n,.recw:is(:hover,:focus-within) .d{visibility:visible}
 }
 @media (prefers-reduced-motion:reduce){.drow .more,.recw .more{transition:none}}
 

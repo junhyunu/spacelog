@@ -8,6 +8,14 @@ export function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ESC_MAP[c]);
 }
 
+/** 기본 행성 '미분류'의 id. 서버의 UNSORTED_ID와 같다. */
+export const UNSORTED_ID = 'unsorted';
+
+/** 행성 객체 또는 id가 미분류인가. */
+export function isUnsorted(planetOrId) {
+  return String(planetOrId?.id ?? planetOrId) === UNSORTED_ID;
+}
+
 /* ---------- 아이콘 (Lucide, 인라인 SVG) ---------- */
 const IC = {
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
@@ -135,6 +143,22 @@ export const PLANET_COLORS = Object.freeze({
   15: { name: '은회색', face: '#b9c6e0', deep: '#48587a' },
   16: { name: '코코아', face: '#c98a5a', deep: '#7a4520' },
 });
+
+/** 기본 행성 '미분류'의 색. 어떤 팔레트 색과도 겹치지 않는 슬레이트라서 "고르지 않은 곳"으로 읽힌다. */
+export const UNSORTED_FACE = '#4c5b6b';
+export const UNSORTED_DEEP = '#26303c';
+
+/** 행성의 면 색(3D · 점 · 칩). 미분류는 슬레이트, 모르는 행성은 fallback. */
+export function planetFace(planet, fallback = '#7a6cff') {
+  if (isUnsorted(planet) && planet) return UNSORTED_FACE;
+  return PLANET_COLORS[planet?.color_index]?.face ?? fallback;
+}
+
+/** 행성의 진한 색(밝은 패널 위 글자 · 선). */
+export function planetDeep(planet, fallback = '') {
+  if (isUnsorted(planet) && planet) return UNSORTED_DEEP;
+  return PLANET_COLORS[planet?.color_index]?.deep ?? fallback;
+}
 
 export const DECO_NAMES = Object.freeze({
   town: '마을',

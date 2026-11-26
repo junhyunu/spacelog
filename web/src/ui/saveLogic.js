@@ -2,6 +2,7 @@
 // 글 + 첨부 파일 + 링크를 저장하면 별 하나가 된다. 한도는 서버와 같다:
 // 첨부(파일 + 링크) 50개, 파일 하나 500MB, 제목 200자, 행성 이름 20자, 메모(본문) 2만 자.
 import { MEMO_MAX } from './detailLogic.js';
+import { UNSORTED_ID } from '../util.js';
 
 export const FILE_MAX = 500 * 1024 * 1024;
 export const ATTACH_MAX = 50;
@@ -151,16 +152,17 @@ export function canSubmit({ text, count = 0, planetId, newPlanetName } = {}) {
 }
 
 /**
- * 행성 칸의 기본값: 열려 있는 패널의 행성 → 마지막으로 저장한 행성 → 첫 행성. 행성이 하나도 없으면 'new'.
+ * 행성 칸의 기본값: 열려 있는 패널의 행성 → 미분류(UNSORTED_ID). 미분류가 아직 없는 옛 서버면 첫 행성,
+ * 행성이 하나도 없으면 'new'. 마지막으로 저장한 행성은 쓰지 않는다.
  * 돌려주는 id는 문자열이다(select의 value와 맞춘다).
  */
-export function defaultPlanetId({ panelPlanetId, lastPlanetId, planets } = {}) {
+export function defaultPlanetId({ panelPlanetId, planets } = {}) {
   const ids = Array.from(planets ?? [], (p) => String(p.id));
   if (!ids.length) return 'new';
-  for (const want of [panelPlanetId, lastPlanetId]) {
-    if (want !== null && want !== undefined && ids.includes(String(want))) return String(want);
+  if (panelPlanetId !== null && panelPlanetId !== undefined && ids.includes(String(panelPlanetId))) {
+    return String(panelPlanetId);
   }
-  return ids[0];
+  return ids.includes(UNSORTED_ID) ? UNSORTED_ID : ids[0];
 }
 
 /** 파일 이름에서 확장자를 뺀 것. 200자까지. */

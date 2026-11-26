@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { store } from '../store.js';
 import { ask } from './confirm.js';
 import { deleteCopy } from './detailLogic.js';
+import { deleteManyCopy, deleteManyToast, moveManyCopy, moveManyToast, moveTargets, partialFailToast, runBatches, vaultCopies } from './planetLogic.js';
 import { toast } from './toast.js';
 
 const same = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined && String(a) === String(b);
@@ -38,6 +39,90 @@ export async function moveStar(star, others) {
   toast(`'${name}'(으)로 옮겼어요`);
   store.reload().catch(() => {});
   return String(target);
+}
+
+/**
+ * 고른 별 여러 개를 한 행성으로 옮긴다(우주 행성 패널 · 홈 목록의 "여러 개 고르기"). others = moveTargets()의 값(하나 이상).
+ * 이미 그 행성에 있거나 그사이 지워진 별은 서버가 건너뛴다. 토스트는 서버가 실제로 옮긴 수(moved)로 말한다(0이면 "이미 그 행성에 있어요").
+ * @returns {Promise<string|{ partial: true, doneIds: string[] }|null>} 옮긴 행성 id(옮긴 것이 0개여도 돌려준다: 부르는 쪽은 고르기를 끝낸다).
+ *   앞 묶음만 옮기고 실패했으면 { partial: true, doneIds }(부르는 쪽은 doneIds를 선택에서 빼고 바로 다시 그리며 고르기는 이어 간다). 취소했거나 아무것도 못 했으면 null
+ */
+export async function moveStars(ids, others) {
+  const list = [...new Set((ids ?? []).map(String))];
+  if (!list.length || !others?.length) return null;
+  const target = await ask(moveManyCopy(list.length, others));
+  if (!target) return null;
+  const name = others.find((p) => same(p.id, target))?.name ?? '';
+  // 서버는 한 번에 id 500개까지 받는다: 500개씩 차례로 보낸다(runBatches). 중간에 실패하면 앞 묶음만 처리된 채로 멈춘다
+  const { count: moved, doneIds, error: err } = await runBatches(list, async (batch) => (await api.moveStars(batch, target))?.moved);
+  if (err) {
+    // 앞 묶음은 옮겨졌을 수 있다: 그만큼 목록을 고치고 다시 받는다
+    if (doneIds.length) {
+      const done = new Set(doneIds);
+      for (const s of store.state.stars) if (done.has(String(s.id))) s.planet_id = target;
+      store.reload().catch(() => {});
+    }
+    if (err?.code !== 'offline') toast(moved > 0 ? partialFailToast('move', moved) : '옮기지 못했어요');
+    return doneIds.length ? { partial: true, doneIds } : null;
+  }
+  const alive = new Set(store.state.stars.map((s) => String(s.id)));
+  toast(moveManyToast(moved, name, { gone: !list.some((id) => alive.has(id)) }));
+  if (moved > 0) {
+    const picked = new Set(list);
+    for (const s of store.state.stars) if (picked.has(String(s.id))) s.planet_id = target; // 다시 받기 전에도 목록이 맞게
+    store.reload().catch(() => {});
+  }
+  return String(target);
+}
+
+/**
+ * "여러 개 고르기"의 "행성 옮기기": 고른 별 id들로 옮길 행성 목록(moveTargets)을 정하고 moveStars를 부른다.
+ * 우주 행성 패널과 홈 목록이 같이 쓴다. 고른 별이 모두 한 행성이면 그 행성을 빼고, 섞였으면 전체(이미 그 행성에 있는 별은 서버가 건너뛴다).
+ * @returns {Promise<string|null>} moveStars와 같다(옮길 것 · 행성이 없으면 null)
+ */
+export function movePickedStars(pickedIds) {
+  const ids = [...(pickedIds ?? [])].map(String);
+  const set = new Set(ids);
+  const stars = (store.state.stars ?? []).filter((s) => set.has(String(s.id)));
+  const others = moveTargets(stars, store.state.planets ?? []);
+  if (!ids.length || !others.length) return Promise.resolve(null);
+  return moveStars(ids, others);
+}
+
+/**
+ * "여러 개 고르기"의 "지우기": "N개를 지울까요?"를 묻고 한 번에 지운다(우주 행성 패널 · 홈 목록이 같이 쓴다).
+ * 보관함 복사본 수는 목록의 별(store.state.stars)에 이미 있는 attachments로 센다(목록 응답에도 첨부 목록이 있다).
+ * 셀 수 없는 별이 섞이면 수를 말하지 않는 문구를 쓴다(별마다 api.star로 받지 않는다).
+ * @returns {Promise<number|{ partial: true, doneIds: string[] }|null>} 서버가 지운 수(0이어도 돌려준다: 부르는 쪽은 고르기를 끝낸다).
+ *   앞 묶음만 지우고 실패했으면 { partial: true, doneIds }(moveStars와 같다). 취소했거나 아무것도 못 했으면 null
+ */
+export async function deletePickedStars(pickedIds) {
+  const ids = [...new Set([...(pickedIds ?? [])].map(String))];
+  if (!ids.length) return null;
+  const set = new Set(ids);
+  const stars = (store.state.stars ?? []).filter((s) => set.has(String(s.id)));
+  const ok = await ask(deleteManyCopy(ids.length, vaultCopies(stars, ids.length)));
+  if (!ok) return null;
+  const { count: deleted, doneIds, error: err } = await runBatches(ids, async (batch) => (await api.deleteStars(batch))?.deleted);
+  if (err) {
+    // 앞 묶음은 지워졌을 수 있다: 그만큼 목록에서 빼고 다시 받는다
+    if (doneIds.length) {
+      const done = new Set(doneIds);
+      store.state.stars = store.state.stars.filter((s) => !done.has(String(s.id)));
+      store.reload().catch(() => {});
+    }
+    if (err?.code !== 'offline') toast(deleted > 0 ? partialFailToast('delete', deleted) : '지우지 못했어요. 다시 눌러 주세요');
+    return doneIds.length ? { partial: true, doneIds } : null;
+  }
+  store.state.stars = store.state.stars.filter((s) => !set.has(String(s.id))); // 다시 받기 전에도 목록에서 빠지게
+  toast(deleteManyToast(deleted));
+  store.reload().catch(() => {});
+  return deleted;
+}
+
+/** 고르는 중에는 오른쪽 아래 물어보기 버튼(#chatBtn)을 숨긴다(body.picking, chat.css). 두 화면이 고르기를 켜고 끌 때 부른다. */
+export function setPickingUi(on) {
+  document.body.classList.toggle('picking', Boolean(on));
 }
 
 /**

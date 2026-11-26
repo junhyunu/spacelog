@@ -1,5 +1,6 @@
 // W-02 행성 패널 · 행성 꾸미기 창 · 행성 삭제 창의 순수 함수(DOM 없음).
 // 문구는 스펙 6-6 · 6-7 그대로다. 조사는 "을(를)" · "(으)로"로 쓴다.
+import { isUnsorted } from '../util.js';
 
 const TEXT_MAX = 20; // 이름 · 한 줄 설명
 const num = (v) => (Number(v) || 0).toLocaleString('ko-KR');
@@ -192,4 +193,169 @@ export function panelStars(stars, planetId, range) {
       return true;
     })
     .sort((a, b) => time(b) - time(a));
+}
+
+/** 잠긴 행성(미분류)인가. 꾸미기 · 합치기 · 지우기를 막을 때 UI는 이것만 본다. */
+export function planetLocked(planet) {
+  return !!planet && isUnsorted(planet);
+}
+
+/* ---------- 여러 개 골라 옮기기 (우주 행성 패널 · 홈 별 목록) ---------- */
+
+/**
+ * 고른 별들을 옮길 수 있는 행성. 모두 한 행성의 별이면 그 행성을 뺀 목록, 섞였으면 전체(이미 그 행성에 있는 별은 서버가 건너뛴다).
+ * 받은 배열은 바꾸지 않는다.
+ */
+export function moveTargets(pickedStars, planets) {
+  const list = Array.isArray(planets) ? planets : [];
+  const homes = new Set((pickedStars ?? []).map((s) => key(s?.planet_id)));
+  if (homes.size !== 1) return [...list];
+  const [only] = homes;
+  return list.filter((p) => key(p.id) !== only);
+}
+
+/** 고른 것 중 지금 목록에 남은 것만(새 Set). 목록이 다시 그려질 때 사라진 별을 선택에서 뺀다. */
+export function keepPicked(picked, stars) {
+  const ids = new Set((Array.isArray(stars) ? stars : []).map((s) => key(s?.id)));
+  return new Set([...(picked ?? [])].filter((id) => ids.has(key(id))));
+}
+
+/** "N개를 어느 행성으로 옮길까요?" 확인 창의 내용(ask() 인자). others = moveTargets()의 값(하나 이상). */
+export function moveManyCopy(n, others) {
+  const count = num(n);
+  return {
+    title: `${count}개를 어느 행성으로 옮길까요?`,
+    desc: '옮기면 우주에서도 그 행성으로 날아가요.',
+    confirmLabel: `${count}개 옮기기`,
+    confirmKind: 'yellow',
+    select: { options: others.map((p) => ({ value: p.id, label: p.name })), value: others[0].id, label: '옮길 행성' },
+  };
+}
+
+/** 여러 개 옮긴 뒤의 토스트. moved = 서버가 실제로 옮긴 수(이미 그 행성에 있던 별 · 지워진 별은 빠진다). 0이면 옮긴 것이 없다. gone = 고른 별이 모두 그사이 지워졌다(0일 때만 뜻이 있다). */
+export function moveManyToast(moved, name, { gone = false } = {}) {
+  const n = Number(moved) || 0;
+  if (n > 0) return `${num(n)}개를 '${name}'(으)로 옮겼어요`;
+  return gone ? '그 별들은 지워졌어요' : '이미 그 행성에 있어요';
+}
+
+/* 고르기 버튼 · 아래 바의 마크업과 문구(두 화면이 같은 것을 쓴다). focusAttr = 다시 그릴 때 초점을 되찾는 속성(패널 'data-focus' · 홈 'data-fk') */
+
+/** 목록 위의 "여러 개 고르기" 버튼. 고르는 중이면 같은 자리가 "취소", 고를 수 없으면(canPick false) ''. */
+export function pickButtonHtml({ picking = false, canPick = false, focusAttr = 'data-focus' } = {}) {
+  if (!picking && !canPick) return '';
+  return `<button type="button" class="pickbtn" data-act="pick" ${focusAttr}="pick">${picking ? '취소' : '여러 개 고르기'}</button>`;
+}
+
+/**
+ * 고르는 중의 아래 바: "N개 골랐어요" + 오른쪽에 "행성 옮기기" · "지우기". 좁은 자리에서는 CSS가 두 줄로 놓는다.
+ * 0개면 둘 다 잠긴다. canMove가 false(옮길 행성이 없다: moveTargets()가 빈 목록)면 "행성 옮기기"만 잠긴다.
+ */
+export function pickBarHtml({ count = 0, canMove = true, focusAttr = 'data-focus' } = {}) {
+  const n = Number(count) || 0;
+  const off = n ? '' : ' disabled';
+  const moveOff = n && canMove ? '' : ' disabled';
+  return (
+    `<div class="pickbar"><span class="pk-n"><b>${num(n)}</b>개 골랐어요</span><span class="pk-acts">` +
+    `<button type="button" class="btn sm" data-act="movePicked" ${focusAttr}="pickbar"${moveOff}>행성 옮기기</button>` +
+    `<button type="button" class="btn sm pkdel" data-act="pickdel" ${focusAttr}="pickdel"${off}>지우기</button></span></div>`
+  );
+}
+
+/** 머리의 전체 선택 체크칸이 보일 상태. 보이는 것만 센다(보이는 것이 0개면 'none'). */
+export function pickAllState(pickedIds, visibleIds) {
+  const visible = (visibleIds ?? []).map(String);
+  if (!visible.length) return 'none';
+  const picked = new Set([...(pickedIds ?? [])].map(String));
+  const n = visible.filter((id) => picked.has(id)).length;
+  if (n === 0) return 'none';
+  return n === visible.length ? 'all' : 'some';
+}
+
+/** 전체 선택 체크칸을 눌렀을 때의 새 Set: 모두 골라져 있으면 비우고, 아니면 보이는 것 전부(보이지 않는 고른 것은 남기지 않는다). */
+export function toggleAll(pickedIds, visibleIds) {
+  if (pickAllState(pickedIds, visibleIds) === 'all') return new Set();
+  return new Set((visibleIds ?? []).map(String));
+}
+
+const PICK_ALL_CHECKED = { all: 'true', some: 'mixed', none: 'false' };
+
+/** 머리의 전체 선택 체크칸(행 체크칸과 같은 .cb 모양, 일부만 골랐으면 '−'). */
+export function pickAllHtml({ state = 'none', focusAttr = 'data-focus' } = {}) {
+  const checked = PICK_ALL_CHECKED[state] ?? 'false';
+  return (
+    `<button type="button" class="pickcb pickall" data-act="pickall" ${focusAttr}="pickall" role="checkbox" aria-checked="${checked}" aria-label="보이는 별 모두 고르기">` +
+    `<span class="cb" aria-hidden="true">${checked === 'mixed' ? '−' : ''}</span></button>`
+  );
+}
+
+/**
+ * 고른 별들의 보관함 복사본 수(파일 · 이미지 첨부, detailLogic.deleteCopy와 같은 셈). n = 고른 수.
+ * 고른 별이 목록에 다 있지 않거나 첨부 목록(attachments)이 없는 별이 있으면 셀 수 없어 null.
+ */
+export function vaultCopies(pickedStars, n) {
+  const stars = Array.isArray(pickedStars) ? pickedStars : [];
+  if (stars.length < (Number(n) || 0) || !stars.every((s) => Array.isArray(s?.attachments))) return null;
+  return stars.reduce((sum, s) => sum + s.attachments.filter((a) => a?.kind === 'file' || a?.kind === 'image').length, 0);
+}
+
+/** "N개를 지울까요?" 확인 창의 내용(ask() 인자). copies = vaultCopies()의 값(null이면 수를 말하지 않는다). */
+export function deleteManyCopy(n, copies) {
+  const count = num(n);
+  let desc;
+  if (copies === null || copies === undefined) desc = `기록 ${count}개와 첨부 파일의 보관함 복사본이 함께 지워져요. 되돌릴 수 없어요.`;
+  else if (Number(copies) > 0) desc = `기록과 첨부 파일 ${num(copies)}개의 보관함 복사본이 함께 지워져요. 되돌릴 수 없어요.`;
+  else desc = `기록 ${count}개가 지워져요. 되돌릴 수 없어요.`;
+  return { title: `${count}개를 지울까요?`, desc, confirmLabel: `${count}개 지우기`, confirmKind: 'pink' };
+}
+
+/** 여러 개 지운 뒤의 토스트. deleted = 서버가 실제로 지운 수. */
+export function deleteManyToast(deleted) {
+  const n = Number(deleted) || 0;
+  return n > 0 ? `${num(n)}개를 지웠어요` : '그 별들은 이미 지워졌어요';
+}
+
+/** 여러 별 요청 한 번에 보낼 수 있는 id 수(server/stars.js checkIds와 같다). */
+export const BATCH_MAX = 500;
+
+/** 배열을 size개씩 끊은 새 배열들(받은 배열은 바꾸지 않는다). 빈 배열이면 []. */
+export function chunk(list, size = BATCH_MAX) {
+  const arr = Array.isArray(list) ? list : [];
+  const n = Math.max(1, Math.floor(Number(size)) || 1);
+  const out = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+}
+
+/**
+ * 500개씩 끊어 차례로 보낸다. send(batch) → 그 묶음에서 처리한 수(숫자가 아니면 0).
+ * 중간 묶음이 실패하면 거기서 멈춘다(뒤 묶음은 보내지 않는다). 앞 묶음은 이미 처리됐으니 부르는 쪽이 doneIds로 화면을 고친다.
+ * @returns {Promise<{ count: number, doneIds: any[], error: any }>} error는 실패가 없으면 null
+ */
+export async function runBatches(ids, send, size = BATCH_MAX) {
+  let count = 0;
+  const doneIds = [];
+  for (const batch of chunk(ids, size)) {
+    try {
+      count += Number(await send(batch)) || 0;
+    } catch (error) {
+      return { count, doneIds, error };
+    }
+    doneIds.push(...batch);
+  }
+  return { count, doneIds, error: null };
+}
+
+/** 앞 묶음은 처리됐고 뒤 묶음이 실패했을 때의 토스트. kind: 'move' | 'delete', n = 처리된 수. */
+export function partialFailToast(kind, n) {
+  return kind === 'move' ? `${num(n)}개는 옮겼고 나머지는 옮기지 못했어요` : `${num(n)}개는 지웠고 나머지는 지우지 못했어요`;
+}
+
+/** 고른 것에서 id 하나를 넣거나 뺀 새 Set(받은 것은 바꾸지 않는다). */
+export function togglePickedId(pickedIds, id) {
+  const next = new Set(pickedIds ?? []);
+  const k = String(id);
+  if (next.has(k)) next.delete(k);
+  else next.add(k);
+  return next;
 }

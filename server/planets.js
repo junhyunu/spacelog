@@ -4,6 +4,7 @@ import { attachmentsByStar } from './stars.js';
 
 export const DECOS = ['town', 'crystal', 'forest', 'rock', 'ice', 'volcano', 'mushroom', 'cactus', 'flower', 'cloud'];
 export const COLOR_COUNT = 16;
+export const UNSORTED_ID = 'unsorted';
 
 const NAME_MAX = 20;
 const DESCRIPTION_MAX = 20;
@@ -54,6 +55,14 @@ function parseFields(body, { requireName }) {
   return out;
 }
 
+// 늘 있는 잠긴 행성 "미분류". 이미 있으면 아무 일도 없다. planet_seq 는 건드리지 않는다.
+export function ensureUnsorted(db) {
+  db.prepare(
+    `INSERT OR IGNORE INTO planets (id, name, description, color_index, deco, ring, slot, created_at)
+     VALUES (?, '미분류', '고르지 않고 저장한 기록', 1, 'rock', 0, -1, ?)`,
+  ).run(UNSORTED_ID, new Date().toISOString());
+}
+
 function getSeq(db) {
   const row = db.prepare("SELECT value FROM meta WHERE key = 'planet_seq'").get();
   const n = row ? Number.parseInt(row.value, 10) : 0;
@@ -66,7 +75,7 @@ function lookFor(n) {
 }
 
 function lowestFreeSlot(db) {
-  const used = db.prepare('SELECT slot FROM planets ORDER BY slot').all();
+  const used = db.prepare('SELECT slot FROM planets WHERE slot >= 0 ORDER BY slot').all();
   let slot = 0;
   for (const row of used) {
     if (row.slot !== slot) break;
@@ -201,6 +210,7 @@ export function registerPlanets(app) {
   app.patch('/api/planets/:id', async (req, reply) => {
     try {
       const { id } = req.params;
+      if (id === UNSORTED_ID) throw new ApiError(403, 'locked');
       if (!exists(db, id)) throw new ApiError(404, 'not_found');
       const fields = parseFields(req.body, { requireName: false });
       if ('ring' in fields) fields.ring = fields.ring ? 1 : 0;
@@ -220,6 +230,7 @@ export function registerPlanets(app) {
     try {
       const { id } = req.params;
       const into = req.body && typeof req.body === 'object' ? req.body.into : undefined;
+      if (id === UNSORTED_ID) throw new ApiError(403, 'locked');
       if (!exists(db, id)) throw new ApiError(404, 'not_found');
       if (typeof into !== 'string' || !into || into === id) throw new ApiError(400, 'invalid_target');
       if (!exists(db, into)) throw new ApiError(404, 'not_found');
@@ -235,6 +246,7 @@ export function registerPlanets(app) {
     try {
       const { id } = req.params;
       const { stars: mode, into } = req.query;
+      if (id === UNSORTED_ID) throw new ApiError(403, 'locked');
       if (!exists(db, id)) throw new ApiError(404, 'not_found');
 
       if (mode === 'move') {

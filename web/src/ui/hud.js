@@ -18,7 +18,7 @@
 //   'manualMove'       패널이 닫혀 있거나 손님 별에 아직 도착하지 않았으면 손님 별을 숨긴다. 조작 안내 줄을 접는다
 //   'flightCancelled'  (controls.js가 알리게 되면) 손님 별로 가던 길이 끊겼을 때 손님 별을 숨긴다
 //   'leftPanelPlanet'  손님 별을 숨긴다
-//   'land' · 'pickStar' · 'openStar'    손님 별이 아닌 곳으로 갔으면 숨긴다
+//   'land' · 'openStar'    손님 별이 아닌 곳으로 갔으면 숨긴다
 //   'enterWorld'       기간을 넓혔으면 그 토스트
 //   'leaveWorld'       손님 별 · 가까운 행성 표시를 지운다. 좁은 화면이면 왼쪽 서랍을 닫는다
 //   'offline'          빈 우주 말풍선을 숨긴다(연결 실패 카드가 대신 말한다)
@@ -32,7 +32,8 @@ import { api } from '../api.js';
 import { store } from '../store.js';
 import { flyTo, setInputBlocked } from '../three/controls.js';
 import { STAR_CAP, setSelectedStar, syncUniverse } from '../three/planets.js';
-import { PLANET_COLORS, daysAgo, esc, periodCountLabel, periodRange } from '../util.js';
+import { planetFace, daysAgo, esc, periodCountLabel, periodRange } from '../util.js';
+import { planetLocked } from './planetLogic.js';
 import { registerEscape } from './escape.js';
 import { confirmDeletePlanet } from './planetDelete.js';
 import { openPlanetForm, trapTab } from './planetForm.js';
@@ -56,7 +57,7 @@ import { onBeforeWorldOpens } from './transition.js';
 
 const $ = (id) => document.getElementById(id);
 const num = (v) => (Number(v) || 0).toLocaleString('ko-KR');
-const faceOf = (planet) => PLANET_COLORS[planet?.color_index]?.face ?? '#7a6cff';
+const faceOf = (planet) => planetFace(planet);
 const SIDE_KEY = 'spacelog.leftPanel'; // 'open' | 'closed'
 const HINT_KEY = 'spacelog.emptyHintOff'; // '1'이면 ✕로 끈 말풍선을 다시 띄우지 않는다
 const narrowMq = typeof matchMedia === 'function' ? matchMedia('(max-width: 760px)') : { matches: false };
@@ -311,7 +312,8 @@ function paintDock() {
           '<div class="drow">' +
           `<button type="button"${zero ? ' class="zero"' : ''} data-planet="${esc(p.id)}" aria-label="${esc(`'${p.name}' 행성으로 날아가기, ${periodCountLabel(store.state.period)} ${count}개`)}">` +
           `<span class="dot" style="background:${faceOf(p)}"></span><span class="t">${esc(p.name)}</span><span class="n">${count}</span></button>` +
-          `<button type="button" class="more" data-more="${esc(p.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(`'${p.name}' 행성 메뉴`)}" title="행성 메뉴">${MORE}</button></div>`
+          (planetLocked(p) ? '' : `<button type="button" class="more" data-more="${esc(p.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(`'${p.name}' 행성 메뉴`)}" title="행성 메뉴">${MORE}</button>`) +
+          '</div>'
         );
       })
       .join('');
@@ -409,7 +411,7 @@ function onDockClick(e) {
 // 좁은 화면에서는 서랍을 닫고 창을 연다(창이 서랍 뒤에 가리지 않게)
 function openPlanetMenu(button) {
   const planet = store.state.planets.find((p) => same(p.id, button.dataset.more));
-  if (!planet) return;
+  if (!planet || planetLocked(planet)) return;
   const run = (fn) => () => {
     closeDrawer();
     fn();
@@ -638,7 +640,6 @@ export function initHud() {
     if (same(starId, guest.id)) guestArrived = true;
     else clearGuestStar();
   };
-  store.on('pickStar', otherStar);
   store.on('openStar', (e) => otherStar(e?.starId));
   store.on('leaveWorld', () => {
     // 우주 밖: 3D는 다음에 들어올 때 'data'로 다시 맞춘다

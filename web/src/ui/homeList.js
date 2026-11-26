@@ -16,7 +16,7 @@
 //   Esc · "목록으로"로 돌아오면 보던 스크롤 자리로 돌아간다. 상세의 "우주에서 보기"는 initHomeList의 openStar(star)를 부른다.
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { PLANET_COLORS, esc, ico, shortDate } from '../util.js';
+import { planetDeep, planetFace, esc, ico, shortDate } from '../util.js';
 import { flushMemo, renderDetail } from './detail.js';
 import { contentLabel } from './detailLogic.js';
 import { registerEscape } from './escape.js';
@@ -24,15 +24,15 @@ import { PAGE, countTitle, emptyState, filterStars, firstLine, markHtml, matches
 import { defaultCustom } from './hudLogic.js';
 import { confirmDeletePlanet } from './planetDelete.js';
 import { openPlanetForm } from './planetForm.js';
-import { thumbKind } from './planetLogic.js';
+import { keepPicked, moveTargets, pickAllHtml, pickAllState, pickBarHtml, pickButtonHtml, planetLocked, thumbKind, toggleAll, togglePickedId } from './planetLogic.js';
 import { openRowMenu } from './rowMenu.js';
-import { deleteStar, moveStar } from './starActions.js';
+import { deletePickedStars, deleteStar, movePickedStars, moveStar, setPickingUi } from './starActions.js';
 import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
 const num = (v) => (Number(v) || 0).toLocaleString('ko-KR');
 const same = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined && String(a) === String(b);
-const faceOf = (planet) => PLANET_COLORS[planet?.color_index]?.face ?? '#7a6cff';
+const faceOf = (planet) => planetFace(planet);
 const LAYERS =
   '<svg class="i" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="m2 12 8.58 3.91a2 2 0 0 0 1.66 0L21 12"/><path d="m2 17 8.58 3.91a2 2 0 0 0 1.66 0L21 17"/></svg>';
 const SIDE_LABEL = { all: '전체 별', today: '오늘 별', week: '이번 주 별', custom: '이 기간 별' };
@@ -50,6 +50,9 @@ let onOpenStar = () => {};
 let backY = 0; // 상세를 열기 전의 스크롤 자리(목록으로 돌아올 때 되돌린다)
 let sideOpen = false; // 좁은 화면의 행성 서랍이 열려 있는지
 let sideOpener = null; // 서랍을 연 버튼(로고 옆 아이콘 · 행성 버튼). 닫으면 초점을 거기로 돌린다
+// 여러 개 골라 옮기기(우주 행성 패널과 같은 모드 · 같은 문구). 목록이 바뀌면 보이는 줄에 남은 것만 남긴다(keepPicked)
+let picking = false;
+let pickedIds = new Set();
 
 /* ---------- 그리기 ---------- */
 // 내용이 바뀌었을 때만 갈아 끼우고, 초점은 같은 것(data-fk)으로 되돌린다
@@ -126,7 +129,8 @@ function paintSide(planets, stars) {
         return (
           '<div class="drow">' +
           item(p.id, p.name, n, `<span class="dot" style="background:${faceOf(p)}"></span>`, `'${p.name}' 행성의 별 보기, ${SIDE_LABEL[period] ?? ''} ${num(n)}개`) +
-          `<button type="button" class="more" data-more="${esc(p.id)}" data-fk="pmore:${esc(p.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(`'${p.name}' 행성 메뉴`)}" title="행성 메뉴">${ico('ellipsis', 18)}</button></div>`
+          (planetLocked(p) ? '' : `<button type="button" class="more" data-more="${esc(p.id)}" data-fk="pmore:${esc(p.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(`'${p.name}' 행성 메뉴`)}" title="행성 메뉴">${ico('ellipsis', 18)}</button>`) +
+          '</div>'
         );
       })
       .join('');
@@ -140,6 +144,19 @@ function rowHtml(s, planet, q) {
   // 메모에서 찾았으면 그 낱말 둘레의 한 줄(왜 나왔는지 알게). 못 찾았으면 메모 첫 줄
   const snip = snipHtml(s.body, q) ?? snipHtml(s.memo, q);
   const note = firstLine(s.body);
+  if (picking) {
+    // 고르는 중: ☆ 자리에 체크칸, 줄 어디를 눌러도 고르기 · 풀기(상세를 열지 않는다). ⋯ 메뉴는 없다
+    const on = pickedIds.has(String(s.id));
+    return (
+      `<div class="srow pick${on ? ' on' : ''}" data-id="${id}">` +
+      `<span class="c-fav"><button type="button" class="pickcb" data-a="pick" data-fk="pick:${id}" role="checkbox" aria-checked="${on}" aria-label="${esc(title)}"><span class="cb" aria-hidden="true"></span></button></span>` +
+      `<span class="sttl">${thumb(s)}<span class="tx"><span class="n">${markHtml(title, q)}</span>` +
+      `<span class="k"><span>${esc(contentLabel(s))}</span><span class="k-dt">${date}</span></span>${snip ? `<span class="snip">메모: ${snip}</span>` : ''}</span></span>` +
+      `<span class="spl c-pl"><span class="dot" style="background:${faceOf(planet)}"></span><span class="t">${esc(planet?.name ?? '')}</span></span>` +
+      `<span class="smemo c-memo"${note ? ` title="${esc(note)}"` : ''}>${snip ?? esc(note)}</span>` +
+      `<span class="sdate c-dt"><span class="d">${date}</span></span></div>`
+    );
+  }
   return (
     `<div class="srow${S.fav && !s.fav ? ' dim' : ''}" data-id="${id}">` +
     `<span class="c-fav"><button type="button" class="sfav" data-a="fav" data-fk="fav:${id}" aria-pressed="${Boolean(s.fav)}" aria-label="${esc(`'${title}' 자주 찾음`)}" title="자주 찾음">${ico('star', 18)}</button></span>` +
@@ -182,7 +199,9 @@ function paintTable(planets, stars, list) {
   const outside = Math.max(0, everywhere - list.length);
   const planetName = S.planet === 'all' ? '' : (byId.get(String(S.planet))?.name ?? '');
 
-  let html = `<h3 class="scount" aria-live="polite">${esc(countTitle({ shown, planetName, q }))}</h3>`;
+  // 고르기 버튼: 보이는 별이 2개 이상이면(행성이 하나뿐이어도 지우기는 된다. 고르는 중에는 같은 자리가 "취소")
+  const pickBtn = pickButtonHtml({ picking, canPick: list.length >= 2, focusAttr: 'data-fk' });
+  let html = `<div class="shead"><h3 class="scount" aria-live="polite">${esc(countTitle({ shown, planetName, q }))}</h3>${pickBtn}</div>`;
   if (outside > 0 && list.length) html += `<p class="sqmore">다른 행성·기간에 ${num(outside)}개 더 있어요<button type="button" data-act="qAll">전체에서 찾기</button></p>`;
 
   const empty = emptyState({ shown: list.length, q, fav: S.fav, elsewhere: everywhere });
@@ -191,7 +210,11 @@ function paintTable(planets, stars, list) {
   } else {
     const { rows, rest } = pageOf(list, S.limit);
     const grouped = S.group && S.planet === 'all';
-    html += '<div class="srow head"><span class="c-fav" aria-hidden="true"></span><span>제목 · 종류</span><span class="c-pl">행성</span><span class="c-memo">메모</span><span class="c-dt">넣은 날</span></div>';
+    // 고르는 중: ☆ 칸 머리 자리에 전체 선택 체크칸(보이는 별 = 지금 거르기에서 더 보기까지 펼친 줄)
+    const favHead = picking
+      ? `<span class="c-fav">${pickAllHtml({ state: pickAllState(pickedIds, rows.map((s) => s.id)), focusAttr: 'data-fk' })}</span>`
+      : '<span class="c-fav" aria-hidden="true"></span>';
+    html += `<div class="srow head">${favHead}<span>제목 · 종류</span><span class="c-pl">행성</span><span class="c-memo">메모</span><span class="c-dt">넣은 날</span></div>`;
     let last = null;
     for (const s of rows) {
       const p = byId.get(String(s.planet_id));
@@ -204,6 +227,9 @@ function paintTable(planets, stars, list) {
     }
     if (rest > 0) html += `<div class="smore"><button type="button" class="btn ghost sm" data-act="more" data-fk="more-rows">더 보기 (${num(rest)}개 남음)</button></div>`;
   }
+  // "행성 옮기기"는 옮길 행성이 없으면(moveTargets가 빈 목록) 잠긴다. "지우기"는 고른 것이 있으면 늘 된다
+  if (picking) html += pickBarHtml({ count: pickedIds.size, canMove: moveTargets(stars.filter((s) => pickedIds.has(String(s.id))), planets).length > 0, focusAttr: 'data-fk' });
+  $('hTable').classList.toggle('picking', picking);
   swap($('hTable'), html);
 }
 
@@ -216,14 +242,15 @@ export function renderHomeList() {
   if (S.q.trim() && !all) loadAll();
   const list = shownList(planets, stars);
   if (S.detail !== null && !list.some((s) => same(s.id, S.detail))) S.detail = null; // 보던 별이 목록에서 빠졌다(지움 · 옮김 · 기간)
+  if (picking) pickedIds = keepPicked(pickedIds, pageOf(list, S.limit).rows); // 보이는 줄에서 사라진 별(거르기 · 옮김 · 지움 · 기간)은 선택에서 뺀다
   paintPeriod();
   paintSide(planets, stars);
-  const picked = S.planet === 'all' ? null : planets.find((p) => same(p.id, S.planet));
-  $('hPlanetBtnName').textContent = picked ? picked.name : '전체 보기';
+  const selPlanet = S.planet === 'all' ? null : planets.find((p) => same(p.id, S.planet));
+  $('hPlanetBtnName').textContent = selPlanet ? selPlanet.name : '전체 보기';
   const pdot = $('hPlanetBtn').querySelector('.dot');
-  pdot.classList.toggle('all', !picked);
-  pdot.style.background = picked ? faceOf(picked) : '';
-  pdot.innerHTML = picked ? '' : LAYERS;
+  pdot.classList.toggle('all', !selPlanet);
+  pdot.style.background = selPlanet ? faceOf(selPlanet) : '';
+  pdot.innerHTML = selPlanet ? '' : LAYERS;
   $('hGroupSw').hidden = S.planet !== 'all';
   $('hGroupSw').setAttribute('aria-checked', String(S.group));
   $('hFavSw').setAttribute('aria-checked', String(S.fav));
@@ -250,7 +277,7 @@ function paintDetail(planets, list) {
   }
   const planet = planets.find((p) => same(p.id, star.planet_id));
   const { index, total } = neighbors(list, star.id);
-  box.style.setProperty('--accent', PLANET_COLORS[planet?.color_index]?.deep ?? '');
+  box.style.setProperty('--accent', planetDeep(planet));
   box.hidden = false;
   renderDetail(box, star, planet, {
     onBack: () => closeDetail(),
@@ -329,6 +356,65 @@ function loadAll() {
     });
 }
 
+/* ---------- 여러 개 골라 옮기기 · 지우기 ---------- */
+// 고르기를 끝낸다(다시 그리지는 않는다). 물어보기 버튼도 다시 보인다
+function endPick() {
+  if (picking) setPickingUi(false);
+  picking = false;
+  pickedIds = new Set();
+}
+
+// 고르기를 켜고 끈다. 켤 때 상세를 보고 있었으면 닫는다. 초점은 같은 자리의 버튼(여러 개 고르기 ↔ 취소)에 남는다
+function togglePick() {
+  if (picking) endPick();
+  else {
+    if (S.detail !== null) S.detail = null;
+    picking = true;
+    pickedIds = new Set();
+    setPickingUi(true);
+  }
+  renderHomeList();
+  $('hTable').querySelector('[data-act="pick"]')?.focus({ preventScroll: true });
+}
+
+function togglePicked(id) {
+  pickedIds = togglePickedId(pickedIds, id);
+  renderHomeList();
+}
+
+// 머리의 전체 선택: 지금 보이는 줄(거르기 · 검색 · 더 보기까지)을 모두 고르거나 비운다. 초점은 체크칸에 남는다(swap이 data-fk로 되찾는다)
+function togglePickAll() {
+  const list = shownList(store.state.planets ?? [], store.state.stars ?? []);
+  pickedIds = toggleAll(pickedIds, pageOf(list, S.limit).rows.map((s) => s.id));
+  renderHomeList();
+}
+
+// 옮기기 · 지우기가 끝난 뒤. result = movePickedStars · deletePickedStars의 값, act = 누른 바 버튼('movePicked' | 'pickdel')
+function afterPickAction(result, act) {
+  if (result === null || result === undefined || !picking) return;
+  if (result.partial) {
+    // 앞 묶음만 처리됐다: 처리된 별은 선택에서 빼고 바로 다시 그린다. 고르기는 이어 간다(남은 것을 다시 누를 수 있게)
+    const done = new Set(result.doneIds);
+    pickedIds = new Set([...pickedIds].filter((id) => !done.has(id)));
+    renderHomeList();
+    const t = $('hTable');
+    (t.querySelector(`.pickbar [data-act="${act}"]:not(:disabled)`) ?? t.querySelector('.pickall, [data-act="pick"]'))?.focus({ preventScroll: true });
+    return;
+  }
+  endPick();
+  renderHomeList();
+  // 목록이 비면 고르기 버튼 · 줄이 없다: 빈 목록 안내의 버튼 → 검색 칸으로(패널이 닫기 버튼으로 돌아가는 것과 같은 자리)
+  ($('hTable').querySelector('[data-act="pick"], .sttl, .sempty button') ?? $('hQ'))?.focus({ preventScroll: true });
+}
+
+async function movePicked() {
+  afterPickAction(await movePickedStars(pickedIds), 'movePicked');
+}
+
+async function deletePicked() {
+  afterPickAction(await deletePickedStars(pickedIds), 'pickdel');
+}
+
 /* ---------- 누르기 ---------- */
 async function toggleFav(star) {
   const next = !star.fav;
@@ -362,7 +448,7 @@ function openStarMenu(button, star) {
 
 function openPlanetMenu(button) {
   const planet = store.state.planets.find((p) => same(p.id, button.dataset.more));
-  if (!planet) return;
+  if (!planet || planetLocked(planet)) return;
   openRowMenu(button, `'${planet.name}' 행성 메뉴`, [
     // 좁은 화면: 서랍을 닫고 창을 띄운다(초점이 펼치기 버튼으로 간다 → 창을 닫으면 거기로 돌아온다)
     { key: 'edit', label: '꾸미기', run: () => { setSide(false); openPlanetForm({ planet }); } },
@@ -391,8 +477,30 @@ function onDockClick(e) {
 
 function onTableClick(e) {
   const el = e.target instanceof Element ? e.target.closest('button') : null;
+  // 고르는 중: 줄(체크칸 · 제목 · 빈 자리) 어디를 눌러도 고르기 · 풀기
+  if (picking && !el?.dataset.act) {
+    const row = e.target instanceof Element ? e.target.closest('.srow.pick[data-id]') : null;
+    if (row) togglePicked(row.dataset.id);
+    return;
+  }
   if (!el) return;
   const act = el.dataset.act;
+  if (act === 'pick') {
+    togglePick();
+    return;
+  }
+  if (act === 'movePicked') {
+    if (!el.disabled) movePicked();
+    return;
+  }
+  if (act === 'pickdel') {
+    if (!el.disabled) deletePicked();
+    return;
+  }
+  if (act === 'pickall') {
+    if (picking) togglePickAll();
+    return;
+  }
   if (act === 'more') {
     S.limit += PAGE;
     renderHomeList();
@@ -521,12 +629,30 @@ export function initHomeList({ openStar } = {}) {
     closeDetail();
     return true;
   });
+  // 고르는 중이면 고르기를 끝낸다(상세 29 다음, 챗봇 창 25보다 먼저)
+  registerEscape(28, () => {
+    if (!picking || store.state.inWorld || $('home').hidden) return false;
+    togglePick();
+    return true;
+  });
 
   store.on('period', (p) => {
     if (p?.custom) custom = p.custom;
     keep.clear();
     S.limit = PAGE;
     paintPeriod(); // 목록은 새 기간의 별을 받은 뒤('data') 다시 그린다
+  });
+  // 우주로 들어가면 고르기를 끝낸다(돌아왔을 때 고르던 상태가 남지 않게)
+  store.on('enterWorld', () => {
+    endPick();
+    $('hTable').classList.remove('picking');
+  });
+  // 로그인 · 로그아웃: 보이는 별이 바뀌니 고르기를 끝낸다. main.js의 같은 이벤트(홈 다시 그리기)가 먼저 돌았을 수 있어 여기서도 다시 그린다
+  store.on('authChange', () => {
+    if (!picking) return;
+    endPick();
+    $('hTable').classList.remove('picking');
+    if (!store.state.inWorld && !$('home').hidden) renderHomeList();
   });
   store.on('data', () => {
     all = null; // 받아 둔 모든 별은 낡았다

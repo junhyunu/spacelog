@@ -1,7 +1,9 @@
 // 행성 · 별 · 이름표: 만들기, 지우기, DB 상태와 맞추기, 별 날아오기.
 // 시안 467~524행(buildPlanet · addStar · label)과 749~768행(relabel · detachStar · moveRec)을 옮겼다.
 import * as THREE from 'three';
-import { PLANET_COLORS } from '../util.js';
+import { isUnsorted, PLANET_COLORS } from '../util.js';
+import { dustMaterials, isDustMaterial, stripeTexture } from './dust.js';
+import { BAND_TILT, DUST_ORBIT, DUST_PER_PLANET, DUST_SIZE, pickDrawn, seededRand } from './dustLogic.js';
 import { slotPosition } from './slots.js';
 import { initScene, ol, outlineMat, scene, toon } from './scene.js';
 
@@ -64,6 +66,7 @@ function starMats() {
 function dispose(root) {
   root.traverse((o) => {
     if (o.isSprite) {
+      if (isDustMaterial(o.material)) return; // 먼지 재질 · 텍스처는 모든 먼지가 함께 쓴다
       o.material.map?.dispose();
       o.material.dispose();
       return;
@@ -71,27 +74,15 @@ function dispose(root) {
     if (!o.isMesh) return;
     if (o.geometry !== starGeo) o.geometry.dispose();
     const m = o.material;
-    if (m !== outlineMat && m !== starMat && m !== starMatOn) m.dispose(); // gradientMap은 함께 쓰므로 남긴다
+    if (m !== outlineMat && m !== starMat && m !== starMatOn) {
+      m.map?.dispose(); // 미분류 몸의 줄무늬 텍스처
+      m.dispose(); // gradientMap은 함께 쓰므로 남긴다
+    }
   });
 }
 
 /* ---------- 장식 ---------- */
-// 행성마다 같은 모습이 다시 나오도록 id에서 씨앗을 얻는다(새로고침해도 장식 자리가 같다).
-function seededRand(text) {
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  let a = h >>> 0;
-  const next = () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-  return (lo, hi) => lo + next() * (hi - lo);
-}
+// 행성마다 같은 모습이 다시 나오도록 id에서 씨앗을 얻는다(seededRand, 새로고침해도 장식 자리가 같다).
 
 const mesh = (geo, color, outline = 1.12, opts) => ol(new THREE.Mesh(geo, toon(color, opts)), outline);
 
@@ -335,13 +326,19 @@ function colorOf(index) {
   return (PLANET_COLORS[index] || PLANET_COLORS[1]).face;
 }
 
-function scaleFor(count) {
+/** 별 수에 따른 크기 배율. 미분류는 늘 1(먼지 띠가 몸에 닿지 않게). */
+function scaleFor(count, unsorted = false) {
+  if (unsorted) return 1;
   const n = Number.isFinite(count) && count > 0 ? count : 0;
   return Math.min(1 + n * GROW_PER_STAR, MAX_RADIUS / BASE_RADIUS);
 }
 
 /** 행성의 겉모습(몸 · 장식 · 깃발 · 고리 · 이름표)을 만든다. 자리와 별은 건드리지 않는다. */
 function buildLook(P) {
+  if (P.unsorted) {
+    buildUnsortedLook(P);
+    return;
+  }
   const r = P.r;
   const col = new THREE.Color(P.css);
   const spin = new THREE.Group();
@@ -397,6 +394,24 @@ function buildLook(P) {
   P.label.position.set(0, r * P.scale + 4.3, 0);
 }
 
+/** 미분류: 줄무늬 공 + 이름표. 장식 · 깃발 · 고리는 없다(별 대신 먼지 띠가 돈다). */
+function buildUnsortedLook(P) {
+  const spin = new THREE.Group();
+  spin.rotation.y = P.spinAngle;
+  spin.scale.setScalar(P.scale);
+  P.group.add(spin);
+  P.spin = spin;
+
+  const body = ol(new THREE.Mesh(new THREE.SphereGeometry(P.r, 48, 32), toon(WHITE, { map: stripeTexture(P.id) })), 1.035);
+  body.userData.planetId = P.id;
+  spin.add(body);
+  P.body = body;
+  P.ringMesh = null;
+
+  makeLabel(P);
+  P.label.position.set(0, P.r * P.scale + 4.3, 0);
+}
+
 function disposeLook(P) {
   P.spinAngle = P.spin.rotation.y;
   if (P.ringMesh) P.ringAngle = P.ringMesh.rotation.z;
@@ -414,15 +429,18 @@ function lookOf(d) {
 
 function labelOf(d) {
   const name = String(d.name ?? '');
-  const sub = capMode ? `별 ${(Number(d.count_in_period) || 0).toLocaleString('en-US')}개` : String(d.description ?? '').trim();
+  const n = (Number(d.count_in_period) || 0).toLocaleString('en-US');
+  const sub = capMode ? (isUnsorted(d.id) ? `먼지 ${n}알` : `별 ${n}개`) : String(d.description ?? '').trim();
   return { name, sub };
 }
 
 function createPlanet(d, count) {
   const look = lookOf(d);
   const text = labelOf(d);
+  const unsorted = isUnsorted(d.id);
   const P = {
     id: key(d.id),
+    unsorted,
     r: BASE_RADIUS,
     ...look,
     ...text,
@@ -432,8 +450,8 @@ function createPlanet(d, count) {
     group: new THREE.Group(),
     spinAngle: 0,
     ringAngle: 0.3,
-    targetScale: scaleFor(count),
-    scale: scaleFor(count),
+    targetScale: scaleFor(count, unsorted),
+    scale: scaleFor(count, unsorted),
   };
   P.labelKey = `${P.name}\n${P.sub}`;
   P.group.position.set(...slotPosition(d.slot));
@@ -454,31 +472,57 @@ function removePlanet(P) {
 /* ---------- 별 ---------- */
 const orbitRadius = (P, S) => P.r * P.scale + S.extra;
 
+/** 미분류 행성의 별은 노란 별 대신 흰 먼지 알(스프라이트)로 그린다. */
 function createStar(id, P, fromPos) {
-  starMats();
+  const rnd = THREE.MathUtils.randFloat;
   const pivot = new THREE.Group();
-  pivot.rotation.set(THREE.MathUtils.randFloat(-0.7, 0.7), THREE.MathUtils.randFloat(0, 6.28), THREE.MathUtils.randFloat(-0.7, 0.7));
-  P.group.add(pivot);
   const holder = new THREE.Group();
-  holder.rotation.y = THREE.MathUtils.randFloat(0, 6.28);
+  holder.rotation.y = rnd(0, 6.28);
   pivot.add(holder);
-  const m = ol(new THREE.Mesh(starGeo, starMat), 1.16);
-  m.userData = { starId: id, planetId: P.id };
-  const S = {
-    id,
-    planetId: P.id,
-    pivot,
-    holder,
-    mesh: m,
-    extra: 2.4 + THREE.MathUtils.randFloat(0, 1.8), // 궤도 반지름 = 행성 반지름 + 2.4 ~ 4.2
-    speed: THREE.MathUtils.randFloat(0.18, 0.38) * (Math.random() < 0.5 ? -1 : 1),
-    spin: THREE.MathUtils.randFloat(1, 2.4),
-  };
+  P.group.add(pivot);
+  let S;
+  if (P.unsorted) {
+    // 먼지: 기울어진 납작한 띠(반지름 6.0~8.6, 두께 ±0.22), 안쪽 알일수록 빠르다
+    pivot.rotation.set(...BAND_TILT);
+    const m = new THREE.Sprite(dustMaterials().normal);
+    m.scale.setScalar(DUST_SIZE);
+    m.userData = { starId: id, planetId: P.id };
+    const extra = DUST_ORBIT[0] - P.r + rnd(0, 1) * (DUST_ORBIT[1] - DUST_ORBIT[0]);
+    S = {
+      id,
+      planetId: P.id,
+      pivot,
+      holder,
+      mesh: m,
+      extra,
+      bandY: rnd(-0.22, 0.22), // orbitRadius는 x만 쓰므로 띠 두께(y)는 여기서 한 번 정한다
+      size: DUST_SIZE,
+      speed: rnd(0.16, 0.21) / Math.sqrt(P.r + extra),
+      spin: 0,
+    };
+  } else {
+    starMats();
+    pivot.rotation.set(rnd(-0.7, 0.7), rnd(0, 6.28), rnd(-0.7, 0.7));
+    const m = ol(new THREE.Mesh(starGeo, starMat), 1.16);
+    m.userData = { starId: id, planetId: P.id };
+    S = {
+      id,
+      planetId: P.id,
+      pivot,
+      holder,
+      mesh: m,
+      extra: 2.4 + rnd(0, 1.8), // 궤도 반지름 = 행성 반지름 + 2.4 ~ 4.2
+      bandY: 0,
+      size: 1,
+      speed: rnd(0.18, 0.38) * (Math.random() < 0.5 ? -1 : 1),
+      spin: rnd(1, 2.4),
+    };
+  }
   stars.set(id, S);
   if (fromPos) launch(S, fromPos);
   else {
-    holder.add(m);
-    m.position.set(orbitRadius(P, S), 0, 0);
+    holder.add(S.mesh);
+    S.mesh.position.set(orbitRadius(P, S), S.bandY, 0);
   }
   return S;
 }
@@ -493,7 +537,7 @@ function launch(S, fromPos) {
     flying.push({ S, t: 0, from: fromPos.clone() });
   }
   S.mesh.position.copy(fromPos);
-  S.mesh.scale.setScalar(1);
+  S.mesh.scale.setScalar(S.size);
 }
 
 function removeStar(S) {
@@ -507,7 +551,11 @@ function removeStar(S) {
 
 function paintStars() {
   starMats();
-  for (const S of stars.values()) S.mesh.material = S.id === selectedId || S.id === guestId ? starMatOn : starMat;
+  for (const S of stars.values()) {
+    const on = S.id === selectedId || S.id === guestId;
+    if (S.mesh.isSprite) S.mesh.material = on ? dustMaterials().on : dustMaterials().normal;
+    else S.mesh.material = on ? starMatOn : starMat;
+  }
 }
 
 function toV3(p) {
@@ -557,7 +605,7 @@ export function syncUniverse({ planets: planetList = [], stars: starList = [], g
       P.group.position.set(...slotPosition(d.slot));
       moved = true;
     }
-    P.targetScale = scaleFor(count);
+    P.targetScale = scaleFor(count, P.unsorted);
     const look = lookOf(d);
     const text = labelOf({ ...d, count_in_period: count });
     const labelKey = `${text.name}\n${text.sub}`;
@@ -579,18 +627,10 @@ export function syncUniverse({ planets: planetList = [], stars: starList = [], g
   if (moved) layoutVer += 1;
 
   // --- 별 ---
-  const wanted = new Map(); // 별 id → 행성 id
-  if (!capMode) {
-    const drawn = new Map();
-    for (const s of starList) {
-      const pid = key(s.planet_id);
-      if (!planets.has(pid)) continue;
-      const n = drawn.get(pid) || 0;
-      if (n >= STARS_PER_PLANET) continue;
-      drawn.set(pid, n + 1);
-      wanted.set(key(s.id), pid);
-    }
-  }
+  // 별 id → 행성 id. 행성마다 최근 것부터 STARS_PER_PLANET개, 미분류는 먼지 DUST_PER_PLANET알
+  const wanted = capMode
+    ? new Map()
+    : pickDrawn(starList, new Set(planets.keys()), { perPlanet: STARS_PER_PLANET, perUnsorted: DUST_PER_PLANET });
   if (guestId !== null) {
     const g = starList.find((s) => key(s.id) === guestId) || (guestStar && key(guestStar.id) === guestId ? guestStar : null);
     if (g && planets.has(key(g.planet_id))) wanted.set(guestId, key(g.planet_id));
@@ -684,10 +724,9 @@ export function starPlanetId(starId) {
   return stars.get(key(starId))?.planetId ?? null;
 }
 
-/** 클릭으로 고를 수 있는 메시들. userData가 { starId, planetId } 또는 { planetId }. */
+/** 클릭으로 고를 수 있는 메시들: 행성 몸만(userData { planetId }). 별 · 먼지는 누를 수 없다. */
 export function pickTargets() {
   const list = [];
-  for (const S of stars.values()) list.push(S.mesh);
   for (const P of planets.values()) list.push(P.body);
   return list;
 }
@@ -711,7 +750,7 @@ export function updateUniverse(dt) {
   }
   for (const S of stars.values()) {
     S.holder.rotation.y += S.speed * dt;
-    S.mesh.rotation.y += S.spin * dt;
+    if (!S.mesh.isSprite) S.mesh.rotation.y += S.spin * dt;
     if (S.mesh.parent === S.holder) S.mesh.position.x = orbitRadius(planets.get(S.planetId), S);
   }
   for (let i = flying.length - 1; i >= 0; i--) {
@@ -721,18 +760,18 @@ export function updateUniverse(dt) {
     F.t += dt / 1.5;
     const e = F.t < 0.5 ? 2 * F.t * F.t : 1 - Math.pow(-2 * F.t + 2, 2) / 2;
     S.holder.updateWorldMatrix(true, false);
-    S.holder.localToWorld(tgt.set(R, 0, 0));
+    S.holder.localToWorld(tgt.set(R, S.bandY, 0));
     mid.copy(F.from).lerp(tgt, 0.5);
     mid.y += 7;
     pa.copy(F.from).lerp(mid, e);
     pb.copy(mid).lerp(tgt, e);
     S.mesh.position.copy(pa.lerp(pb, e));
-    S.mesh.scale.setScalar(1 + Math.sin(Math.min(F.t, 1) * Math.PI) * 0.8);
-    S.mesh.rotation.y += dt * 8;
+    S.mesh.scale.setScalar(S.size * (1 + Math.sin(Math.min(F.t, 1) * Math.PI) * 0.8));
+    if (!S.mesh.isSprite) S.mesh.rotation.y += dt * 8;
     if (F.t >= 1) {
       S.holder.add(S.mesh);
-      S.mesh.position.set(R, 0, 0);
-      S.mesh.scale.setScalar(1);
+      S.mesh.position.set(R, S.bandY, 0);
+      S.mesh.scale.setScalar(S.size);
       flying.splice(i, 1);
     }
   }

@@ -33,6 +33,11 @@ async function list(query = '') {
   return res.json();
 }
 
+// 미분류(늘 있는 행성)를 뺀 목록. 만든 행성만 비교할 때 쓴다.
+async function listMine(query = '') {
+  return (await list(query)).filter((p) => p.id !== 'unsorted');
+}
+
 function addStar(planetId, createdAt = new Date().toISOString()) {
   const id = crypto.randomUUID();
   app.db
@@ -138,7 +143,7 @@ test('invalid look → 400 invalid_look', async () => {
     expect(res.statusCode, JSON.stringify(look)).toBe(400);
     expect(res.json()).toEqual({ error: 'invalid_look' });
   }
-  expect(await list()).toEqual([]);
+  expect(await listMine()).toEqual([]);
 
   const p = await create();
   for (const look of bad) {
@@ -153,7 +158,7 @@ test('PATCH changes look', async () => {
   const res = await call('PATCH', `/api/planets/${p.id}`, { color_index: 9, deco: 'flower', ring: true });
   expect(res.statusCode).toBe(200);
   expect(res.json()).toEqual({ ...p, color_index: 9, deco: 'flower', ring: true });
-  expect((await list())[0]).toEqual({ ...p, color_index: 9, deco: 'flower', ring: true });
+  expect((await listMine())[0]).toEqual({ ...p, color_index: 9, deco: 'flower', ring: true });
 });
 
 test('PATCH unknown id → 404', async () => {
@@ -169,7 +174,7 @@ test('delete with stars and stars=move moves them', async () => {
   addStar(b.id);
   const res = await call('DELETE', `/api/planets/${a.id}?stars=move&into=${b.id}`);
   expect(res.statusCode).toBe(204);
-  const planets = await list();
+  const planets = await listMine();
   expect(planets.map((p) => p.id)).toEqual([b.id]);
   expect(planets[0].count_total).toBe(3);
   expect(starCount(a.id)).toBe(0);
@@ -191,7 +196,7 @@ test('delete with stars and stars=delete removes them and calls removeStarFiles 
   expect(res.statusCode).toBe(204);
   expect(seen.sort()).toEqual([s1, s2].sort());
   expect(app.db.prepare('SELECT id FROM stars').all().map((r) => r.id)).toEqual([keep]);
-  expect((await list()).map((p) => p.id)).toEqual([b.id]);
+  expect((await listMine()).map((p) => p.id)).toEqual([b.id]);
 });
 
 test('default removeStarFiles is a no-op function', async () => {
@@ -211,7 +216,7 @@ test('stars=move without into, or into itself → 400 invalid_target', async () 
     expect(res.json()).toEqual({ error: 'invalid_target' });
   }
   expect(starCount(a.id)).toBe(1);
-  expect((await list()).length).toBe(1);
+  expect((await listMine()).length).toBe(1);
 });
 
 test('rejects empty and 21-char names', async () => {
@@ -246,7 +251,7 @@ test('rename and describe', async () => {
   const res = await call('PATCH', `/api/planets/${p.id}`, { name: '새 이름', description: '설명' });
   expect(res.statusCode).toBe(200);
   expect(res.json()).toEqual({ ...p, name: '새 이름', description: '설명' });
-  const [got] = await list();
+  const [got] = await listMine();
   expect(got.name).toBe('새 이름');
   expect(got.description).toBe('설명');
 });
@@ -257,7 +262,7 @@ test('delete non-empty without stars param → 409', async () => {
   const res = await call('DELETE', `/api/planets/${a.id}`);
   expect(res.statusCode).toBe(409);
   expect(res.json()).toEqual({ error: 'not_empty' });
-  expect((await list()).length).toBe(1);
+  expect((await listMine()).length).toBe(1);
   expect(starCount(a.id)).toBe(1);
 });
 
@@ -274,7 +279,7 @@ test('merge moves stars and removes source', async () => {
   const res = await call('POST', `/api/planets/${a.id}/merge`, { into: b.id });
   expect(res.statusCode).toBe(200);
   expect(res.json()).toEqual({ moved: 2 });
-  const planets = await list();
+  const planets = await listMine();
   expect(planets.map((p) => p.id)).toEqual([b.id]);
   expect(planets[0].count_total).toBe(2);
   const gone = await call('PATCH', `/api/planets/${a.id}`, { name: 'x' });
@@ -293,7 +298,7 @@ test('merge into itself or unknown → 400/404', async () => {
   expect(unknownTarget.statusCode).toBe(404);
   const unknownSource = await call('POST', '/api/planets/nope/merge', { into: a.id });
   expect(unknownSource.statusCode).toBe(404);
-  expect((await list()).length).toBe(1);
+  expect((await listMine()).length).toBe(1);
   expect(starCount(a.id)).toBe(1);
 });
 
@@ -303,14 +308,14 @@ test('counts respect period', async () => {
   addStar(a.id, '2026-11-10T03:00:00.000Z');
   addStar(a.id, '2026-10-01T03:00:00.000Z');
   const q = `?from=${encodeURIComponent('2026-11-10T00:00:00.000Z')}&to=${encodeURIComponent('2026-11-11T00:00:00.000Z')}`;
-  const planets = await list(q);
+  const planets = await listMine(q);
   expect(planets.map((p) => p.slot)).toEqual([0, 1]);
   expect(planets[0].count_in_period).toBe(1);
   expect(planets[0].count_total).toBe(2);
   expect(planets[1].id).toBe(b.id);
   expect(planets[1].count_in_period).toBe(0);
 
-  const all = await list();
+  const all = await listMine();
   expect(all[0].count_in_period).toBe(2);
   expect(all[0].count_total).toBe(2);
 });
@@ -319,9 +324,9 @@ test('period: from is inclusive, to is exclusive', async () => {
   const a = await create();
   addStar(a.id, '2026-11-10T00:00:00.000Z');
   addStar(a.id, '2026-11-11T00:00:00.000Z');
-  const [p] = await list('?from=2026-11-10T00:00:00.000Z&to=2026-11-11T00:00:00.000Z');
+  const [p] = await listMine('?from=2026-11-10T00:00:00.000Z&to=2026-11-11T00:00:00.000Z');
   expect(p.count_in_period).toBe(1);
-  const [onlyFrom] = await list('?from=2026-11-11T00:00:00.000Z');
+  const [onlyFrom] = await listMine('?from=2026-11-11T00:00:00.000Z');
   expect(onlyFrom.count_in_period).toBe(1);
 });
 
@@ -340,9 +345,9 @@ test('name is NFC-normalised so decomposed hangul is not over-counted', async ()
 test('period without millis or with an offset is normalised', async () => {
   const p = await create();
   addStar(p.id, '2026-11-10T00:00:00.000Z');
-  const a = await list('?from=2026-11-10T00:00:00Z&to=2026-11-11T00:00:00Z');
+  const a = await listMine('?from=2026-11-10T00:00:00Z&to=2026-11-11T00:00:00Z');
   expect(a[0].count_in_period).toBe(1);
-  const b = await list(`?from=${encodeURIComponent('2026-11-10T09:00:00+09:00')}`);
+  const b = await listMine(`?from=${encodeURIComponent('2026-11-10T09:00:00+09:00')}`);
   expect(b[0].count_in_period).toBe(1);
 });
 
@@ -350,7 +355,7 @@ test('only `to` is honoured', async () => {
   const p = await create();
   addStar(p.id, '2026-11-10T00:00:00.000Z');
   addStar(p.id, '2026-11-12T00:00:00.000Z');
-  const rows = await list('?to=2026-11-11T00:00:00.000Z');
+  const rows = await listMine('?to=2026-11-11T00:00:00.000Z');
   expect(rows[0].count_in_period).toBe(1);
 });
 
@@ -359,4 +364,50 @@ test('garbage or repeated period → 400 invalid_period', async () => {
   const res = await call('GET', '/api/planets?from=2026-11-10T00:00:00Z&from=2026-11-11T00:00:00Z');
   expect(res.statusCode).toBe(400);
   expect(res.json()).toEqual({ error: 'invalid_period' });
+});
+
+test('fresh db has the unsorted planet first', async () => {
+  const all = await list();
+  expect(all[0]).toMatchObject({ id: 'unsorted', name: '미분류', description: '고르지 않고 저장한 기록', slot: -1 });
+  expect(all[0]).toMatchObject({ color_index: 1, deco: 'rock', ring: false });
+});
+
+test('new planets still take slots 0, 1, 2 with unsorted present', async () => {
+  expect((await create({ name: 'a' })).slot).toBe(0);
+  expect((await create({ name: 'b' })).slot).toBe(1);
+  expect((await create({ name: 'c' })).slot).toBe(2);
+});
+
+test('unsorted does not use up the auto look sequence', async () => {
+  expect((await create({ name: 'a' })).color_index).toBe(1);
+});
+
+test('unsorted cannot be patched, deleted or merged away', async () => {
+  const other = await create({ name: 'x' });
+  const patch = await call('PATCH', '/api/planets/unsorted', { name: 'y' });
+  expect(patch.statusCode).toBe(403);
+  expect(patch.json()).toEqual({ error: 'locked' });
+  const del = await call('DELETE', '/api/planets/unsorted?stars=delete');
+  expect(del.statusCode).toBe(403);
+  expect(del.json()).toEqual({ error: 'locked' });
+  expect((await call('DELETE', '/api/planets/unsorted')).statusCode).toBe(403);
+  expect((await call('DELETE', `/api/planets/unsorted?stars=move&into=${other.id}`)).statusCode).toBe(403);
+  const merge = await call('POST', '/api/planets/unsorted/merge', { into: other.id });
+  expect(merge.statusCode).toBe(403);
+  expect(merge.json()).toEqual({ error: 'locked' });
+  expect((await list())[0]).toMatchObject({ id: 'unsorted', name: '미분류' });
+});
+
+test('other planets can merge or move their stars into unsorted', async () => {
+  const a = await create({ name: 'a' });
+  const starA = addStar(a.id);
+  const merge = await call('POST', `/api/planets/${a.id}/merge`, { into: 'unsorted' });
+  expect(merge.statusCode).toBe(200);
+  expect(merge.json()).toEqual({ moved: 1 });
+  expect(app.db.prepare('SELECT planet_id FROM stars WHERE id = ?').get(starA).planet_id).toBe('unsorted');
+
+  const b = await create({ name: 'b' });
+  const starB = addStar(b.id);
+  expect((await call('DELETE', `/api/planets/${b.id}?stars=move&into=unsorted`)).statusCode).toBe(204);
+  expect(app.db.prepare('SELECT planet_id FROM stars WHERE id = ?').get(starB).planet_id).toBe('unsorted');
 });

@@ -1,6 +1,6 @@
 // 화면 상태 + 이벤트. 모듈끼리는 여기를 거쳐 이야기한다.
 // 쓰는 이벤트: 'data'(reload 끝), 'offline'(요청 실패), 'online'(다시 연결됨),
-// 그 밖에 뒤 태스크가 정한 것('land', 'pickStar', 'near', 'leftPanelPlanet', 'openDetail' …).
+// 그 밖에 뒤 태스크가 정한 것('land', 'near', 'leftPanelPlanet', 'openDetail' …).
 import { api } from './api.js';
 import { DEFAULT_LOOK } from './ui/characterLogic.js';
 import { periodRange } from './util.js';

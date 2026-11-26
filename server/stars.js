@@ -84,6 +84,13 @@ export function attachmentsByStar(db, starIds) {
   return map;
 }
 
+// 여러 별을 다루는 요청의 ids 검사: 문자열 배열, 1~500개.
+function checkIds(ids) {
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > 500 || !ids.every((v) => typeof v === 'string')) {
+    throw new ApiError(400, 'invalid_ids');
+  }
+}
+
 export function attachmentsOf(db, starId) {
   return db.prepare('SELECT * FROM attachments WHERE star_id = ? ORDER BY position').all(starId);
 }
@@ -260,6 +267,57 @@ export function registerStars(app) {
       const keys = Object.keys(req.body && typeof req.body === 'object' ? req.body : {});
       if (!(keys.length === 1 && keys[0] === 'fav')) app.ragSync?.markStars([id], 'patch');
       return toStarJson(updated, updated.attachments);
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  // 별 여러 개를 한꺼번에 지운다. 없는 별 · 중복은 건너뛰고 실제로 지운 수를 돌려준다.
+  app.post('/api/stars/delete', async (req, reply) => {
+    try {
+      const { ids } = req.body && typeof req.body === 'object' ? req.body : {};
+      checkIds(ids);
+      const inFlight = app.ragSync?.inFlight?.() ?? null;
+      const rows = db.transaction(() => {
+        const found = [];
+        for (const id of new Set(ids)) {
+          const row = getRow(db, id);
+          if (!row) continue;
+          row.attachments = attachmentsOf(db, id);
+          found.push(row);
+        }
+        if (found.length) {
+          const gone = found.map((r) => r.id);
+          recordRemovals(db, gone, inFlight);
+          const del = db.prepare('DELETE FROM stars WHERE id = ?');
+          for (const id of gone) del.run(id);
+        }
+        return found;
+      })();
+      if (rows.length) app.ragSync?.markStars(rows.map((r) => r.id), 'delete');
+      for (const row of rows) {
+        try {
+          await app.removeStarFiles(row);
+        } catch (err) {
+          console.error(`removeStarFiles failed for star ${row.id}`, err);
+        }
+      }
+      return { deleted: rows.length };
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  // 별 여러 개를 한 행성으로 옮긴다. 없는 별 · 중복 · 이미 그 행성에 있는 별은 건너뛰고 실제로 옮긴 수를 돌려준다.
+  app.post('/api/stars/move', async (req, reply) => {
+    try {
+      const { ids, planet_id: planetId } = req.body && typeof req.body === 'object' ? req.body : {};
+      checkIds(ids);
+      if (!planetExists(db, planetId)) throw new ApiError(400, 'unknown_planet');
+      const upd = db.prepare('UPDATE stars SET planet_id = ? WHERE id = ? AND planet_id <> ?');
+      const moved = db.transaction(() => [...new Set(ids)].filter((id) => upd.run(planetId, id, planetId).changes > 0))();
+      if (moved.length) app.ragSync?.markStars(moved, 'patch');
+      return { moved: moved.length };
     } catch (err) {
       return fail(reply, err);
     }

@@ -100,6 +100,9 @@ export const api = {
   stars: ({ from, to, planet_id, limit, fav } = {}) => request('GET', `/stars${qs({ from, to, planet_id, limit, fav: fav ? 1 : undefined })}`),
   star: (starId) => request('GET', `/stars/${id(starId)}`),
   patchStar: (starId, patch) => request('PATCH', `/stars/${id(starId)}`, patch),
+  /** 별 여러 개를 한 행성으로. → { moved } */
+  moveStars: (ids, planetId) => request('POST', '/stars/move', { ids, planet_id: planetId }),
+  deleteStars: (ids) => request('POST', '/stars/delete', { ids }),
   deleteStar: (starId) => request('DELETE', `/stars/${id(starId)}`),
 
   /**

@@ -14,7 +14,7 @@ import { Vector3 } from 'three';
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { flyStarIn, starMesh } from '../three/planets.js';
-import { PLANET_COLORS, esc, fullDate, ico } from '../util.js';
+import { planetFace, esc, fullDate, ico } from '../util.js';
 import { ask } from './confirm.js';
 import {
   MEMO_STATUS,
@@ -184,7 +184,7 @@ const CHEVRON = (d) =>
 // 홈의 목록 자리에 펼쳐질 때의 머리(home.css #hDetail header): [← 목록으로] 행성 이름 · 제목 ··· [<] n / N [>]
 // 좁은 화면에서는 "목록으로"가 ← 아이콘만 남는다(이름은 aria-label로 그대로).
 function homeHeadHtml(star, planet, home) {
-  const face = PLANET_COLORS[planet?.color_index]?.face ?? '#7a6cff';
+  const face = planetFace(planet);
   const index = Number(home.index) || 0;
   const total = Number(home.total) || 0;
   return (
@@ -199,7 +199,7 @@ function homeHeadHtml(star, planet, home) {
 
 function headHtml(star, planet, home) {
   if (home) return homeHeadHtml(star, planet, home);
-  const face = PLANET_COLORS[planet?.color_index]?.face ?? '#7a6cff';
+  const face = planetFace(planet);
   const name = planet?.name ?? '';
   return (
     `<button type="button" class="btn x ghost" data-d="back" aria-label="'${esc(name)}' 목록으로">${ico('arrow-left')}</button>` +

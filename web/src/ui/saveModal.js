@@ -6,7 +6,7 @@ import { api } from '../api.js';
 import { store } from '../store.js';
 import { playerPosition, setInputBlocked } from '../three/controls.js';
 import { flyStarIn } from '../three/planets.js';
-import { PLANET_COLORS, esc, fileSize, ico } from '../util.js';
+import { planetFace, esc, fileSize, ico } from '../util.js';
 import { ask, closeAsk } from './confirm.js';
 import { memoCount } from './detailLogic.js';
 import { registerEscape } from './escape.js';
@@ -94,11 +94,11 @@ function paintPlanet() {
   const planet = isNew ? null : planetList().find((p) => String(p.id) === S.planet);
   const dot = $('svDot');
   dot.classList.toggle('new', isNew);
-  dot.style.background = planet ? (PLANET_COLORS[planet.color_index]?.face ?? '') : '';
+  dot.style.background = planet ? planetFace(planet, '') : '';
   $('svNewName').hidden = !isNew;
 }
 
-// 선택 상자를 다시 채운다. wanted가 목록에 없으면 기본값(패널의 행성 → 마지막 저장 행성 → 첫 행성 → 새 행성).
+// 선택 상자를 다시 채운다. wanted가 목록에 없으면 기본값(패널의 행성 → 미분류 → 첫 행성(옛 서버) → 새 행성).
 // 다시 골라야 하는 동안(S.pick)에는 아무것도 고르지 않은 자리('')가 맨 위에 있고, 직접 고를 때까지 그 자리에 둔다.
 function rebuildPlanets(wanted) {
   if (!S) return;
@@ -129,7 +129,6 @@ function rebuildPlanets(wanted) {
   } else if (value !== 'new' && !list.some((p) => String(p.id) === value)) {
     value = defaultPlanetId({
       panelPlanetId: store.state.panelPlanetId,
-      lastPlanetId: store.state.lastPlanetId,
       planets: list,
     });
   }

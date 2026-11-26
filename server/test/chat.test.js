@@ -260,7 +260,7 @@ describe('asking', () => {
     expect(r.body.assistant_message).toMatchObject({ role: 'assistant', content: '', status: 'running', error: null, sources: [] });
     const b = rag.bodies[0];
     expect(b).toMatchObject({ question: '요약해 줘', today: '2026-11-12', tz_offset_min: -300, excluded_planets: [hide], history: [] });
-    expect(b.planets).toEqual([{ id: keep, name: '화성' }]);
+    expect(b.planets).toEqual([{ id: 'unsorted', name: '미분류' }, { id: keep, name: '화성' }]); // 미분류도 늘 있는 행성이다
     expect(b.context).toEqual({}); // 빼 둔 행성 · 그 별의 맥락은 보내지 않는다
   });
 

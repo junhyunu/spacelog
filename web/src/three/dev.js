@@ -62,10 +62,6 @@ store.on('land', (planetId) => {
   console.log('[land]', planetId, planets.find((p) => p.id === planetId)?.name);
   store.state.panelPlanetId = planetId; // 패널이 열린 셈 치고, 멀어지면 leftPanelPlanet이 오는지 본다
 });
-store.on('pickStar', (starId) => {
-  console.log('[pickStar]', starId);
-  setSelectedStar(starId);
-});
 store.on('near', (planetId) => console.log('[near]', planetId));
 store.on('leftPanelPlanet', () => {
   console.log('[leftPanelPlanet]', store.state.panelPlanetId);

@@ -162,6 +162,43 @@ body:has(#side:not([hidden])) #period{--left-w:280px}
 @media (hover:hover){.menu button:hover:not(:disabled){background:var(--yellow)}}
 .menu button:disabled{color:#9a94bd;cursor:not-allowed}
 .lbl{font-family:var(--f-display);font-size:12px;color:var(--violet);letter-spacing:.06em}
+.lockline{font-size:13px;line-height:1.5;color:var(--mute);margin:0 0 10px}
+/* 여러 개 골라 옮기기(panel.js · homeList.js가 같이 쓴다). 체크칸 = 20px 흰 네모, 고르면 노랑 + 잉크 체크 */
+.cb{position:relative;width:20px;height:20px;flex:none;box-sizing:border-box;border:var(--line-thin) solid var(--ink);border-radius:6px;background:var(--white)}
+[aria-checked="true"] > .cb,.cb[aria-checked="true"]{background:var(--yellow)}
+[aria-checked="true"] > .cb::after,.cb[aria-checked="true"]::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--ink);border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+/* 머리의 전체 선택: 일부만 골랐으면 노랑 + 잉크 '−'(aria-checked="mixed") */
+[aria-checked="mixed"] > .cb{background:var(--yellow);display:grid;place-items:center;font:800 16px/1 var(--f-body);color:var(--ink)}
+/* 체크칸 버튼(홈 목록의 행 · 두 화면의 머리 전체 선택): 누르는 영역 36px */
+.pickcb{flex:none;width:36px;height:36px;padding:0;border:0;border-radius:10px;background:transparent;display:grid;place-items:center;cursor:pointer}
+@media (hover:hover){.pickcb:hover{background:var(--panel-2)}}
+.pickcb:focus-visible{outline:var(--line) solid var(--sky);outline-offset:1px}
+/* 아래 바: 잉크 바탕 · 노랑 굵은 개수 · 오른쪽에 [행성 옮기기](노랑) [지우기](흰 바탕 · 분홍 글자) */
+.pickbar{display:flex;align-items:center;justify-content:space-between;gap:var(--gap-3);background:var(--ink);color:var(--panel);font:600 14px var(--f-body);padding:10px 12px 10px 16px}
+.pickbar b{color:var(--yellow);font-weight:800;font-variant-numeric:tabular-nums;margin-right:1px}
+.pickbar .pk-acts{display:flex;gap:var(--gap-2);flex:none}
+.pickbar .btn{flex:none;box-shadow:none}
+.pickbar .pkdel{background:var(--white);color:var(--danger-text)}
+.pickbar .btn:disabled{background:#3a3260;color:#9a94bd}
+.pickbar .btn:focus-visible{outline-offset:2px}
+/* 두 줄 배치: 위 줄 개수, 아래 줄 두 버튼 반반(높이 44px). 우주 패널은 폭이 좁아 늘, 홈은 760px 이하에서(home.css) */
+#panel .pickbar{flex-direction:column;align-items:stretch;gap:var(--gap-2);padding:10px 12px 12px}
+#panel .pickbar .pk-acts{display:grid;grid-template-columns:1fr 1fr}
+#panel .pickbar .btn{min-height:44px}
+/* 행성 패널 고르는 중: 라벨 줄 왼쪽의 전체 선택 체크칸(행의 체크칸과 세로줄을 맞춘다) */
+.lblpick{display:flex;align-items:center;gap:6px;min-width:0}
+#panel .lblpick .pickcb{margin-left:4px}
+/* 행성 패널: 라벨 줄 오른쪽의 "여러 개 고르기" / "취소" */
+.lblrow{display:flex;align-items:center;justify-content:space-between;gap:var(--gap-2);min-height:30px}
+.pickbtn{position:relative;flex:none;font:700 12.5px var(--f-body);color:var(--ink);background:var(--panel-2);border:2px solid var(--ink);border-radius:var(--r-pill);padding:4px 11px;cursor:pointer;white-space:nowrap}
+.pickbtn::after{content:"";position:absolute;left:0;right:0;top:50%;height:44px;transform:translateY(-50%)}
+@media (hover:hover){.pickbtn:hover{background:var(--yellow)}}
+.pickbtn:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+#panel .pickbar{flex:none;border-top:var(--line) solid var(--ink)}
+/* 고르는 중의 행: 행 전체가 체크칸. ⋯이 없으니 날짜는 늘 보이고 오른쪽 여백도 줄이지 않는다 */
+.recw.pick > .rec{padding-right:10px}
+.recw.pick:is(:hover,:focus-within) .d{visibility:visible}
+.recw.pick > .rec.on{background:color-mix(in srgb,var(--yellow) 22%,var(--white))}
 .th{width:34px;height:34px;flex:none;border:2.5px solid var(--ink);border-radius:8px;background:var(--panel-2);display:grid;place-items:center;font:700 9.5px var(--f-mono);color:var(--ink);overflow:hidden;box-sizing:border-box}
 .empty{border:2.5px dashed #b7b0e0;border-radius:12px;padding:18px;text-align:center;color:var(--mute);font-size:13.5px;line-height:1.6}
 .pv{border:2.5px solid var(--ink);border-radius:12px;overflow:hidden;flex:none}

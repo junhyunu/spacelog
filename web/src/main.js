@@ -139,7 +139,7 @@ initSearch();
 // Esc 순서(escape.js): 확인 창 → 행성 꾸미기 창 → 저장 창 → 전환 건너뛰기 → 좁은 화면의 왼쪽 서랍 → 상세에서 목록 → 챗봇 창 닫기 → 패널 닫기
 setEscapeGuards({ isAskOpen, isTransitioning });
 
-// W-02 행성 패널(+ 상세). 'land' · 'openStar' · 'pickStar'로 열리고 'leftPanelPlanet'으로 닫힌다.
+// W-02 행성 패널(+ 상세). 'land' · 'openStar'로 열리고 'leftPanelPlanet'으로 닫힌다.
 initPanel();
 
 // "+ 새 행성"(#hNewPlanet · #wNewPlanet): 행성 꾸미기 창을 만들기로 연다.

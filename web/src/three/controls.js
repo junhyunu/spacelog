@@ -3,7 +3,6 @@
 //
 // store로 알리는 것:
 //   'land'            planetId   E(행성 근처) · "E" 안내 버튼 · 행성 클릭(날아가 도착한 뒤)
-//   'pickStar'        starId     별 클릭(패널이 그 행성이면 바로, 아니면 날아가 도착한 뒤)
 //   'near'            planetId | null   가까운 행성이 바뀔 때(표면에서 8 안)
 //   'leftPanelPlanet'            store.state.panelPlanetId 행성의 표면 + 14 밖으로 나갔을 때,
 //                                다른 행성으로 자동 비행을 시작할 때, 또는 그 행성이 사라졌을 때(한 번만)
@@ -112,7 +111,7 @@ function refreshOverview(force) {
 
 /* ---------- 자동 비행 ---------- */
 /**
- * 자동 비행과 도착 뒤 0.2초 기다림을 모두 끊는다. 기다리던 flyTo()는 false로 끝난다('land' · 'pickStar' 없음).
+ * 자동 비행과 도착 뒤 0.2초 기다림을 모두 끊는다. 기다리던 flyTo()는 false로 끝난다('land' 없음).
  * 비행 중이 아니면 아무 일도 하지 않는다. 던지지 않는다.
  */
 export function stopFlight() {
@@ -215,15 +214,10 @@ function pick(e) {
   ray.setFromCamera(m, camera);
   const hit = ray.intersectObjects(pickTargets(), false)[0];
   if (!hit) return;
-  const { starId, planetId } = hit.object.userData;
+  const { planetId } = hit.object.userData;
   const panelId = store.state.panelPlanetId;
   const onPanelPlanet = panelId !== null && panelId !== undefined && String(panelId) === planetId;
-  if (starId) {
-    if (onPanelPlanet) store.emit('pickStar', starId);
-    else flyTo(planetId, starId).then((ok) => ok && store.emit('pickStar', starId));
-  } else if (planetId && !onPanelPlanet) {
-    flyTo(planetId).then((ok) => ok && store.emit('land', planetId));
-  }
+  if (planetId && !onPanelPlanet) flyTo(planetId).then((ok) => ok && store.emit('land', planetId));
 }
 
 function bindInput() {
@@ -311,7 +305,7 @@ function step() {
     }
     return;
   }
-  // 날아가던(또는 막 도착한) 행성이 사라졌으면 비행을 끊는다(false, land · pickStar 없음)
+  // 날아가던(또는 막 도착한) 행성이 사라졌으면 비행을 끊는다(false, land 없음)
   if ((autopilot && !hasPlanet(autopilot.planetId)) || (arriving && !hasPlanet(arriving.planetId))) stopFlight();
   t += dt;
   refreshOverview(false);

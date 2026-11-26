@@ -24,6 +24,12 @@ const FIXED = [
   [4, -18, 6],
 ];
 
+/** 미분류 행성의 slot 값(서버와 같다). 줄 세우는 자리가 아니라 고정 자리를 뜻한다. */
+export const UNSORTED_SLOT = -1;
+
+/** 미분류 행성의 고정 좌표. 다른 자리와 조망에서 겹치지 않는다(slots.test.js). */
+export const UNSORTED_POSITION = Object.freeze([14, 3, 0]);
+
 const RING_SIZE = 8; // 고리 하나에 놓는 행성 수
 const RING_RADIUS = 80; // 첫 고리 반지름
 const RING_STEP = 28; // 고리마다 늘어나는 반지름
@@ -32,10 +38,12 @@ const RING_LIFT = 8; // 번갈아 위아래로 띄우는 높이
 const OVERVIEW_SAFETY = 1.04; // 딱 맞는 거리에 더하는 여유
 
 /**
- * n번째 자리의 좌표 [x, y, z]. n은 0부터, 상한이 없다.
+ * n번째 자리의 좌표 [x, y, z]. n은 0부터, 상한이 없다. UNSORTED_SLOT(-1)은 미분류의 고정 좌표,
+ * 그 밖의 음수는 0번으로 본다.
  * 10 이상은 가운데를 도는 고리 위: 8개씩, 고리가 차면 반지름을 28 늘리고 π/8 돌려서 다음 고리.
  */
 export function slotPosition(n) {
+  if (n === UNSORTED_SLOT) return [...UNSORTED_POSITION];
   const i0 = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
   if (i0 < FIXED.length) return [...FIXED[i0]];
   const k = Math.floor((i0 - FIXED.length) / RING_SIZE);

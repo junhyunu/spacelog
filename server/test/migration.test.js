@@ -517,3 +517,18 @@ test('v4 → v5: stars get fav (0), existing stars are kept as they were, backs 
   expect(bak.prepare("SELECT name FROM pragma_table_info('stars')").all().map((r) => r.name)).not.toContain('fav');
   bak.close();
 });
+
+test('opening a database without the unsorted planet adds exactly one, and reopening keeps one', () => {
+  const dataDir = tempDir();
+  const first = openDb(dataDir);
+  first.prepare("DELETE FROM planets WHERE id = 'unsorted'").run(); // 판 5 이지만 미분류가 없던 DB
+  first.close();
+  for (let i = 0; i < 2; i += 1) {
+    const db = openDb(dataDir);
+    const rows = db.prepare("SELECT id, name, slot FROM planets WHERE id = 'unsorted'").all();
+    expect(rows).toEqual([{ id: 'unsorted', name: '미분류', slot: -1 }]);
+    expect(db.prepare('SELECT COUNT(*) AS c FROM planets').get().c).toBe(1);
+    expect(db.pragma('user_version', { simple: true })).toBe(5);
+    db.close();
+  }
+});

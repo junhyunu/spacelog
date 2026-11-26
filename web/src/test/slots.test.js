@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { overviewDistance, slotPosition } from '../three/slots.js';
+import { UNSORTED_POSITION, UNSORTED_SLOT, overviewDistance, slotPosition } from '../three/slots.js';
 
 test('first four slots are the prototype sample positions', () => {
   expect(slotPosition(0)).toEqual([0, 0, -34]);
@@ -148,16 +148,16 @@ for (const n of COUNTS) {
 
 // Screen-space discs at the overview camera (yaw 0, pitch 0.5, looking at (0,2,-6)): each planet is a
 // disc of world radius 6 (the largest a planet grows to) at its own depth, plus a gap of 2 world units.
-function overlapping(positions, distance, pitch = 0.5) {
+function overlapping(positions, distance, pitch = 0.5, radii = []) {
   const R = 6;
   const GAP = 2;
   const sp = Math.sin(pitch);
   const cp = Math.cos(pitch);
-  const discs = positions.map(([x, y, z]) => {
+  const discs = positions.map(([x, y, z], i) => {
     const ry = y - 2;
     const rz = z + 6;
     const depth = distance - (ry * sp + rz * cp);
-    return { x: x / depth, y: (ry * cp - rz * sp) / depth, r: R / depth, gap: GAP / depth };
+    return { x: x / depth, y: (ry * cp - rz * sp) / depth, r: (radii[i] ?? R) / depth, gap: GAP / depth };
   });
   const out = [];
   for (let a = 0; a < discs.length; a++) {
@@ -181,6 +181,30 @@ for (const aspect of ASPECTS) {
     for (let n = 1; n <= 40; n++) {
       const positions = slots(n);
       expect(overlapping(positions, overviewDistance(positions, { aspect })), `${n} planets`).toEqual([]);
+    }
+  });
+}
+
+test('slotPosition(-1) is the fixed unsorted position', () => {
+  expect(UNSORTED_SLOT).toBe(-1);
+  expect(slotPosition(-1)).toEqual([14, 3, 0]);
+  expect([...UNSORTED_POSITION]).toEqual([14, 3, 0]);
+  const a = slotPosition(-1);
+  a[0] = 999;
+  expect(slotPosition(-1)).toEqual([14, 3, 0]);
+});
+
+// The unsorted planet carries a dust band, so it counts as radius/margin 10; the others stay 9 (disc radius 6).
+for (const aspect of ASPECTS) {
+  test(`unsorted planet overlaps nothing in the overview: 1 to 40 planets, aspect ${aspect.toFixed(2)}`, () => {
+    for (let n = 1; n <= 40; n++) {
+      const positions = [slotPosition(-1), ...slots(n)];
+      const d = Math.max(
+        overviewDistance(slots(n), { aspect }),
+        overviewDistance([slotPosition(-1)], { aspect, margin: 10 }),
+      );
+      expect(outside([slotPosition(-1)], d, { aspect, margin: 10 }), `${n} planets`).toEqual([]);
+      expect(overlapping(positions, d, 0.5, [10]), `${n} planets`).toEqual([]);
     }
   });
 }

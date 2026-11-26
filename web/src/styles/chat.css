@@ -36,6 +36,9 @@
 #chatHint::before{right:51px;bottom:-21px;border-width:18px 14px 0;border-top-color:var(--ink)}
 #chatHint::after{right:57px;bottom:-9px;border-width:11px 8px 0;border-top-color:var(--panel)}
 body:has(#panel:not([hidden])) #chatHint,body:has(#left.drawer) #chatHint,body.world-entering #chatHint{display:none}
+/* 여러 개 고르는 중(body.picking, starActions.js setPickingUi): 물어보기 버튼이 아래 바의 [지우기]를 덮지 않게 숨긴다. 열린 챗봇 창은 그대로 둔다.
+   버튼을 가리키는 처음 한 번 말풍선도 함께 숨긴다 */
+body.picking :is(#chatBtn,#chatHint){display:none}
 
 /* 기록하기 · 말풍선은 챗봇 버튼 왼쪽으로(스펙 7장) */
 #wLog{right:calc(var(--edge) + var(--chat-w) + var(--chat-gap) + env(safe-area-inset-right,0px));bottom:calc(16px + (var(--chat-btn) - 50px) / 2 + env(safe-area-inset-bottom,0px))}

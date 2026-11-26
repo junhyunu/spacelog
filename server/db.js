@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { buildSearchText } from './stars.js';
+import { ensureUnsorted } from './planets.js';
 
 // PRAGMA user_version 으로 스키마 판을 적는다. 0 = 15600bb 까지(별 하나가 파일 · 링크를 직접 가졌다).
 // 1 = 첨부 표(attachments). 별 하나에 첨부 여러 개(spec 6-9).
@@ -216,6 +217,7 @@ export function openDb(dataDir) {
         db.exec('UPDATE stars SET file_hash = NULL WHERE file_hash IS NOT NULL');
         rebuildSearchText(db, adopted);
       }
+      ensureUnsorted(db); // 늘 있는 미분류 행성(없으면 만든다)
       foldMemos(db); // 판 3 뒤에 옛 화면 · 옛 서버가 쓴 메모(없으면 아무 일도 없다)
     }).immediate();
     return db;
