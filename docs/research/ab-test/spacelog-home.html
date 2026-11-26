@@ -742,7 +742,8 @@ const ico = (n, z = 18) => `<svg class="i" width="${z}" height="${z}" viewBox="0
 
 /* ================= 날짜 · 기간 ================= */
 const day0 = (d, add = 0) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + add);
-const md = (d) => `${d.getMonth() + 1}월 ${d.getDate()}일`;
+// 목록의 날짜: '11.26'(앱 util.js shortDate와 같은 표기)
+const md = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const parse = (s) => { const m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(s || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; };
 
