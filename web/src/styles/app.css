@@ -152,7 +152,7 @@ body.world-entering :is(#left,#period,#wLog,#wHint,#worldMsg,#near){opacity:0;po
    왼쪽 패널(펼침 280px · 접힘 로고 버튼)과 겹치지 않게 그만큼 너비를 줄인다 */
 #period{--left-w:150px;position:fixed;top:calc(var(--edge) + env(safe-area-inset-top,0px));right:calc(var(--edge) + env(safe-area-inset-right,0px));z-index:2;display:flex;flex-direction:column;align-items:flex-end;gap:10px;max-width:calc(100vw - 2 * var(--edge) - var(--left-w) - 12px)}
 body:has(#side:not([hidden])) #period{--left-w:280px}
-#period .pbar{padding:5px;display:flex;gap:6px;row-gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;max-width:100%;box-sizing:border-box}
+#period .pbar{min-height:43px;padding:5px;display:flex;gap:6px;row-gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;max-width:100%;box-sizing:border-box}
 .seg{display:flex;gap:4px}
 /* 기간 버튼: 모서리는 바깥 카드에 맞춘 8px(카드 16 - 테두리 3 - 바 안쪽 여백 5). 알약이면 둥근 사각형 카드 안에서 곡선이 어긋난다.
    높이는 글자대로(약 28px): 바(.pbar) 안쪽 여백이 위아래 · 좌우 5px로 고르고, 바 높이가 옆의 찾기 버튼과 맞는다 */
@@ -461,7 +461,7 @@ body:has(#wResults:not([hidden])) #period{z-index:25}
 #pTools{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;max-width:100%}
 .tbtn{width:50px;height:50px;padding:0;display:grid;place-items:center;color:var(--ink);cursor:pointer;flex:none}
 /* 넓은 화면: 동그란 🔍를 기간 바와 같은 높이(43px)로 */
-#wSearchBtn{border-radius:50%;width:43px;height:43px}
+#wSearchBtn{border-radius:50%;width:43px;height:43px} /* 옆 기간 막대(.pbar)와 같은 43px */
 #wPeriodBtn{display:none}
 body.wsearch-open #wSearch{display:flex}
 @media (hover:hover){.tbtn:hover{background:var(--hover)}}
@@ -470,7 +470,7 @@ body.wsearch-open #wSearch{display:flex}
   /* 로고 옆 한 줄에 아이콘 두 개만. #period 상자가 화면 폭을 다 써도 빈 곳은 누르기를 받지 않는다(로고 버튼을 가리지 않게) */
   #period,body:has(#side:not([hidden])) #period,body:has(#range:not([hidden])) #period{top:calc(var(--edge) + env(safe-area-inset-top,0px));pointer-events:none}
   #period > *{pointer-events:auto}
-  .tbtn,#wSearchBtn{width:46px;height:46px}
+  .tbtn,#wSearchBtn{width:44px;height:44px} /* 로고 버튼(#sideOpen)과 같은 44px */
   #wSearchBtn{border-radius:var(--r-card)}
   /* 🕐 + 지금 기간 글자(예: 🕐 이번 주). 기간 바를 접어도 지금 기간이 보이게 */
   #wPeriodBtn{display:flex;width:auto;gap:6px;padding:0 14px 0 12px;font:700 14px var(--f-body);white-space:nowrap}

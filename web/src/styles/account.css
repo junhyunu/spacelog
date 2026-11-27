@@ -9,7 +9,7 @@ body:not(.signed-out) .auth-out{display:none!important}
 
 /* ---------- W-00 상단 줄: 사람 아이콘 버튼 ---------- */
 .me-btn{display:grid;place-items:center;width:44px;height:44px;padding:0;box-sizing:border-box;flex:none}
-.home-acts .me-btn{display:grid;place-items:center;width:46px;height:46px;padding:0}
+.home-acts .me-btn{display:grid;place-items:center;width:44px;height:44px;padding:0}
 @media (max-width:480px){
   .home-acts .me-btn .i{display:block} /* 좁은 화면은 버튼 아이콘을 숨기지만, 이 버튼은 아이콘이 전부다 */
   .home-acts .me-btn{width:44px;height:44px} /* 위 줄의 다른 버튼과 같은 44px */

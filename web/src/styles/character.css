@@ -23,7 +23,7 @@
 /* W-00 상단 줄: 로고 | (로그인) 또는 (기록하기 · 로그아웃 · 사람 아이콘). 자리가 모자라면 버튼 묶음이 아래 줄 오른쪽으로 내려간다 */
 .home-top{flex-wrap:wrap}
 .home-acts{display:flex;align-items:center;gap:var(--gap-3);min-width:0;margin-left:auto}
-.home-acts .btn{display:flex;align-items:center;gap:var(--gap-1)}
+.home-acts .btn{display:flex;align-items:center;gap:var(--gap-1);height:44px;box-sizing:border-box} /* 위 줄 버튼은 모두 44px(좁은 화면과 같다) */
 
 @media (max-width:760px){
   #charForm .preview{width:168px;height:168px}

@@ -41,7 +41,7 @@ body:has(#panel:not([hidden])) #chatHint,body:has(#left.drawer) #chatHint,body.w
 body.picking :is(#chatBtn,#chatHint){display:none}
 
 /* 기록하기 · 말풍선은 챗봇 버튼 왼쪽으로(스펙 7장) */
-#wLog{right:calc(var(--edge) + var(--chat-w) + var(--chat-gap) + env(safe-area-inset-right,0px));bottom:calc(16px + (var(--chat-btn) - 50px) / 2 + env(safe-area-inset-bottom,0px))}
+#wLog{right:calc(var(--edge) + var(--chat-w) + var(--chat-gap) + env(safe-area-inset-right,0px));bottom:calc(16px + (var(--chat-btn) - 50px) / 2 + env(safe-area-inset-bottom,0px));height:var(--chat-h);box-sizing:border-box;padding-top:0;padding-bottom:0} /* 옆 물어보기와 같은 높이 */
 #wHint{right:calc(var(--edge) + var(--chat-w) + var(--chat-gap) + env(safe-area-inset-right,0px));width:min(296px,calc(100vw - 2 * var(--edge) - var(--chat-w) - var(--chat-gap)))}
 /* W-00: 홈의 기록하기는 위 줄 그대로. 맨 아래 카드가 버튼에 가리지 않게 아래 여백을 넓힌다 */
 .home-wrap{padding-bottom:calc(28px + var(--chat-btn) + 16px + env(safe-area-inset-bottom,0px))}
