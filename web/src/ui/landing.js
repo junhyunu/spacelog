@@ -33,12 +33,12 @@ export const LANDING_CHARS = Object.freeze(Object.keys(KIND_KO).flatMap((k) => [
 // m = 좁은 화면의 자리(x · y %, w CSS 값). 없으면 좁은 화면에서 숨김. m.tallOnly = 좁고 낮은 화면(세로 740px 이하)에서도 숨김.
 // label = 이름표, face = 캐릭터가 바라보는 쪽(r · l), tilt = 기울기, fl = 둥실 박자
 const SLOTS = [
-  { kind: 'planet', id: 'photo', edge: true, x: '5%', y: '92%', w: 36, fl: '', m: { x: '8%', y: '96%', w: 'min(60vw,34vh)' } },
-  { kind: 'planet', id: 'travel', dx: -35, dy: -6, w: 15, fl: '', label: true, m: { x: '84%', y: '90%', w: 'min(30vw,17vh)' } },
-  { kind: 'planet', id: 'workout', dx: 33, dy: -10, w: 13, fl: 'c', label: true, m: { x: '82%', y: '19%', w: 'min(22vw,11vh)', tallOnly: true } },
-  { kind: 'planet', id: 'study', dx: 35, dy: 15, w: 15, fl: 'b', label: true },
-  { kind: 'char', id: 'astronaut-0', dx: -21, dy: 10, w: 9.5, fl: '', face: 'r', tilt: 16, m: { x: '17%', y: '18%', w: 'min(24vw,12vh)' } },
-  { kind: 'char', id: 'human-0', dx: 20, dy: 9, w: 8.5, fl: 'b', face: 'l', tilt: -12 },
+  { kind: 'planet', id: 'photo', edge: true, x: '7.4%', y: '89.3%', w: 46, fl: '', m: { x: '8%', y: '96%', w: 'min(60vw,34vh)' } },
+  { kind: 'planet', id: 'travel', dx: -32.4, dy: -9.3, w: 15, fl: '', label: true, m: { x: '84%', y: '90%', w: 'min(30vw,17vh)' } },
+  { kind: 'planet', id: 'workout', dx: 36.6, dy: -16.8, w: 13, fl: 'c', label: true, m: { x: '82%', y: '19%', w: 'min(22vw,11vh)', tallOnly: true } },
+  { kind: 'planet', id: 'study', dx: 46.9, dy: 16.5, w: 24.6, fl: 'b', label: true },
+  { kind: 'char', id: 'astronaut-0', dx: -20.4, dy: 15.9, w: 9.5, fl: '', face: 'r', tilt: 16, m: { x: '17%', y: '18%', w: 'min(24vw,12vh)' } },
+  { kind: 'char', id: 'human-0', dx: 22.3, dy: 4.5, w: 10.7, fl: 'b', face: 'l', tilt: -12 },
 ];
 let scene = null;
 let live = null;

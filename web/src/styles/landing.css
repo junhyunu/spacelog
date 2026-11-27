@@ -52,8 +52,8 @@ body.signed-out #enterBtn{font-size:17px;padding:9px 18px}
 .ls-burst{position:absolute;left:0;top:0;width:clamp(18px,calc(var(--u) * 2.2),30px);pointer-events:none;z-index:2}
 
 /* 처음 한 번 보이는 안내 말풍선: 첫 캐릭터 위, 꼬리가 아래로 */
-/* 넓은 화면: 우주인(블랙홀 가운데에서 -21u, +10u) 머리 위 */
-.ls-tip{position:absolute;left:calc(var(--cx) - 25 * var(--u));top:calc(var(--cy) + 6 * var(--u));transform:translateY(-100%);margin:0;background:#fff;color:var(--ink);border:var(--line,2px) solid var(--ink);border-radius:12px;box-shadow:0 3px 0 var(--ink);
+/* 넓은 화면: 우주인(블랙홀 가운데에서 -20.4u, +15.9u) 머리 위 */
+.ls-tip{position:absolute;left:calc(var(--cx) - 24.5 * var(--u));top:calc(var(--cy) + 12 * var(--u));transform:translateY(-100%);margin:0;background:#fff;color:var(--ink);border:var(--line,2px) solid var(--ink);border-radius:12px;box-shadow:0 3px 0 var(--ink);
   padding:6px 12px;font-weight:700;font-size:clamp(12px,1.05vw,14px);line-height:1.35;white-space:nowrap;pointer-events:none;animation:pop .22s cubic-bezier(.3,1.5,.6,1)}
 .ls-tip::after{content:"";position:absolute;left:28px;top:100%;border:8px solid transparent;border-top-color:var(--ink)}
 .ls-tip[hidden]{display:none}
