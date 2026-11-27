@@ -482,7 +482,8 @@ function renderHome(body) {
     '<div class="cp-sec"><div class="lbl">최근 대화</div>' +
     (recent.length ? `<ul class="cp-convs">${recent.map((c) => convItem(c)).join('')}</ul>` : '<p class="empty">아직 대화가 없어요</p>') +
     '</div>' +
-    `<button type="button" class="btn violet cp-new" data-act="new">${ico('message-square-plus', 18)} 새 대화</button>` +
+    // 새 대화: 탭 줄 바로 위에 붙는다(chat.css .cp-foot). 목록이 짧아도 길어도 같은 자리
+    `<div class="cp-foot"><button type="button" class="btn violet cp-new" data-act="new">${ico('message-square-plus', 18)} 새 대화</button></div>` +
     '</div>';
   body.querySelectorAll('[data-q]').forEach((b) =>
     b.addEventListener('click', () => show('thread', { id: null, question: qs[Number(b.dataset.q)] })),
@@ -496,7 +497,8 @@ function renderList(body) {
     '<div class="cp-list">' +
     (mode() === 'off' ? blockBanner() : '') +
     (convs.length ? `<ul class="cp-convs">${convs.map((c) => convItem(c, { del: true })).join('')}</ul>` : '<p class="empty">아직 대화가 없어요. 홈에서 바로 물어보세요</p>') +
-    `<button type="button" class="btn violet cp-new" data-act="new">${ico('message-square-plus', 18)} 새 대화</button>` +
+    // 새 대화: 탭 줄 바로 위에 붙는다(chat.css .cp-foot). 목록이 짧아도 길어도 같은 자리
+    `<div class="cp-foot"><button type="button" class="btn violet cp-new" data-act="new">${ico('message-square-plus', 18)} 새 대화</button></div>` +
     '</div>';
 }
 
