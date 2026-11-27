@@ -28,6 +28,7 @@ import { initDropzone } from './ui/dropzone.js';
 import { setEscapeGuards } from './ui/escape.js';
 import { initHome, renderHome } from './ui/home.js';
 import { initHud } from './ui/hud.js';
+import { initLongPress } from './ui/longPress.js';
 import { initSearch } from './ui/search.js';
 import { initTopbar } from './ui/topbar.js';
 import { initPanel } from './ui/panel.js';
@@ -142,6 +143,8 @@ setEscapeGuards({ isAskOpen, isTransitioning });
 
 // W-02 행성 패널(+ 상세). 'land' · 'openStar'로 열리고 'leftPanelPlanet'으로 닫힌다.
 initPanel();
+// 터치 화면: 목록 줄을 꾹 누르면 그 줄의 ⋯ 메뉴(홈 · 우주의 별 줄 · 행성 줄)
+initLongPress();
 
 // "+ 새 행성"(#hNewPlanet · #wNewPlanet): 행성 꾸미기 창을 만들기로 연다.
 // 저장하면 store.reload() → 'data' → 우주 안이면 3D · 목록, 밖이면 홈의 행성 목록이 다시 그려진다.

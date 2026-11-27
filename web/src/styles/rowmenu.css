@@ -22,11 +22,16 @@
 .drow:has(.more):is(:hover,:focus-within) .n,.drow:has(.more[aria-expanded="true"]) .n,
 .recw:is(:hover,:focus-within) .d,.recw:has(.more[aria-expanded="true"]) .d{visibility:hidden}
 
-/* 터치 화면: 늘 보이고, 행 오른쪽을 비워 개수 · 날짜는 그 왼쪽에 그대로 둔다 */
+/* 터치 화면: 줄을 꾹 누르면 메뉴가 열린다(longPress.js). ⋯는 화면에서만 숨기고(스크린리더 · 키보드에는 남는다),
+   고른 행성 줄(홈: 노란 줄, 우주: 지금 있는 행성)에만 보인다. 그 줄만 오른쪽을 비워 개수를 ⋯ 왼쪽에 둔다.
+   메뉴가 열린 동안에는 그 줄의 ⋯가 보인다(메뉴가 어디서 나왔는지). 꾹 누를 때 글자 선택 · iOS 기본 메뉴는 막는다 */
 @media (hover:none){
-  .drow .more,.recw .more{opacity:1;pointer-events:auto}
-  .drow:has(.more) > button[data-planet],.recw > .rec{padding-right:48px}
+  .drow .more,.recw .more,:is(.drow,.recw):is(:hover,:focus-within) .more{opacity:0;pointer-events:none}
+  .drow:has(> button:is([aria-pressed="true"],.here)) .more,:is(.drow,.recw) .more:is([aria-expanded="true"],:focus-visible){opacity:1;pointer-events:auto}
+  .drow:has(> button:is([aria-pressed="true"],.here)) > button[data-planet]{padding-right:48px}
   .drow:has(.more):is(:hover,:focus-within) .n,.recw:is(:hover,:focus-within) .d{visibility:visible}
+  .drow:has(.more[aria-expanded="true"]):not(:has(> button:is([aria-pressed="true"],.here))) .n,.recw:has(.more[aria-expanded="true"]) .d{visibility:hidden}
+  .drow,.recw{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 }
 @media (prefers-reduced-motion:reduce){.drow .more,.recw .more{transition:none}}
 

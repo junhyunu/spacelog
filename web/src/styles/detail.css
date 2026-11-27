@@ -51,6 +51,10 @@
    ✎(이름 바꾸기)는 오른쪽 버튼 줄: 우주는 ✕ 앞(34px), 홈은 이전 · 다음 앞(40px) */
 :is(#panel,#hDetail) .ttl{display:flex;align-items:center;gap:2px;min-width:0}
 :is(#panel,#hDetail) .ttl .dfav{margin-left:-8px}
+/* 제목 서체(Black Han Sans)는 글자를 줄 위쪽에 그려서 가운데 정렬만으로는 ☆가 2~3px 낮다: 글자 잉크 가운데에 맞춰 올린다(실측: 우주 19px → 2px, 홈 22px → 3px).
+   transform이 아니라 top으로(누르는 순간의 scale(press.css)과 겹치지 않게) */
+:is(#panel,#hDetail) .ttl .dfav{position:relative;top:-2px}
+#hDetail .ttl .dfav{top:-3px}
 :is(#panel,#hDetail) .ttl h2{min-width:0}
 :is(#panel,#hDetail) header .tpen{flex:none;display:grid;place-items:center;padding:0}
 
