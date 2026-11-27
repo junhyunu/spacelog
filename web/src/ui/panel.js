@@ -20,7 +20,7 @@ import { setSelectedStar } from '../three/planets.js';
 import { planetDeep, planetFace, esc, ico, listDate } from '../util.js';
 import { flushMemo, renderDetail } from './detail.js';
 import { registerEscape } from './escape.js';
-import { clearGuestStar } from './hud.js';
+import { clearGuestStar, openDrawer } from './hud.js';
 import { confirmDeletePlanet } from './planetDelete.js';
 import { openPlanetForm } from './planetForm.js';
 import { mergePlanet } from './planetMerge.js';
@@ -148,7 +148,10 @@ function listHtml(planet, stars) {
     // 꽉 찬 화면(좁은 화면)은 ← 우주로가 머리 맨 왼쪽, 그 밖에는 ✕가 오른쪽 끝
     `<header>${full ? closeBtn : ''}<div class="planet-ico" style="background:${face}" aria-hidden="true"></div>` +
     // 행성 꾸미기는 ⋯ 메뉴에서만(머리의 연필은 없앴다)
-    `<div class="hd"><h2><span class="pn">${esc(planet.name)}</span></h2>` +
+    // 꽉 찬 화면: 이름이 "이름 ▾" 버튼이 된다. 누르면 왼쪽 행성 서랍이 패널 위로 열려 다른 행성으로 바로 간다(홈의 "전체 보기 ▾"와 같은 방식)
+    (full
+      ? `<div class="hd"><h2><button type="button" class="pswitch" data-act="planets" data-focus="planets" aria-haspopup="true" aria-controls="side" aria-label="${esc(`행성 바꾸기, 지금 '${planet.name}'`)}"><span class="pn">${esc(planet.name)}</span>${ico('chevron-down', 18)}</button></h2>`
+      : `<div class="hd"><h2><span class="pn">${esc(planet.name)}</span></h2>`) +
     `<div class="sub">${esc(panelCountText({ period: store.state.period, inPeriod: stars.length, total: planet.count_total, range: store.state.range }))}</div></div>` +
     (locked ? '' : `<button type="button" class="btn x ghost" data-act="menu" data-focus="menu" aria-label="행성 메뉴" aria-expanded="${menuOpen}" aria-controls="pMenu">${ico('ellipsis')}</button>`) +
     `${full ? '' : closeBtn}</header>` +
@@ -514,6 +517,10 @@ function onClick(e) {
   const pickEl = e.target.closest('[data-pick]');
   if (pickEl) {
     if (picking) togglePicked(pickEl.dataset.pick);
+    return;
+  }
+  if (act === 'planets') {
+    openDrawer(actEl);
     return;
   }
   if (act === 'close') closePanel({ overview: true, keepPosition: true });

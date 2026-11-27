@@ -392,7 +392,13 @@ body:has(#panel:not([hidden])) #wHint{visibility:hidden}
      닫기는 머리 왼쪽의 "← 우주로"(panel.js). 토스트 · 확인 창 · 꾸미기 창은 그 위에 뜬다 */
   #panel{inset:0;width:auto;height:auto;z-index:30;border:0;border-radius:0;box-shadow:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px);box-sizing:border-box;animation:pfull .18s ease-out}
   @keyframes pfull{from{opacity:0;transform:translateY(16px)}}
-  body:has(#panel:not([hidden])) :is(#left,#period,#topHandle,#wLog,#wHint,#chatBtn,#chatHint,#wBanner){visibility:hidden}
+  body:has(#panel:not([hidden])) :is(#left:not(.drawer),#period,#topHandle,#wLog,#wHint,#chatBtn,#chatHint,#wBanner){visibility:hidden}
+  /* 머리의 "행성 이름 ▾"(panel.js)로 연 왼쪽 행성 서랍은 꽉 찬 패널 위에 뜬다 */
+  body:has(#panel:not([hidden])) #left.drawer{z-index:31}
+  #panel .pswitch{display:inline-flex;align-items:center;gap:4px;max-width:100%;min-height:44px;margin:-6px 0;padding:0 6px 0 0;border:0;border-radius:10px;background:none;font:inherit;color:inherit;letter-spacing:inherit;cursor:pointer;text-align:left}
+  #panel .pswitch .pn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #panel .pswitch .i{flex:none}
+  #panel h2:has(.pswitch){overflow:visible} /* 버튼의 초점 링이 잘리지 않게(긴 이름은 버튼 안 .pn이 …) */
   /* 패널 머리: 이름은 한 줄(넘치면 …), 아이콘 · 여백을 줄여 목록 줄을 더 보인다 */
   #panel header{padding:10px 12px 10px 14px;gap:10px}
   #panel .planet-ico{width:44px;height:44px}

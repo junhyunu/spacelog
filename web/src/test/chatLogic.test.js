@@ -17,6 +17,7 @@ import {
   panelMode,
   quickQuestions,
   savedStarSource,
+  isLongAnswer,
   relativeTime,
   shouldPollUnread,
   sourceCardModel,
@@ -322,4 +323,13 @@ describe('answerAnnouncement', () => {
     expect(answerAnnouncement({ status: 'done', content: long })).toBe(`${'가'.repeat(ANNOUNCE_MAX)}…`);
     expect(answerAnnouncement({ status: 'done', content: '' })).toBe('기록에서 찾지 못했어요.');
   });
+});
+
+describe('isLongAnswer', () => {
+  test('short answer → no', () => expect(isLongAnswer('짧은 답이에요.')).toBe(false));
+  test('empty → no', () => expect(isLongAnswer('  ')).toBe(false));
+  test('600 chars → yes', () => expect(isLongAnswer('가'.repeat(600))).toBe(true));
+  test('599 chars → no', () => expect(isLongAnswer('가'.repeat(599))).toBe(false));
+  test('12 lines → yes', () => expect(isLongAnswer(Array.from({ length: 12 }, (_, i) => `${i + 1}. 항목`).join('\n'))).toBe(true));
+  test('11 lines → no', () => expect(isLongAnswer(Array.from({ length: 11 }, (_, i) => `${i + 1}. 항목`).join('\n'))).toBe(false));
 });

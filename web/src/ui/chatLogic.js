@@ -212,3 +212,13 @@ export function answerAnnouncement(m = {}) {
   if (!t.length) return '기록에서 찾지 못했어요.';
   return t.length > ANNOUNCE_MAX ? `${t.slice(0, ANNOUNCE_MAX).join('')}…` : t.join('');
 }
+
+// 답이 길면(글자 600자 이상 또는 12줄 이상) 말풍선에 "크게 보기"를 둔다(chatRead.js). 짧은 답은 지금 모양 그대로
+export const LONG_ANSWER_CHARS = 600;
+export const LONG_ANSWER_LINES = 12;
+/** 다 만들어진 답이 "크게 보기"를 둘 만큼 긴지. */
+export function isLongAnswer(content) {
+  const t = String(content ?? '').trim();
+  if (!t) return false;
+  return t.length >= LONG_ANSWER_CHARS || t.split('\n').length >= LONG_ANSWER_LINES;
+}

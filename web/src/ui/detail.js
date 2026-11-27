@@ -192,14 +192,18 @@ const CHEVRON = (d) =>
 
 // 홈의 목록 자리에 펼쳐질 때의 머리(home.css #hDetail header): [← 목록으로] 행성 이름 · 제목 ··· [<] n / N [>]
 // 좁은 화면에서는 "목록으로"가 ← 아이콘만 남는다(이름은 aria-label로 그대로).
-// 자주 찾음 ☆(홈 목록의 ☆와 같은 모양 · 같은 값). 제목 바로 앞에 둔다
+// 자주 찾음 ☆(홈 목록의 ☆와 같은 모양 · 같은 값). 홈 · 우주 모두 두 줄(행성 이름 · 별 이름) 왼쪽에 따로 서서
+// 두 줄의 가운데에 온다(행성 점과 별 이름은 같은 왼쪽 끝). 이름을 고치는 중에는 없다(입력칸만)
 const favHtml = (star) =>
-  `<button type="button" class="sfav dfav" data-d="fav" aria-pressed="${Boolean(star.fav)}" aria-label="자주 찾음" title="자주 찾음">${ico('star', 20)}</button>`;
+  titles.is(star.id)
+    ? ''
+    : `<button type="button" class="sfav dfav" data-d="fav" aria-pressed="${Boolean(star.fav)}" aria-label="자주 찾음" title="자주 찾음">${ico('star', 20)}</button>`;
 
-// 제목 자리: ☆ + 제목. 이름을 고치는 중이면 입력칸 + [취소][저장]
-function titleHtml(star) {
+// 별 이름 줄. 이름을 고치는 중이면 입력칸 + [취소][저장]
+// 좁은 화면은 2줄까지만 보이고(detail.css), 잘렸으면 누르면 전체가 펼쳐진다(full, bindTitleToggle)
+function titleHtml(star, full = false) {
   if (titles.is(star.id)) return titleEditHtml({ bar: true, focusAttr: 'data-d', key: 'tin' });
-  return `<div class="ttl">${favHtml(star)}<h2 class="h2s">${esc(star.title || '제목 없음')}</h2></div>`;
+  return `<div class="ttl${full ? ' full' : ''}"><h2 class="h2s" data-d="title">${esc(star.title || '제목 없음')}</h2></div>`;
 }
 
 // 이름 바꾸기 ✎: 오른쪽 버튼 줄(우주는 ✕ 앞, 홈은 이전 · 다음 앞)에 같은 크기의 네모 버튼. 고치는 중에는 없다
@@ -208,14 +212,15 @@ function penHtml(star, cls) {
   return `<button type="button" class="btn ghost ${cls} tpen" data-d="rename" aria-label="이름 바꾸기" title="이름 바꾸기">${ico('pencil')}</button>`;
 }
 
-function homeHeadHtml(star, planet, home) {
+function homeHeadHtml(star, planet, home, full) {
   const face = planetFace(planet);
   const index = Number(home.index) || 0;
   const total = Number(home.total) || 0;
   return (
     `<button type="button" class="btn ghost sm back" data-d="back" aria-label="목록으로">${ico('arrow-left', 16)}<span class="bt">목록으로</span></button>` +
+    favHtml(star) +
     `<div class="hd"><div class="pname"><span class="dot" style="background:${face}"></span><span class="t">${esc(planet?.name ?? '')}</span></div>` +
-    `${titleHtml(star)}</div>` +
+    `${titleHtml(star, full)}</div>` +
     penHtml(star, 'pen') +
     `<div class="pager"><button type="button" class="btn ghost" data-d="prev" aria-label="이전 기록"${index <= 0 ? ' disabled' : ''}>${CHEVRON('m15 18-6-6 6-6')}</button>` +
     `<span aria-live="polite">${(index + 1).toLocaleString('ko-KR')} / ${total.toLocaleString('ko-KR')}</span>` +
@@ -224,18 +229,15 @@ function homeHeadHtml(star, planet, home) {
 }
 
 // split: 목록 옆 칸에 따로 열린 상세(panel.js). 목록이 옆에 보이니 ←은 없고, ✕는 상세만 닫는다
-function headHtml(star, planet, home, split = false) {
-  if (home) return homeHeadHtml(star, planet, home);
+function headHtml(star, planet, home, split = false, full = false) {
+  if (home) return homeHeadHtml(star, planet, home, full);
   const face = planetFace(planet);
   const name = planet?.name ?? '';
-  const editing = titles.is(star.id);
   return (
     (split ? '' : `<button type="button" class="btn x ghost" data-d="back" aria-label="'${esc(name)}' 목록으로">${ico('arrow-left')}</button>`) +
-    // 우주: ☆는 두 줄(행성 이름 · 별 이름) 왼쪽에 따로 서서 두 줄의 가운데에 온다. 행성 점과 별 이름은 같은 왼쪽 끝.
-    // 이름을 고치는 중에는 ☆ 없이 입력칸만
-    (editing ? '' : favHtml(star)) +
+    favHtml(star) +
     `<div class="hd"><div class="sub pname"><span class="dot" style="background:${face}"></span><span class="t">${esc(name)}</span></div>` +
-    `${editing ? titleHtml(star) : `<div class="ttl"><h2 class="h2s">${esc(star.title || '제목 없음')}</h2></div>`}</div>` +
+    `${titleHtml(star, full)}</div>` +
     penHtml(star, 'x') +
     `<button type="button" class="btn x" data-d="close" aria-label="${split ? '상세 닫기' : '닫기'}">${ico('x')}</button>`
   );
@@ -509,7 +511,7 @@ function onThumbError(img) {
 /* ---------- 그리기 ---------- */
 
 function partHtml(ctx, part) {
-  if (part === 'head') return headHtml(ctx.star, ctx.planet, ctx.home, ctx.split);
+  if (part === 'head') return headHtml(ctx.star, ctx.planet, ctx.home, ctx.split, ctx.titleFull);
   if (part === 'top') return topHtml(ctx, ctx.star);
   return bottomHtml(ctx.star, ctx.home);
 }
@@ -529,6 +531,7 @@ function bindPart(ctx, part, el) {
       done.then(() => live(ctx) && renderPart(ctx, 'head'));
     });
     titles.bind(el.querySelector('[data-tedit]'), ctx.star);
+    bindTitleToggle(ctx, el.querySelector('.ttl h2'));
   } else if (part === 'top') {
     el.querySelector('.viewer .pv.img img')?.addEventListener('error', () => onViewError(ctx));
     for (const img of el.querySelectorAll('.ith img')) img.addEventListener('error', () => onThumbError(img), { once: true });
@@ -553,6 +556,27 @@ function bindPart(ctx, part, el) {
     el.querySelector('[data-a="del"]').addEventListener('click', () => remove(ctx));
     el.querySelector('[data-a="fly"]')?.addEventListener('click', () => ctx.home?.onFly?.());
   }
+}
+
+// 좁은 화면에서 2줄로 잘린 제목: 누르면(Enter · Space도) 전체를 펼치고, 다시 누르면 접는다. 잘리지 않았으면 그냥 제목
+function bindTitleToggle(ctx, h2) {
+  if (!h2) return;
+  const clamped = h2.scrollHeight > h2.clientHeight + 1;
+  if (!clamped && !ctx.titleFull) return;
+  h2.tabIndex = 0;
+  h2.setAttribute('role', 'button');
+  h2.setAttribute('aria-expanded', String(Boolean(ctx.titleFull)));
+  h2.title = ctx.titleFull ? '제목 접기' : '제목 전체 보기';
+  const toggle = () => {
+    ctx.titleFull = !ctx.titleFull;
+    renderPart(ctx, 'head');
+  };
+  h2.addEventListener('click', toggle);
+  h2.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    toggle();
+  });
 }
 
 // 조각 하나를 다시 그린다. 내용이 같으면 그대로 둔다(이미지를 다시 받지 않고 초점도 남는다)
@@ -630,6 +654,7 @@ export function renderDetail(container, star, planet, { onBack, onClose, home = 
     handlers: { onBack, onClose },
     home,
     split,
+    titleFull: false, // 좁은 화면에서 잘린 제목을 펼쳤는지
     html: {},
     busy: false,
     moving: false,

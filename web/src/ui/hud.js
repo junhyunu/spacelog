@@ -448,7 +448,21 @@ function setSide(collapsed, { remember = false, focus = false } = {}) {
     if (el) el.inert = drawer;
   }
   if (remember && !narrow) writeKey(SIDE_KEY, sideCollapsed ? 'closed' : 'open');
-  if (focus) (sideCollapsed ? $('sideOpen') : $('sideClose')).focus({ preventScroll: true });
+  // 접힐 때 초점: 서랍을 연 버튼이 따로 있으면(꽉 찬 행성 패널의 "행성 이름 ▾") 그리로, 아니면 로고 버튼으로
+  const opener = sideCollapsed && drawerOpener?.isConnected ? drawerOpener : null;
+  if (sideCollapsed) drawerOpener = null;
+  if (focus) (sideCollapsed ? (opener ?? $('sideOpen')) : $('sideClose')).focus({ preventScroll: true });
+}
+
+let drawerOpener = null;
+/**
+ * 좁은 화면: 왼쪽 서랍(행성 목록)을 연다. 꽉 찬 행성 패널에서 다른 행성으로 바로 가게(panel.js "행성 이름 ▾").
+ * 닫으면 초점은 opener로 돌아온다. 행성을 고르면 서랍이 닫히고 그 행성으로 날아간다(onDockClick)
+ */
+export function openDrawer(opener = null) {
+  if (!narrowMq.matches || !store.state.inWorld) return;
+  drawerOpener = opener;
+  setSide(false, { focus: true });
 }
 
 /** 좁은 화면에서 왼쪽 서랍이 펼쳐져 있는지. */

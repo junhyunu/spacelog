@@ -4,7 +4,8 @@
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { esc, ico } from '../util.js';
-import { answerAnnouncement, askMeta, canSend, counterText, errorMessage, savedStarSource, sourceCardModel, titleFrom } from './chatLogic.js';
+import { answerAnnouncement, askMeta, canSend, counterText, errorMessage, isLongAnswer, savedStarSource, sourceCardModel, titleFrom } from './chatLogic.js';
+import { openRead } from './chatRead.js';
 import { toast } from './toast.js';
 
 let T = null; // 지금 그린 대화 화면 상태
@@ -257,9 +258,12 @@ function paintSources(li, m) {
     const acts = document.createElement('div');
     acts.className = 'bacts';
     // 이미 별로 띄웠으면 "띄운 별 보기 →"(누르면 그 별로 날아간다). 그 별을 지우면 서버가 null을 보내 다시 "별로 저장"이 된다
-    acts.innerHTML = savedStarSource(m)
-      ? `<button type="button" class="btn ghost sm saved" data-saved>${ico('star', 14)} 띄운 별 보기 →</button>`
-      : `<button type="button" class="btn ghost sm" data-save>${ico('star', 14)} 별로 저장</button>`;
+    // 긴 답은 앞에 "크게 보기"(chatRead.js: 넓은 화면은 가운데 읽기 창, 좁은 화면은 꽉 찬 화면)
+    acts.innerHTML =
+      (isLongAnswer(m.content) ? `<button type="button" class="btn ghost sm" data-read>${ico('maximize-2', 14)} 크게 보기</button>` : '') +
+      (savedStarSource(m)
+        ? `<button type="button" class="btn ghost sm saved" data-saved>${ico('star', 14)} 띄운 별 보기 →</button>`
+        : `<button type="button" class="btn ghost sm" data-save>${ico('star', 14)} 별로 저장</button>`);
     li.appendChild(acts);
   }
 }
@@ -462,9 +466,20 @@ function onListClick(t, e) {
     if (s) t.hooks.onSource?.(s);
     return;
   }
-  if (target.closest('[data-save]')) {
-    // 기록하기 창: 글 칸에 답 내용(쓰던 글이 있으면 덮어쓰지 않는다 — saveModal.js 규칙).
-    // 별이 실제로 생기면 'savedFromAnswer'가 와서 이 답에 잇는다(아래)
-    store.emit('openSave', { text: String(m.content ?? ''), fromAnswer: m.id });
+  if (target.closest('[data-read]')) {
+    // 크게 보기: 물어본 말은 이 답 바로 앞의 사용자 말풍선
+    const i = t.messages.indexOf(m);
+    const q = t.messages.slice(0, i).reverse().find((x) => x.role === 'user');
+    openRead(m, String(q?.content ?? '').trim(), { onSource: (s) => t.hooks.onSource?.(s), onSave: saveAnswer }, () =>
+      msgEl(t, m.id)?.querySelector('[data-read]') ?? null,
+    );
+    return;
   }
+  if (target.closest('[data-save]')) saveAnswer(m);
+}
+
+// 기록하기 창: 글 칸에 답 내용(쓰던 글이 있으면 덮어쓰지 않는다 — saveModal.js 규칙).
+// 별이 실제로 생기면 'savedFromAnswer'가 와서 이 답에 잇는다
+function saveAnswer(m) {
+  store.emit('openSave', { text: String(m.content ?? ''), fromAnswer: m.id });
 }

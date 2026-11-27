@@ -207,3 +207,34 @@ button.src{cursor:pointer}
   #chatPanel{animation:none}
   .cp-sw .knob::after,#chatBtn,#wLog{transition:none}
 }
+
+/* ---------- 긴 답 크게 보기(chatRead.js) ----------
+   넓은 화면: 뒤를 어둡게 덮고 가운데 읽기 창(폭 680px, 화면 높이 안). 좁은 화면(760px 이하): 꽉 찬 화면, 머리 왼쪽 ←.
+   기록하기 창(--z-save 43) · 확인 창보다 아래, 챗봇 창(22) · 행성 패널보다 위 */
+.bacts{gap:var(--gap-2);flex-wrap:wrap}
+#chatRead{position:fixed;inset:0;z-index:41;background:rgba(10,6,30,.6);display:grid;place-items:center;padding:24px 16px;box-sizing:border-box}
+#chatRead .cr-card{width:min(680px,100%);max-height:100%;display:flex;flex-direction:column;overflow:hidden;color:var(--ink);animation:pop .22s cubic-bezier(.3,1.5,.6,1)}
+#chatRead .cr-head{display:flex;align-items:center;gap:12px;padding:16px 16px 12px 20px;border-bottom:var(--line) solid var(--ink)}
+#chatRead .cr-hd{flex:1;min-width:0}
+#chatRead h2{margin:0;font-family:var(--f-display);font-weight:400;font-size:20px;line-height:1.2}
+#chatRead .cr-q{margin:4px 0 0;font-size:13px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#chatRead .btn.x{flex:none;width:40px;height:40px;min-height:0;padding:0;display:grid;place-items:center;background:var(--panel-2)}
+#chatRead .btn.cr-back{display:none} /* 넓은 화면은 ✕만, 좁은 화면은 ←만 */
+#chatRead .cr-body{flex:1;min-height:0;overflow-y:auto;padding:18px 24px 20px;outline:0}
+#chatRead .cr-tx{margin:0;font-size:16px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}
+#chatRead .cr-srcs:empty{display:none}
+#chatRead .cr-srcs{margin-top:20px}
+#chatRead .cr-foot{flex:none;display:flex;justify-content:flex-end;gap:var(--gap-2);flex-wrap:wrap;padding:12px 16px;border-top:var(--line) solid var(--ink);background:var(--panel-2)}
+#chatRead .cr-foot .btn{display:inline-flex;align-items:center;gap:6px;min-height:44px}
+#chatRead .cr-foot .btn:not(.ghost){background:var(--yellow)}
+#chatRead *:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+@media (max-width:760px){
+  #chatRead{padding:0;background:var(--panel)}
+  #chatRead .cr-card{width:100%;height:100%;max-height:none;border:0;border-radius:0;box-shadow:none;animation:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px);box-sizing:border-box}
+  #chatRead .cr-head{padding:10px 12px;gap:10px}
+  #chatRead .btn.cr-back{display:grid}
+  #chatRead .btn.cr-x{display:none}
+  #chatRead .cr-body{padding:16px}
+  #chatRead .cr-foot .btn{flex:1;justify-content:center}
+}
+@media (prefers-reduced-motion:reduce){#chatRead .cr-card{animation:none}}

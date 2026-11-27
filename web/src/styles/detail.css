@@ -47,18 +47,12 @@
 :is(#panel,#hDetail) .arow .acts{grid-column:1 / -1}
 :is(#panel,#hDetail) .arow .acts:empty{display:none}
 
-/* 머리의 제목 자리: ☆(자주 찾음) + 제목. ☆ 그림의 왼쪽 끝을 위 줄 행성 점에 맞춘다(버튼 36px · 그림 20px → 8px 당긴다).
+/* 머리: [←] [☆] [행성 이름 / 별 이름] ··· [✎] … ☆(자주 찾음)는 두 줄 왼쪽에 따로 서서 두 줄의 가운데(홈 · 우주 같다).
+   행성 점과 별 이름은 같은 왼쪽 끝. 그림(20px)과 버튼(36px) 사이 빈 곳만큼 양옆을 당겨 ☆ 그림 → 두 줄 간격을 6px로(머리 gap 12px − 6px).
    ✎(이름 바꾸기)는 오른쪽 버튼 줄: 우주는 ✕ 앞(34px), 홈은 이전 · 다음 앞(40px) */
-:is(#panel,#hDetail) .ttl{display:flex;align-items:center;gap:2px;min-width:0}
-:is(#panel,#hDetail) .ttl .dfav{margin-left:-8px}
-/* 제목 서체(Black Han Sans)는 글자를 줄 위쪽에 그려서 가운데 정렬만으로는 ☆가 2~3px 낮다: 글자 잉크 가운데에 맞춰 올린다(실측: 우주 19px → 2px, 홈 22px → 3px).
-   transform이 아니라 top으로(누르는 순간의 scale(press.css)과 겹치지 않게) */
-:is(#panel,#hDetail) .ttl .dfav{position:relative;top:-2px}
-#hDetail .ttl .dfav{top:-3px}
+:is(#panel,#hDetail) .ttl{min-width:0}
 :is(#panel,#hDetail) .ttl h2{min-width:0}
-/* 우주 상세: ☆는 머리에 따로 서서 두 줄(행성 이름 · 별 이름)의 가운데. 그림(20px)과 버튼(36px) 사이 빈 곳만큼 양옆을 당겨
-   ☆ 그림 → 두 줄 왼쪽 끝 간격을 6px로(머리 gap 12px − 6px) */
-#panel header > .dfav{align-self:center;margin:0 -6px 0 -8px}
+:is(#panel,#hDetail) header > .dfav{align-self:center;margin:0 -6px 0 -8px}
 :is(#panel,#hDetail) header .tpen{flex:none;display:grid;place-items:center;padding:0}
 
 /* 별 이름 바꾸기(titleEdit.js): 상세 머리 · 행성 패널 별 줄 · 홈 별 줄이 같은 입력칸을 쓴다 */
@@ -76,3 +70,23 @@
 .tedit .tcnt.bad{color:var(--danger-text);font-weight:700}
 .tedit .tebar:has(.tcnt[hidden]) .terr{margin-right:auto}
 .tedit[aria-busy="true"]{opacity:.7;cursor:progress}
+
+/* 좁은 화면(760px 이하)의 상세 머리: 두 줄(홈 상세와 같은 꼴, home.css #hDetail header).
+   [←]  ● 행성 이름        [✎][✕]
+   [☆]  별 이름(끝까지 · 2줄까지, 잘렸으면 누르면 펼침 · detail.js bindTitleToggle)
+   ←와 ☆는 같은 40px 칸, 행성 점과 별 이름은 같은 왼쪽 끝. 넓은 화면은 한 줄(☆가 두 줄의 가운데) 그대로 */
+@media (max-width:760px){
+  #panel header:has(.pname){display:grid;grid-template-columns:40px minmax(0,1fr) auto auto;grid-template-areas:"back pname pen close" "fav title title title";align-items:center;gap:var(--gap-2) 10px}
+  #panel header:has(.pname) .hd{display:contents}
+  #panel header:has(.pname) [data-d="back"]{grid-area:back;justify-self:center}
+  #panel header:has(.pname) .pname{grid-area:pname;margin:0}
+  #panel header:has(.pname) :is(.ttl,.tedit){grid-area:title}
+  #panel header:has(.pname) .tpen{grid-area:pen}
+  #panel header:has(.pname) [data-d="close"]{grid-area:close}
+  #panel header:has(.pname) .x{align-self:center}
+  #panel header:has(.pname) > .dfav{grid-area:fav;justify-self:center;margin:0}
+  #panel header:has(.tedit){grid-template-areas:"back pname pen close" "title title title title"}
+  /* 별 이름은 2줄까지. 펼치면(.full) 전부 */
+  :is(#panel,#hDetail) .ttl:not(.full) h2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
+  :is(#panel,#hDetail) .ttl h2[role="button"]{cursor:pointer}
+}

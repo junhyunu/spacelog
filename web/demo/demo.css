@@ -61,3 +61,6 @@ body.top-tucked:not(.top-peek) #period{transform:translateY(calc(-100% - var(--e
 
 /* ---------- 화면 전체를 덮는 창: 띠 아래에서 시작(띠는 그 위에 남는다) ---------- */
 #save,#planetForm,#planetDel,#charForm,#confirm,.authdlg,#dropveil{top:var(--demo-bar)}
+
+/* 크게 보기 창도 띠 아래에서 */
+#chatRead{top:var(--demo-bar)}
