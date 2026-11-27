@@ -13,6 +13,7 @@ import './styles/save.css';
 import './styles/chat.css';
 import './styles/account.css';
 import './styles/home.css';
+import './styles/landing.css';
 import './styles/select.css'; // 선택 상자 화살표: 각 창의 선택 상자 규칙 뒤에 와야 한다
 import './styles/press.css'; // 누르는 순간의 반응: 모든 부품 규칙 뒤에 와야 한다
 

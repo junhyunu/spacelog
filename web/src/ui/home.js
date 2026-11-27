@@ -19,6 +19,7 @@ import { esc, periodRange } from '../util.js';
 import { accountName, isSignedIn } from './account.js';
 import { registerEscape } from './escape.js';
 import { initHomeList, renderHomeList } from './homeList.js';
+import { initLanding } from './landing.js';
 import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
@@ -300,6 +301,7 @@ export function initHome({ enter } = {}) {
   home = $('home');
   if (typeof enter === 'function') onEnter = enter;
   scatterStars();
+  initLanding(home); // 로그인 전 첫 화면의 행성 · 캐릭터(로그인하면 숨는다)
   home.addEventListener('click', onClick);
   initMeMenu();
   // 별 제목을 누르면: 우주로 들어가 그 별로 날아간다
