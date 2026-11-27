@@ -461,7 +461,9 @@ body:has(#wResults:not([hidden])) #period{z-index:25}
 #pTools{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;max-width:100%}
 .tbtn{width:50px;height:50px;padding:0;display:grid;place-items:center;color:var(--ink);cursor:pointer;flex:none}
 /* 넓은 화면: 동그란 🔍를 기간 바와 같은 높이(43px)로 */
-#wSearchBtn{border-radius:50%;width:43px;height:43px} /* 옆 기간 막대(.pbar)와 같은 43px */
+/* 옆 기간 막대(.pbar, 43px)보다 5px 크게: 동그라미는 같은 높이면 한 단계 작아 보인다(시각 보정). 가운데 높이는 같다(#pTools align-items:center) */
+#wSearchBtn{border-radius:50%;width:48px;height:48px}
+#wSearchBtn .i{width:24px;height:24px}
 #wPeriodBtn{display:none}
 body.wsearch-open #wSearch{display:flex}
 @media (hover:hover){.tbtn:hover{background:var(--hover)}}
@@ -472,6 +474,7 @@ body.wsearch-open #wSearch{display:flex}
   #period > *{pointer-events:auto}
   .tbtn,#wSearchBtn{width:44px;height:44px} /* 로고 버튼(#sideOpen)과 같은 44px */
   #wSearchBtn{border-radius:var(--r-card)}
+  #wSearchBtn .i{width:22px;height:22px} /* 둥근 사각형이라 보정하지 않는다 */
   /* 🕐 + 지금 기간 글자(예: 🕐 이번 주). 기간 바를 접어도 지금 기간이 보이게 */
   #wPeriodBtn{display:flex;width:auto;gap:6px;padding:0 14px 0 12px;font:700 14px var(--f-body);white-space:nowrap}
   #pTools .pbar{order:3;flex:1 1 100%}

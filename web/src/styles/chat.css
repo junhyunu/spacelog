@@ -1,7 +1,7 @@
 /* 챗봇(2차 스펙 7장): 오른쪽 아래 버튼(#chatBtn) · 창(#chatPanel). 툰 규칙(DESIGN.md 2장): 잉크 테두리 · 단색 그림자, 흐림 · 빛 번짐 없음.
    쌓임: 버튼 21 · 창 22(W-00 홈 20 위, 전환 막 30 · 저장 43 · 확인 45 · 토스트 50 아래).
    행성 패널과는 겹치지 않는다: 1100px 이상은 나란히, 그 아래는 하나만(app.css · chatPanel.js). */
-:root{--chat-btn:56px;--chat-w:130px;--chat-h:46px;--chat-gap:12px;--chat-red:#ff3b3b;--chat-face:#a99fff;--chat-ball:#5b4fd6}
+:root{--chat-btn:56px;--chat-w:130px;--chat-h:46px;--chat-mini:52px;--chat-gap:12px;--chat-red:#ff3b3b;--chat-face:#a99fff;--chat-ball:#5b4fd6}
 
 /* ---------- 버튼 ---------- */
 /* 기록하기와 같은 높이(46px) · 같은 바닥선의 알약: 연보라 바탕 · 잉크 글자 · 잉크 테두리 · 단색 그림자. 왼쪽에 원자 그림(32px), 오른쪽에 "물어보기".
@@ -196,8 +196,12 @@ button.src{cursor:pointer}
   body:has(#chatPanel:not([hidden])) #chatBtn{visibility:hidden}
   /* 좁은 화면: 알약으로 나왔다가(글자를 읽을 시간) 스크롤 · 이동하거나 4초가 지나면 둥근 버튼으로 줄어든다(chatButton.js가 body.chat-mini를 단다).
      기록하기 · 말풍선은 줄어든 폭만큼 오른쪽으로 따라온다 */
-  body.chat-mini{--chat-w:var(--chat-h)}
-  body.chat-mini #chatBtn{gap:0;padding-right:4px}
+  /* 줄어든 동그라미는 기록하기(46px)보다 6px 크게(--chat-mini): 같은 높이면 작아 보인다(시각 보정). 가운데 높이는 그대로 */
+  body.chat-mini{--chat-w:var(--chat-mini)}
+  body.chat-mini #chatBtn{gap:0;padding:0;justify-content:center;height:var(--chat-mini);bottom:calc(16px + (var(--chat-btn) - 50px) / 2 - (var(--chat-mini) - var(--chat-h)) / 2 + env(safe-area-inset-bottom,0px))}
+  body.chat-mini #chatBtn .atomic{width:36px;height:36px}
+  body.chat-mini #chatBtn .atomic > .atom{width:100%;height:100%}
+  #chatBtn{transition:transform .08s,box-shadow .08s,width .22s ease,height .22s ease,bottom .22s ease}
   body.chat-mini #chatBtn .t{flex:0 0 0;width:0;opacity:0}
   #wLog{transition:right .22s ease,transform .08s,box-shadow .08s}
   body.chat-mini #chatHint::before{right:6px}
