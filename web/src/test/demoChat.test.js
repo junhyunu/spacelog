@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import { FALLBACK_INTRO, NOT_FOUND_TEXT, SUGGESTIONS, buildAnswer, matchId, normalizeQuestion, tokenize } from '../../demo/chat.js';
 import { createMockApi } from '../../demo/mockApi.js';
 import { STORAGE_ERROR_TOAST, buildSeedState, memoryAdapter, openStore } from '../../demo/store.js';
-import { quickQuestions } from '../ui/chatLogic.js';
+import { isLongAnswer, quickQuestions } from '../ui/chatLogic.js';
 
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 const ANCHOR = new Date('2026-11-27T12:00:00');
@@ -170,18 +170,23 @@ describe('준비된 질문 매칭', () => {
 });
 
 describe('대화 · 흘려 보내기', () => {
-  test('처음 상태: 켜져 있고 바로 쓸 수 있다, 미리 넣은 대화 4개 · 읽지 않음 1개', async () => {
+  test('처음 상태: 켜져 있고 바로 쓸 수 있다, 미리 넣은 대화 5개(긴 답 1개) · 읽지 않음 1개', async () => {
     const { api } = await setup();
     expect(await api.chatStatus()).toEqual({ rag: { state: 'ready', reason: null }, key: true });
     const st = await api.chatSettings();
     expect(st).toMatchObject({ enabled: true, consented: true, excluded_planets: [], key: true, rag: { state: 'ready', reason: null } });
     expect(st.index.done).toBe(st.index.total);
     const list = await api.conversations();
-    expect(list).toHaveLength(4);
+    expect(list).toHaveLength(5);
     expect(list[0]).toMatchObject({ title: '이번 달 운동 기록 요약해 줘', unread: true, running: false });
     expect(list[0].last).toMatchObject({ role: 'assistant', status: 'done' });
     expect(await api.unread()).toEqual({ count: 1 });
     const r = await api.conversation(list[0].id);
+    // 긴 답 대화: 크게 보기 기준(600자 · 12줄)을 넘는다
+    const long = list.find((c) => c.title === '3주차 회고 자세히 요약해 줘');
+    const lr = await api.conversation(long.id);
+    expect(isLongAnswer(lr.messages[1].content)).toBe(true);
+    expect(lr.messages[1].sources.map((x) => x.exists)).toEqual([true, true, true]);
     expect(r.messages[1].sources[0]).toMatchObject({ exists: true, file_name: '운동 기록.csv' });
     expect(await api.unread()).toEqual({ count: 0 });
   });
