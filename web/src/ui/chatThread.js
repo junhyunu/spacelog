@@ -4,7 +4,7 @@
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { esc, ico } from '../util.js';
-import { answerAnnouncement, askMeta, canSend, counterText, errorMessage, isLongAnswer, savedStarSource, sourceCardModel, titleFrom } from './chatLogic.js';
+import { answerAnnouncement, askMeta, canSend, counterText, errorMessage, isLongAnswer, quickQuestions, savedStarSource, sourceCardModel, titleFrom } from './chatLogic.js';
 import { openRead } from './chatRead.js';
 import { toast } from './toast.js';
 
@@ -184,7 +184,15 @@ function paintHead(t) {
 
 function paintAll(t) {
   if (!t.messages.length) {
-    t.list.innerHTML = '<p class="empty">무엇이든 물어보세요. 띄운 별에서 찾아 답해요.</p>';
+    // 빈 새 대화: 챗봇의 첫 마디 말풍선(저장되는 메시지가 아니다) + 바로 묻는 추천 질문(홈 탭과 같은 것).
+    // 첫 질문을 보내면 목록을 비우고(submit) 실제 말풍선이 그 자리에 온다
+    t.quick = quickQuestions(store.state);
+    const blocked = Boolean(t.hooks.getBlock?.());
+    t.list.innerHTML =
+      '<div class="b bot greet"><p class="tx">무엇이든 물어보세요. 띄운 별에서 찾아 답해요.</p></div>' +
+      `<div class="cp-quick ct-quick" role="group" aria-label="추천 질문">${t.quick
+        .map((q, i) => `<button type="button" class="btn ghost" data-quick="${i}"${blocked ? ' disabled' : ''}>${esc(q)}</button>`)
+        .join('')}</div>`;
     return;
   }
   t.list.textContent = '';
@@ -452,6 +460,15 @@ async function stop(t) {
 function onListClick(t, e) {
   const target = e.target instanceof Element ? e.target : null;
   if (!target) return;
+  // 빈 새 대화의 추천 질문: 입력칸에 넣고 바로 묻는다
+  const quick = target.closest('[data-quick]');
+  if (quick) {
+    if (!quick.disabled && t.quick?.[Number(quick.dataset.quick)]) {
+      t.ta.value = t.quick[Number(quick.dataset.quick)];
+      submit(t);
+    }
+    return;
+  }
   const li = target.closest('.b');
   const m = li ? t.messages.find((x) => x.id === li.dataset.id) : null;
   if (!m) return;
