@@ -118,6 +118,8 @@
 .sfav[aria-pressed="true"] svg{fill:var(--yellow)}
 /* "자주 찾음만" 보는 중에 ☆를 끈 줄: 바로 빼지 않고 흐리게 남긴다 */
 .srow.dim > :not(.c-fav){opacity:.45}
+/* 이름을 바꾸는 중인 줄: 제목 칸이 입력칸 + 저장(titleEdit.js, detail.css .tedit) */
+.srow.editing .sttl{cursor:default}
 /* ⋯: 마우스를 올리거나 키보드로 그 줄에 오면 넣은 날 칸 위에 겹쳐 나타나고 그동안 날짜는 숨는다(rowmenu.css의 .drow · .recw와 같은 규칙) */
 .srow .more{position:absolute;right:0;top:50%;transform:translateY(-50%);width:36px;height:36px;padding:0;margin:0;border:0;border-radius:10px;background:transparent;color:var(--ink);display:grid;place-items:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .1s}
 .srow .more::after{content:"";position:absolute;inset:-4px}
@@ -236,13 +238,14 @@
   #hTable .pickbar .btn{min-height:44px}
   #hDetail{padding:12px 12px 16px}
   /* 상세의 머리: "목록으로"는 ← 아이콘만(이전 · 다음과 같은 40px 네모). 이전 · 다음이 폭을 많이 써서 제목은 바로 아래 줄 전체에 둔다 */
-  #hDetail header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"back pname pager" "title title title";align-items:center;gap:var(--gap-2) 10px}
+  #hDetail header{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-areas:"back pname fav pager" "title title title title";align-items:center;gap:var(--gap-2) 10px}
   #hDetail header .back{grid-area:back;width:40px;height:40px;min-height:0;padding:0;justify-content:center}
   #hDetail header .back .bt{display:none}
   #hDetail .hd{display:contents}
   #hDetail .pname{grid-area:pname}
   #hDetail .pager{grid-area:pager}
-  #hDetail h2.h2s{grid-area:title}
+  #hDetail :is(.ttl,.tedit){grid-area:title}
+  #hDetail .dfav{grid-area:fav}
   /* [☆][제목 · 종류 ··· 날짜][⋯]: 날짜는 종류 줄 오른쪽 끝, ⋯는 늘 보인다 */
   .srow{grid-template-columns:36px minmax(0,1fr) 36px;gap:var(--gap-2)}
   .srow > .c-pl{display:none}

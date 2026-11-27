@@ -421,3 +421,18 @@ export function createMemoSaver({ save, delay = MEMO_DELAY, onState, onGone, ini
     isDirty: () => !disposed && (inflight !== null || !clean()),
   };
 }
+
+/** 별 이름 한도(코드 포인트). 서버(server/stars.js TITLE_MAX) · 체험판과 같다. */
+export const TITLE_MAX = 200;
+
+/**
+ * 이름 바꾸기 칸의 글을 저장해도 되는지. 앞뒤 공백은 뗀다(서버와 같다).
+ * @returns {{ kind: 'empty' } | { kind: 'same' } | { kind: 'ok', title: string }}
+ *   empty: 비었다(저장하지 않고 알린다) · same: 지금 이름과 같다(저장할 것 없이 끝낸다) · ok: 저장할 이름
+ */
+export function renameCheck(draft, current) {
+  const title = [...String(draft ?? '').trim()].slice(0, TITLE_MAX).join('').trim();
+  if (!title) return { kind: 'empty' };
+  if (title === String(current ?? '')) return { kind: 'same' };
+  return { kind: 'ok', title };
+}

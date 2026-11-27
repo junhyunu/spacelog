@@ -17,7 +17,9 @@ import {
   memoCount,
   openFailToast,
   groupAttachments,
+  renameCheck,
   safeHttpUrl,
+  TITLE_MAX,
 } from '../ui/detailLogic.js';
 
 describe('kindLabel', () => {
@@ -804,5 +806,21 @@ describe('chatReadsFile', () => {
   test('이미지 · 링크는 안내하지 않는다', () => {
     expect(chatReadsFile({ kind: 'image', file_ext: 'png' })).toBe(true);
     expect(chatReadsFile({ kind: 'link', url: 'https://example.com' })).toBe(true);
+  });
+});
+
+describe('renameCheck', () => {
+  test('blank or spaces only → empty', () => {
+    expect(renameCheck('', '아침 러닝')).toEqual({ kind: 'empty' });
+    expect(renameCheck('   ', '아침 러닝')).toEqual({ kind: 'empty' });
+    expect(renameCheck(null, '아침 러닝')).toEqual({ kind: 'empty' });
+  });
+  test('same as now after trimming → same', () => {
+    expect(renameCheck('  아침 러닝 ', '아침 러닝')).toEqual({ kind: 'same' });
+  });
+  test('new name is trimmed and cut to 200 code points', () => {
+    expect(renameCheck(' 저녁 러닝 ', '아침 러닝')).toEqual({ kind: 'ok', title: '저녁 러닝' });
+    const long = '가'.repeat(TITLE_MAX + 5);
+    expect(renameCheck(long, '').title).toBe('가'.repeat(TITLE_MAX));
   });
 });

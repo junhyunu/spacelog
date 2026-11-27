@@ -125,6 +125,56 @@ export function setPickingUi(on) {
   document.body.classList.toggle('picking', Boolean(on));
 }
 
+// 화면이 쥔 별과 store의 같은 별(다른 객체일 수 있다)에 값을 함께 적고, 다른 화면이 다시 그리도록 알린다
+function patchLocal(star, fields) {
+  Object.assign(star, fields);
+  const inStore = store.state.stars.find((s) => same(s.id, star.id));
+  if (inStore && inStore !== star) Object.assign(inStore, fields);
+  store.emit('starChanged', { id: String(star.id) });
+}
+
+/**
+ * 자주 찾음(☆)을 켜고 끈다. 먼저 화면을 바꾸고, 저장하지 못하면 되돌린다.
+ * 홈 목록 · 행성 패널 · 상세(홈 · 우주)가 같이 쓴다. 바뀌면 store의 'starChanged'를 알린다.
+ * onFlip(value)은 값을 적을 때마다(되돌릴 때도) 부른다: 화면이 따로 쥔 사본(홈 검색용 목록 등)을 맞출 때 쓴다.
+ * @returns {Promise<boolean>} 저장했으면 true
+ */
+export async function toggleFavStar(star, { onFlip } = {}) {
+  const next = !star.fav;
+  const flip = (value) => {
+    onFlip?.(value);
+    patchLocal(star, { fav: value });
+  };
+  flip(next);
+  try {
+    await api.patchStar(star.id, { fav: next });
+    return true;
+  } catch (err) {
+    flip(!next); // 저장하지 못했다: 되돌린다
+    if (err?.code !== 'offline') toast('자주 찾음을 바꾸지 못했어요');
+    return false;
+  }
+}
+
+/**
+ * 별 이름을 바꾼다. title은 renameCheck(detailLogic.js)를 거친 이름. 저장한 뒤에 화면을 바꾼다(실패하면 그대로).
+ * 다시 받기로 검색 목록 · 3D까지 새 이름을 쓴다. 챗봇 색인은 서버가 고친다.
+ * @returns {Promise<boolean>} 바꿨으면 true
+ */
+export async function renameStar(star, title) {
+  try {
+    await api.patchStar(star.id, { title });
+  } catch (err) {
+    if (err?.code !== 'offline') toast(err?.status === 404 ? '그 별은 지워졌어요' : '이름을 바꾸지 못했어요');
+    if (err?.status === 404) store.reload().catch(() => {});
+    return false;
+  }
+  patchLocal(star, { title });
+  toast('이름을 바꿨어요');
+  store.reload().catch(() => {});
+  return true;
+}
+
 /**
  * 지울지 묻고 지운다(상세의 "이 별 지우기"와 같은 확인 창).
  * @returns {Promise<boolean>} 지웠으면 true(이미 지워진 별도 지운 것으로 본다)

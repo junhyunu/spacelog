@@ -35,7 +35,8 @@ import {
 } from './detailLogic.js';
 import { registerEscape } from './escape.js';
 import { clearGuestStar } from './hud.js';
-import { moveCopy } from './starActions.js';
+import { moveCopy, toggleFavStar } from './starActions.js';
+import { createTitleEditor, titleEditHtml } from './titleEdit.js';
 import { toast } from './toast.js';
 
 const same = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined && String(a) === String(b);
@@ -45,6 +46,14 @@ const ledger = createMemoLedger(); // 별 id → 마지막으로 저장한 메�
 let syncs = 0; // 지금까지 온 'data' 수
 
 const live = (ctx) => current === ctx && ctx.memoEl.isConnected;
+
+// 이름 바꾸기(머리의 ✎): 제목 자리가 입력칸이 된다. 끝나면 초점은 ✎로
+const titles = createTitleEditor({
+  render: () => {
+    if (current && live(current)) renderPart(current, 'head');
+  },
+  focusAfter: () => current?.container.querySelector('[data-d="rename"]')?.focus({ preventScroll: true }),
+});
 
 /* ---------- 메모 저장 ---------- */
 
@@ -183,6 +192,19 @@ const CHEVRON = (d) =>
 
 // 홈의 목록 자리에 펼쳐질 때의 머리(home.css #hDetail header): [← 목록으로] 행성 이름 · 제목 ··· [<] n / N [>]
 // 좁은 화면에서는 "목록으로"가 ← 아이콘만 남는다(이름은 aria-label로 그대로).
+// 제목 자리: 제목 + ✎(이름 바꾸기). 고치는 중이면 입력칸 + [취소][저장]
+function titleHtml(star) {
+  if (titles.is(star.id)) return titleEditHtml({ bar: true, focusAttr: 'data-d', key: 'tin' });
+  return (
+    `<div class="ttl"><h2 class="h2s">${esc(star.title || '제목 없음')}</h2>` +
+    `<button type="button" class="ic tpen" data-d="rename" aria-label="이름 바꾸기" title="이름 바꾸기">${ico('pencil', 16)}</button></div>`
+  );
+}
+
+// 자주 찾음 ☆(홈 목록의 ☆와 같은 모양 · 같은 값)
+const favHtml = (star) =>
+  `<button type="button" class="sfav dfav" data-d="fav" aria-pressed="${Boolean(star.fav)}" aria-label="자주 찾음" title="자주 찾음">${ico('star', 20)}</button>`;
+
 function homeHeadHtml(star, planet, home) {
   const face = planetFace(planet);
   const index = Number(home.index) || 0;
@@ -190,7 +212,8 @@ function homeHeadHtml(star, planet, home) {
   return (
     `<button type="button" class="btn ghost sm back" data-d="back" aria-label="목록으로">${ico('arrow-left', 16)}<span class="bt">목록으로</span></button>` +
     `<div class="hd"><div class="pname"><span class="dot" style="background:${face}"></span><span class="t">${esc(planet?.name ?? '')}</span></div>` +
-    `<h2 class="h2s">${esc(star.title || '제목 없음')}</h2></div>` +
+    `${titleHtml(star)}</div>` +
+    favHtml(star) +
     `<div class="pager"><button type="button" class="btn ghost" data-d="prev" aria-label="이전 기록"${index <= 0 ? ' disabled' : ''}>${CHEVRON('m15 18-6-6 6-6')}</button>` +
     `<span aria-live="polite">${(index + 1).toLocaleString('ko-KR')} / ${total.toLocaleString('ko-KR')}</span>` +
     `<button type="button" class="btn ghost" data-d="next" aria-label="다음 기록"${index >= total - 1 ? ' disabled' : ''}>${CHEVRON('m9 18 6-6-6-6')}</button></div>`
@@ -204,7 +227,8 @@ function headHtml(star, planet, home) {
   return (
     `<button type="button" class="btn x ghost" data-d="back" aria-label="'${esc(name)}' 목록으로">${ico('arrow-left')}</button>` +
     `<div class="hd"><div class="sub pname"><span class="dot" style="background:${face}"></span><span class="t">${esc(name)}</span></div>` +
-    `<h2 class="h2s">${esc(star.title || '제목 없음')}</h2></div>` +
+    `${titleHtml(star)}</div>` +
+    favHtml(star) +
     `<button type="button" class="btn x" data-d="close" aria-label="닫기">${ico('x')}</button>`
   );
 }
@@ -489,6 +513,14 @@ function bindPart(ctx, part, el) {
     // 홈의 머리: 이전 · 다음
     el.querySelector('[data-d="prev"]')?.addEventListener('click', () => ctx.home?.onPrev?.());
     el.querySelector('[data-d="next"]')?.addEventListener('click', () => ctx.home?.onNext?.());
+    el.querySelector('[data-d="rename"]')?.addEventListener('click', () => titles.start(ctx.star));
+    el.querySelector('[data-d="fav"]')?.addEventListener('click', () => {
+      // 먼저 바뀐 값으로 그리고, 저장하지 못해 되돌렸으면 다시 그린다
+      const done = toggleFavStar(ctx.star);
+      if (live(ctx)) renderPart(ctx, 'head');
+      done.then(() => live(ctx) && renderPart(ctx, 'head'));
+    });
+    titles.bind(el.querySelector('[data-tedit]'), ctx.star);
   } else if (part === 'top') {
     el.querySelector('.viewer .pv.img img')?.addEventListener('error', () => onViewError(ctx));
     for (const img of el.querySelectorAll('.ith img')) img.addEventListener('error', () => onThumbError(img), { once: true });
@@ -577,6 +609,7 @@ export function renderDetail(container, star, planet, { onBack, onClose, home = 
     return;
   }
   if (current) leave(current).catch(() => {});
+  titles.clear(); // 다른 별을 연다: 고치던 이름은 버린다
 
   const saver = saverFor(id, star.body ?? '');
   const ctx = {

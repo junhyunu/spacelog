@@ -24,10 +24,11 @@ import { PAGE, countTitle, emptyState, filterStars, firstLine, markHtml, matches
 import { defaultCustom } from './hudLogic.js';
 import { confirmDeletePlanet } from './planetDelete.js';
 import { openPlanetForm } from './planetForm.js';
+import { mergePlanet, mergeTargets } from './planetMerge.js';
 import { keepPicked, moveTargets, pickAllHtml, pickAllState, pickBarHtml, pickButtonHtml, planetLocked, thumbKind, toggleAll, togglePickedId } from './planetLogic.js';
 import { openRowMenu } from './rowMenu.js';
-import { deletePickedStars, deleteStar, movePickedStars, moveStar, setPickingUi } from './starActions.js';
-import { toast } from './toast.js';
+import { deletePickedStars, deleteStar, movePickedStars, moveStar, setPickingUi, toggleFavStar } from './starActions.js';
+import { createTitleEditor, titleEditHtml } from './titleEdit.js';
 
 const $ = (id) => document.getElementById(id);
 const num = (v) => (Number(v) || 0).toLocaleString('ko-KR');
@@ -53,6 +54,11 @@ let sideOpener = null; // 서랍을 연 버튼(로고 옆 아이콘 · 행성 �
 // 여러 개 골라 옮기기(우주 행성 패널과 같은 모드 · 같은 문구). 목록이 바뀌면 보이는 줄에 남은 것만 남긴다(keepPicked)
 let picking = false;
 let pickedIds = new Set();
+// 별 ⋯ 메뉴의 "이름 바꾸기": 그 줄의 제목 칸이 입력칸이 된다(우주 행성 패널과 같은 동작). 끝나면 초점은 그 별 제목으로
+const rowEdit = createTitleEditor({
+  render: () => renderHomeList(),
+  focusAfter: (id) => $('hTable').querySelector(`[data-fk="open:${CSS.escape(id)}"]`)?.focus({ preventScroll: true }),
+});
 
 /* ---------- 그리기 ---------- */
 // 내용이 바뀌었을 때만 갈아 끼우고, 초점은 같은 것(data-fk)으로 되돌린다
@@ -157,9 +163,19 @@ function rowHtml(s, planet, q) {
       `<span class="sdate c-dt"><span class="d">${date}</span></span></div>`
     );
   }
+  const fav = `<span class="c-fav"><button type="button" class="sfav" data-a="fav" data-fk="fav:${id}" aria-pressed="${Boolean(s.fav)}" aria-label="${esc(`'${title}' 자주 찾음`)}" title="자주 찾음">${ico('star', 18)}</button></span>`;
+  if (rowEdit.is(s.id)) {
+    // 이름을 바꾸는 중: 제목 칸이 입력칸 + 저장. 행성 · 메모 · 날짜는 그대로, ⋯은 없다
+    return (
+      `<div class="srow editing" data-id="${id}">${fav}` +
+      `<div class="sttl">${thumb(s)}${titleEditHtml({ focusAttr: 'data-fk', key: `tin:${s.id}` })}</div>` +
+      `<span class="spl c-pl"><span class="dot" style="background:${faceOf(planet)}"></span><span class="t">${esc(planet?.name ?? '')}</span></span>` +
+      `<span class="smemo c-memo">${esc(note)}</span>` +
+      `<span class="sdate c-dt"><span class="d">${date}</span></span></div>`
+    );
+  }
   return (
-    `<div class="srow${S.fav && !s.fav ? ' dim' : ''}" data-id="${id}">` +
-    `<span class="c-fav"><button type="button" class="sfav" data-a="fav" data-fk="fav:${id}" aria-pressed="${Boolean(s.fav)}" aria-label="${esc(`'${title}' 자주 찾음`)}" title="자주 찾음">${ico('star', 18)}</button></span>` +
+    `<div class="srow${S.fav && !s.fav ? ' dim' : ''}" data-id="${id}">${fav}` +
     `<button type="button" class="sttl" data-a="open" data-fk="open:${id}">${thumb(s)}<span class="tx"><span class="n">${markHtml(title, q)}</span>` +
     `<span class="k"><span>${esc(contentLabel(s))}</span><span class="k-dt">${date}</span></span>${snip ? `<span class="snip">메모: ${snip}</span>` : ''}</span></button>` +
     `<span class="spl c-pl"><span class="dot" style="background:${faceOf(planet)}"></span><span class="t">${esc(planet?.name ?? '')}</span></span>` +
@@ -231,6 +247,8 @@ function paintTable(planets, stars, list) {
   if (picking) html += pickBarHtml({ count: pickedIds.size, canMove: moveTargets(stars.filter((s) => pickedIds.has(String(s.id))), planets).length > 0, focusAttr: 'data-fk' });
   $('hTable').classList.toggle('picking', picking);
   swap($('hTable'), html);
+  const group = $('hTable').querySelector('.srow.editing [data-tedit]');
+  if (group) rowEdit.bind(group, stars.find((s) => rowEdit.is(s.id)));
 }
 
 /** 행성 패널 · 거르기 줄 · 목록을 지금 상태로 다시 그린다. */
@@ -243,6 +261,7 @@ export function renderHomeList() {
   const list = shownList(planets, stars);
   if (S.detail !== null && !list.some((s) => same(s.id, S.detail))) S.detail = null; // 보던 별이 목록에서 빠졌다(지움 · 옮김 · 기간)
   if (picking) pickedIds = keepPicked(pickedIds, pageOf(list, S.limit).rows); // 보이는 줄에서 사라진 별(거르기 · 옮김 · 지움 · 기간)은 선택에서 뺀다
+  if (rowEdit.active && (picking || S.detail !== null || !pageOf(list, S.limit).rows.some((s) => rowEdit.is(s.id)))) rowEdit.clear(); // 고치던 줄이 안 보인다
   paintPeriod();
   paintSide(planets, stars);
   const selPlanet = S.planet === 'all' ? null : planets.find((p) => same(p.id, S.planet));
@@ -416,31 +435,37 @@ async function deletePicked() {
 }
 
 /* ---------- 누르기 ---------- */
-async function toggleFav(star) {
-  const next = !star.fav;
-  const id = String(star.id);
-  const set = (value) => {
-    star.fav = value;
-    const cached = all?.find((s) => same(s.id, id));
-    if (cached) cached.fav = value;
-  };
-  set(next);
-  if (S.fav && !next) keep.add(id);
-  else keep.delete(id);
-  renderHomeList();
-  try {
-    await api.patchStar(star.id, { fav: next });
-  } catch (err) {
-    set(!next); // 저장하지 못했다: 되돌린다
-    keep.delete(id);
-    renderHomeList();
-    if (err?.code !== 'offline') toast('자주 찾음을 바꾸지 못했어요');
+// ☆: 우주의 행성 패널 · 상세와 같이 쓴다(starActions.js). 다시 그리기 · 흐리게 남기기는 'starChanged'에서 한다
+function toggleFav(star) {
+  keep.delete(String(star.id));
+  toggleFavStar(star);
+}
+
+// 별 ☆ · 이름이 바뀌었다(이 목록 · 상세 · 우주 어디서든)
+function onStarChanged({ id } = {}) {
+  const star = store.state.stars.find((s) => same(s.id, id));
+  if (star) {
+    const cached = all?.find((s) => same(s.id, id)); // 검색용 목록도 맞춘다
+    if (cached && cached !== star) Object.assign(cached, { fav: star.fav, title: star.title });
+    if (S.fav && !star.fav) keep.add(String(star.id)); // "자주 찾음만" 보는 중에 끈 별: 바로 빼지 않고 흐리게 남긴다
   }
+  const home = $('home');
+  if (!store.state.inWorld && !home.hidden && !home.inert) renderHomeList();
+}
+
+// 행성 합치기(우주 행성 패널 메뉴와 같은 창). 보던 행성을 합쳤으면 받은 행성으로 거르기를 옮긴다(옮겨 간 별이 바로 보이게)
+async function mergeFromHome(planet) {
+  const into = await mergePlanet(planet);
+  if (!into || !same(S.planet, planet.id)) return;
+  S.planet = into;
+  S.detail = null;
+  refilter();
 }
 
 function openStarMenu(button, star) {
   const others = store.state.planets.filter((p) => !same(p.id, star.planet_id));
   openRowMenu(button, `'${star.title || '제목 없음'}' 별 메뉴`, [
+    { key: 'rename', label: '이름 바꾸기', run: () => rowEdit.start(star) },
     { key: 'move', label: '행성 옮기기', disabled: others.length === 0, run: () => moveStar(star, others).then((moved) => moved && renderHomeList()) },
     { key: 'del', label: '지우기', danger: true, run: () => deleteStar(star).then((gone) => gone && renderHomeList()) },
   ]);
@@ -452,6 +477,7 @@ function openPlanetMenu(button) {
   openRowMenu(button, `'${planet.name}' 행성 메뉴`, [
     // 좁은 화면: 서랍을 닫고 창을 띄운다(초점이 펼치기 버튼으로 간다 → 창을 닫으면 거기로 돌아온다)
     { key: 'edit', label: '꾸미기', run: () => { setSide(false); openPlanetForm({ planet }); } },
+    { key: 'merge', label: '다른 행성과 합치기', disabled: mergeTargets(planet).length === 0, run: () => { setSide(false); mergeFromHome(planet); } },
     { key: 'del', label: '지우기', danger: true, run: () => { setSide(false); confirmDeletePlanet(planet, store.state.planets.filter((p) => !same(p.id, planet.id))); } },
   ]);
 }
@@ -476,6 +502,7 @@ function onDockClick(e) {
 }
 
 function onTableClick(e) {
+  if (e.target instanceof Element && e.target.closest('[data-tedit]')) return; // 이름 입력칸 · 저장은 titleEdit.js가 받는다
   const el = e.target instanceof Element ? e.target.closest('button') : null;
   // 고르는 중: 줄(체크칸 · 제목 · 빈 자리) 어디를 눌러도 고르기 · 풀기
   if (picking && !el?.dataset.act) {
@@ -654,6 +681,7 @@ export function initHomeList({ openStar } = {}) {
     $('hTable').classList.remove('picking');
     if (!store.state.inWorld && !$('home').hidden) renderHomeList();
   });
+  store.on('starChanged', onStarChanged);
   store.on('data', () => {
     all = null; // 받아 둔 모든 별은 낡았다
     // 우주 밖에 있고 전환 중(inert)이 아닐 때만(빨려 들어가는 중인 요소를 갈아 끼우지 않게)
