@@ -54,6 +54,7 @@ body.top-tucked:not(.top-peek) #period{transform:translateY(calc(-100% - var(--e
   #left.drawer #side{top:var(--demo-bar)}
   /* 전체 화면이 되는 것들: 위 끝을 띠 아래로 */
   #chatPanel{top:var(--demo-bar)}
+  #panel{top:var(--demo-bar);padding-top:0}
   body.wsearch-open #wSearch{top:var(--demo-bar)}
   body.wsearch-open #wResults{height:calc(100dvh - 66px - var(--demo-bar) - env(safe-area-inset-top,0px))}
 }

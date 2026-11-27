@@ -475,10 +475,10 @@ function openPlanetMenu(button) {
   const planet = store.state.planets.find((p) => same(p.id, button.dataset.more));
   if (!planet || planetLocked(planet)) return;
   openRowMenu(button, `'${planet.name}' 행성 메뉴`, [
-    // 좁은 화면: 서랍을 닫고 창을 띄운다(초점이 펼치기 버튼으로 간다 → 창을 닫으면 거기로 돌아온다)
-    { key: 'edit', label: '꾸미기', run: () => { setSide(false); openPlanetForm({ planet }); } },
-    { key: 'merge', label: '다른 행성과 합치기', disabled: mergeTargets(planet).length === 0, run: () => { setSide(false); mergeFromHome(planet); } },
-    { key: 'del', label: '지우기', danger: true, run: () => { setSide(false); confirmDeletePlanet(planet, store.state.planets.filter((p) => !same(p.id, planet.id))); } },
+    // 좁은 화면: 서랍은 연 채로 창을 띄운다(창이 서랍 위에 뜬다). 닫으면 초점이 그 줄의 ⋯로 돌아온다
+    { key: 'edit', label: '꾸미기', run: () => openPlanetForm({ planet }) },
+    { key: 'merge', label: '다른 행성과 합치기', disabled: mergeTargets(planet).length === 0, run: () => mergeFromHome(planet) },
+    { key: 'del', label: '지우기', danger: true, run: () => confirmDeletePlanet(planet, store.state.planets.filter((p) => !same(p.id, planet.id))) },
   ]);
 }
 

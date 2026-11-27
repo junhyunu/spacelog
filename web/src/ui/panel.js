@@ -54,6 +54,8 @@ const panelEl = () => $('panel');
 // 그때 #panel은 투명한 틀이 되고 안에 [상세 칸 .pdet][목록 칸 .plist] 두 카드가 선다(app.css #panel.split).
 // 챗봇 창이 열렸거나 좁은 화면이면 지금처럼 한 칸: 상세가 목록 자리를 바꾼다
 const splitMq = typeof matchMedia === 'function' ? matchMedia('(min-width: 1100px)') : { matches: false };
+// 좁은 화면(760px 이하): 패널이 화면을 꽉 채운다(app.css). 닫기는 머리 왼쪽의 ← "우주로"
+const narrowMq = typeof matchMedia === 'function' ? matchMedia('(max-width: 760px)') : { matches: false };
 const chatOpen = () => Boolean($('chatPanel') && !$('chatPanel').hidden);
 const wantSplit = () => view === 'detail' && splitMq.matches && !chatOpen();
 
@@ -138,13 +140,18 @@ function listHtml(planet, stars) {
       );
     })
     .join('');
+  const full = narrowMq.matches;
+  const closeBtn = full
+    ? `<button type="button" class="btn x ghost" data-act="close" data-focus="close" aria-label="우주로 돌아가기" title="우주로">${ico('arrow-left')}</button>`
+    : `<button type="button" class="btn x" data-act="close" data-focus="close" aria-label="닫기">${ico('x')}</button>`;
   return (
-    `<header><div class="planet-ico" style="background:${face}" aria-hidden="true"></div>` +
+    // 꽉 찬 화면(좁은 화면)은 ← 우주로가 머리 맨 왼쪽, 그 밖에는 ✕가 오른쪽 끝
+    `<header>${full ? closeBtn : ''}<div class="planet-ico" style="background:${face}" aria-hidden="true"></div>` +
     // 행성 꾸미기는 ⋯ 메뉴에서만(머리의 연필은 없앴다)
     `<div class="hd"><h2><span class="pn">${esc(planet.name)}</span></h2>` +
     `<div class="sub">${esc(panelCountText({ period: store.state.period, inPeriod: stars.length, total: planet.count_total, range: store.state.range }))}</div></div>` +
     (locked ? '' : `<button type="button" class="btn x ghost" data-act="menu" data-focus="menu" aria-label="행성 메뉴" aria-expanded="${menuOpen}" aria-controls="pMenu">${ico('ellipsis')}</button>`) +
-    `<button type="button" class="btn x" data-act="close" data-focus="close" aria-label="닫기">${ico('x')}</button></header>` +
+    `${full ? '' : closeBtn}</header>` +
     (menuOpen && !locked
       ? '<div class="menu" id="pMenu">' +
         '<button type="button" data-m="edit" data-focus="m:edit">행성 꾸미기</button>' +
@@ -617,6 +624,8 @@ export function initPanel() {
   store.on('chatOpened', relayout);
   store.on('chatClosed', relayout);
   splitMq.addEventListener?.('change', relayout);
+  // 꽉 찬 화면 ↔ 떠 있는 패널: 목록 머리의 닫기 버튼(← / ✕)을 바꿔 그린다
+  narrowMq.addEventListener?.('change', () => planetId !== null && renderPanel());
 
   // Esc: 상세에서 목록(30) → 패널 닫기(20, 메뉴가 열려 있으면 메뉴부터, 고르는 중이면 고르기부터 끝낸다)
   registerEscape(30, () => {
