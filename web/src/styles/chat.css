@@ -93,7 +93,11 @@ body:has(#left.drawer) #chatBtn{visibility:hidden}
 .cp-foot .cp-new{width:100%;margin:0}
 .cp-quick{display:flex;flex-wrap:wrap;gap:8px}
 /* 빈 새 대화: 첫 마디 말풍선 아래 추천 질문(chatThread.js). 말풍선 왼쪽 끝에 맞춘다 */
-.ct-quick{align-self:stretch}
+.ct-quick{align-self:stretch;gap:12px 6px} /* 줄 사이 12px: 위아래로 6px씩 넓힌 누르는 범위(::after)가 옆 줄 칩과 겹치지 않게 */
+/* 새 대화의 추천 질문은 말풍선보다 한 단계 아래: 투명 바탕 · 얇고 연한 테두리 · 작은 보라 글자. 누르는 범위는 44px(::after) */
+.cp-quick.ct-quick .btn,.cp-quick.ct-quick .btn:not(:disabled){position:relative;min-height:32px;padding:3px 12px;font-size:12.5px;font-weight:600;color:var(--violet-text);background:transparent;border:1.5px solid #d6d1f2}
+.ct-quick .btn::after{content:"";position:absolute;inset:-6px 0}
+@media (hover:hover){.cp-quick.ct-quick .btn.ghost:hover:not(:disabled){background:var(--white);color:var(--ink)}}
 /* 추천 질문: 가로로 흐르는 둥근 칩(흰 바탕 · 얇은 연보라 테두리 · 그림자 없음). "바로 묻기"라 아래 대화 줄과 모양을 나눈다 */
 .cp-quick .btn{text-align:left;white-space:normal;overflow-wrap:anywhere;font-size:13.5px;font-weight:700;min-height:40px;padding:6px 14px;border-radius:var(--r-pill);border:var(--line-row) solid var(--row-line);box-shadow:none}
 .cp-quick .btn:not(:disabled){background:var(--white)}
