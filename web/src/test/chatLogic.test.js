@@ -104,6 +104,7 @@ describe('sourceCardModel', () => {
     const m = sourceCardModel(
       { star_id: 's1', exists: true, title: 'MCP가 뭐더라', planet_id: 'p1', created_at: new Date(2026, 10, 11).toISOString(), file_name: 'a.pdf' },
       planets,
+      new Date(2026, 10, 20),
     );
     expect(m).toEqual({ title: 'MCP가 뭐더라', color: '#5ec8ff', date: '11.11', file: 'a.pdf', gone: false });
   });
@@ -189,7 +190,7 @@ describe('relativeTime', () => {
   test('yesterday', () => expect(relativeTime(new Date(2026, 10, 12, 23, 0).toISOString(), new Date(2026, 10, 13, 9, 0))).toBe('어제'));
   test('days', () => expect(relativeTime(new Date(2026, 10, 9, 12, 0).toISOString(), now)).toBe('4일 전'));
   test('older → date', () => expect(relativeTime(new Date(2026, 9, 1).toISOString(), now)).toBe('10.01'));
-  test('another year', () => expect(relativeTime(new Date(2025, 9, 1).toISOString(), now)).toBe('2025.10.01'));
+  test('another year', () => expect(relativeTime(new Date(2025, 9, 1).toISOString(), now)).toBe('25.10.01'));
   test('bad → 미확인', () => expect(relativeTime('nope', now)).toBe('미확인'));
 });
 

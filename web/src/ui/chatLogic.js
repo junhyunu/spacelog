@@ -1,5 +1,5 @@
 // 챗봇 화면의 순수 함수(테스트 대상). DOM을 건드리지 않는다.
-import { planetFace, shortDate } from '../util.js';
+import { listDate, planetFace, shortDate } from '../util.js';
 
 export const QUESTION_MAX = 2000; // 서버(chat.js QUESTION_MAX)와 같다. 코드 포인트로 센다
 export const COUNTER_FROM = 1800; // 이만큼부터 글자 수를 보여 준다
@@ -55,14 +55,14 @@ export function failedLine(index) {
 }
 
 /** 출처 카드에 그릴 것. gone이면 흐리게, 누를 수 없다. */
-export function sourceCardModel(source, planets = []) {
+export function sourceCardModel(source, planets = [], now = new Date()) {
   const gone = source?.exists !== true;
   const planet = gone ? null : planets.find((p) => same(p.id, source.planet_id));
   const title = gone ? '지워진 별' : String(source.title ?? '').trim() || '제목 없음';
   return {
     title,
     color: planetFace(planet, MUTE),
-    date: gone || !has(source.created_at) ? '' : shortDate(source.created_at),
+    date: gone || !has(source.created_at) ? '' : listDate(source.created_at, now),
     file: has(source?.file_name) ? String(source.file_name) : '',
     gone,
   };
@@ -119,7 +119,7 @@ export function relativeTime(iso, now = new Date()) {
   if (days <= 0) return `${Math.floor(diff / 3600_000)}시간 전`;
   if (days === 1) return '어제';
   if (days < 7) return `${days}일 전`;
-  if (d.getFullYear() !== now.getFullYear()) return `${d.getFullYear()}.${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`;
+  if (d.getFullYear() !== now.getFullYear()) return `${String(d.getFullYear()).slice(-2)}.${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`; // 별 목록(listDate)과 같은 '25.11.11'
   return `${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`;
 }
 

@@ -146,6 +146,21 @@ initPanel();
 // 터치 화면: 목록 줄을 꾹 누르면 그 줄의 ⋯ 메뉴(홈 · 우주의 별 줄 · 행성 줄)
 initLongPress();
 
+// 날이 바뀌면(켜 둔 채 자정을 넘김 · 오래 둔 탭으로 돌아옴) 'dayChanged': 목록의 "오늘 · 어제 · n일 전"을 다시 그린다(util.js listDate)
+{
+  let day = new Date().toDateString();
+  const checkDay = () => {
+    const now = new Date().toDateString();
+    if (now === day) return;
+    day = now;
+    store.emit('dayChanged');
+  };
+  setInterval(checkDay, 60_000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) checkDay();
+  });
+}
+
 // "+ 새 행성"(#hNewPlanet · #wNewPlanet): 행성 꾸미기 창을 만들기로 연다.
 // 저장하면 store.reload() → 'data' → 우주 안이면 3D · 목록, 밖이면 홈의 행성 목록이 다시 그려진다.
 store.on('newPlanet', () => openPlanetForm({}));

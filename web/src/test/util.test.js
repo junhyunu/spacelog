@@ -13,6 +13,7 @@ import {
   ico,
   isUnsorted,
   periodRange,
+  listDate,
   shortDate,
 } from '../util.js';
 
@@ -104,8 +105,21 @@ describe('dates', () => {
     expect(daysAgo(localIso(2026, 11, 12, 1, 0), new Date(2026, 10, 11, 23, 0))).toBe(0);
   });
   test('fullDate joins the local date and the day count', () => {
-    expect(fullDate(localIso(2026, 11, 11, 8, 0), NOW)).toBe('2026-11-11 · 0일 전');
+    expect(fullDate(localIso(2026, 11, 11, 8, 0), NOW)).toBe('2026-11-11 · 오늘');
+    expect(fullDate(localIso(2026, 11, 10, 8, 0), NOW)).toBe('2026-11-10 · 어제');
     expect(fullDate(localIso(2026, 11, 1, 8, 0), NOW)).toBe('2026-11-01 · 10일 전');
+  });
+  test('listDate: 오늘 · 어제 · n일 전 (2~6) · 월.일 · 다른 해는 yy.월.일', () => {
+    const now = new Date(2026, 10, 11, 0, 1);
+    expect(listDate(localIso(2026, 11, 11, 0, 0), now)).toBe('오늘');
+    expect(listDate(localIso(2026, 11, 10, 23, 59), now)).toBe('어제');
+    expect(listDate(localIso(2026, 11, 9, 12, 0), now)).toBe('2일 전');
+    expect(listDate(localIso(2026, 11, 5, 12, 0), now)).toBe('6일 전');
+    expect(listDate(localIso(2026, 11, 4, 12, 0), now)).toBe('11.04');
+    expect(listDate(localIso(2026, 1, 3, 12, 0), now)).toBe('01.03');
+    expect(listDate(localIso(2025, 12, 31, 12, 0), now)).toBe('25.12.31');
+    expect(listDate(localIso(2026, 11, 12, 1, 0), now)).toBe('오늘'); // 앞날
+    expect(listDate('nope', now)).toBe('');
   });
 });
 

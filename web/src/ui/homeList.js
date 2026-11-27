@@ -16,7 +16,7 @@
 //   Esc · "목록으로"로 돌아오면 보던 스크롤 자리로 돌아간다. 상세의 "우주에서 보기"는 initHomeList의 openStar(star)를 부른다.
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { planetDeep, planetFace, esc, ico, shortDate } from '../util.js';
+import { planetDeep, planetFace, esc, ico, listDate } from '../util.js';
 import { flushMemo, renderDetail } from './detail.js';
 import { contentLabel } from './detailLogic.js';
 import { registerEscape } from './escape.js';
@@ -146,7 +146,7 @@ function paintSide(planets, stars) {
 function rowHtml(s, planet, q) {
   const id = esc(s.id);
   const title = s.title || '제목 없음';
-  const date = esc(shortDate(s.created_at));
+  const date = esc(listDate(s.created_at));
   // 메모에서 찾았으면 그 낱말 둘레의 한 줄(왜 나왔는지 알게). 못 찾았으면 메모 첫 줄
   const snip = snipHtml(s.body, q) ?? snipHtml(s.memo, q);
   const note = firstLine(s.body);
@@ -682,6 +682,7 @@ export function initHomeList({ openStar } = {}) {
     if (!store.state.inWorld && !$('home').hidden) renderHomeList();
   });
   store.on('starChanged', onStarChanged);
+  store.on('dayChanged', () => renderHomeList()); // 목록 날짜(오늘 · 어제 …)를 새 날 기준으로
   store.on('data', () => {
     all = null; // 받아 둔 모든 별은 낡았다
     // 우주 밖에 있고 전환 중(inert)이 아닐 때만(빨려 들어가는 중인 요소를 갈아 끼우지 않게)

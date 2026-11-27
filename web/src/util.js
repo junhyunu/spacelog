@@ -123,11 +123,27 @@ export function daysAgo(iso, now = new Date()) {
   return Math.max(0, Math.round((b - a) / 86400000));
 }
 
-/** '2026-11-11 · 0일 전' */
+// 지난 날 수를 말로: 0 → 오늘, 1 → 어제, 그 밖은 n일 전
+const agoText = (days) => (days === 0 ? '오늘' : days === 1 ? '어제' : `${days}일 전`);
+
+/**
+ * 목록의 날짜(홈 별 목록 · 행성 패널 · 챗봇 출처 카드). 현지 달력 기준.
+ * 오늘 · 어제 · 2~6일 전은 "n일 전", 그 뒤로는 올해면 "11.11", 다른 해면 "25.11.11". 앞날(시계 차이)은 "오늘"
+ */
+export function listDate(iso, now = new Date()) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const days = daysAgo(iso, now);
+  if (days < 7) return agoText(days);
+  const md = `${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`;
+  return d.getFullYear() === now.getFullYear() ? md : `${String(d.getFullYear()).slice(-2)}.${md}`;
+}
+
+/** '2026-11-11 · 오늘' · '2026-11-10 · 어제' · '2026-11-01 · 10일 전' (별 상세) */
 export function fullDate(iso, now = new Date()) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '날짜 미확인';
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} · ${daysAgo(iso, now)}일 전`;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} · ${agoText(daysAgo(iso, now))}`;
 }
 
 /* ---------- 행성 모습 ---------- */

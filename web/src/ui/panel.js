@@ -17,7 +17,7 @@ import { api } from '../api.js';
 import { store } from '../store.js';
 import { enterOverview } from '../three/controls.js';
 import { setSelectedStar } from '../three/planets.js';
-import { planetDeep, planetFace, esc, ico, shortDate } from '../util.js';
+import { planetDeep, planetFace, esc, ico, listDate } from '../util.js';
 import { flushMemo, renderDetail } from './detail.js';
 import { registerEscape } from './escape.js';
 import { clearGuestStar } from './hud.js';
@@ -124,7 +124,7 @@ function listHtml(planet, stars) {
         return (
           '<div class="recw pick">' +
           `<button type="button" class="rec${on ? ' on' : ''}" role="checkbox" aria-checked="${on}" data-pick="${esc(s.id)}" data-focus="pick:${esc(s.id)}">` +
-          `<span class="cb" aria-hidden="true"></span>${thumb(s)}<span class="t">${esc(title)}</span>${clip(s)}<span class="d">${esc(shortDate(s.created_at))}</span></button></div>`
+          `<span class="cb" aria-hidden="true"></span>${thumb(s)}<span class="t">${esc(title)}</span>${clip(s)}<span class="d">${esc(listDate(s.created_at))}</span></button></div>`
         );
       }
       // 줄 맨 앞의 자주 찾음 ☆(홈 목록과 같은 모양 · 같은 값)
@@ -135,7 +135,7 @@ function listHtml(planet, stars) {
         // 한 행 = ☆ + 상세 열기 버튼 + ⋯ 버튼. ⋯은 마우스를 올리거나 키보드로 오면 날짜 자리에 나타난다(터치는 늘)
         `<div class="recw fv">${fav}` +
         `<button type="button" class="rec${fresh ? ' new' : ''}" data-id="${esc(s.id)}" data-focus="star:${esc(s.id)}"${cur}>` +
-        `${thumb(s)}<span class="t">${esc(s.title || '제목 없음')}</span>${clip(s)}<span class="d">${esc(shortDate(s.created_at))}</span></button>` +
+        `${thumb(s)}<span class="t">${esc(s.title || '제목 없음')}</span>${clip(s)}<span class="d">${esc(listDate(s.created_at))}</span></button>` +
         `<button type="button" class="more" data-more-star="${esc(s.id)}" data-focus="more:${esc(s.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(`'${s.title || '제목 없음'}' 별 메뉴`)}" title="별 메뉴">${ico('ellipsis', 18)}</button></div>`
       );
     })
@@ -609,6 +609,7 @@ export function initPanel() {
   });
   // ☆ · 이름이 바뀌었다(이 패널 · 상세 · 홈 어디서든): 다시 그린다
   store.on('starChanged', () => renderPanel());
+  store.on('dayChanged', () => renderPanel()); // 목록 날짜(오늘 · 어제 …)를 새 날 기준으로
   store.on('data', () => {
     if (!store.state.inWorld) closePanel();
     else {

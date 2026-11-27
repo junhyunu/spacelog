@@ -262,9 +262,8 @@ body{word-break:keep-all}
 .th{color:var(--ink)}
 .na{color:#8a84ad}
 #panel{--accent:var(--violet)}
-#panel .lbl{color:var(--violet-text)} /* 라벨은 앱 전체에서 한 색. 행성 색(--accent)은 행성 아이콘 둘레 · 포커스 링에만 */
+#panel .lbl{color:var(--violet-text)} /* 라벨은 앱 전체에서 한 색. 행성 색(--accent)은 포커스 링에만(행성 아이콘 둘레의 색 고리는 뺐다) */
 #panel *:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-#panel .planet-ico{box-shadow:inset -8px -8px 0 rgba(0,0,0,.18),0 0 0 3px var(--panel),0 0 0 6px var(--accent)}
 
 /* confirm */
 #confirm{position:fixed;inset:0;z-index:45;background:rgba(10,6,30,.6);display:grid;place-items:center;padding:16px}
@@ -397,6 +396,8 @@ body:has(#panel:not([hidden])) #wHint{visibility:hidden}
   /* 패널 머리: 이름은 한 줄(넘치면 …), 아이콘 · 여백을 줄여 목록 줄을 더 보인다 */
   #panel header{padding:10px 12px 10px 14px;gap:10px}
   #panel .planet-ico{width:44px;height:44px}
+  /* 목록 머리: 이름이 한 줄이라 버튼(← · ⋯)도 행성 아이콘 · 이름과 같은 세로 가운데에 둔다(넓은 화면은 이름이 두 줄이 될 수 있어 위에 붙인다) */
+  #panel header:has(> .planet-ico) .x{align-self:center}
   #panel h2:not(.h2s){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
 /* 기간 버튼 4개(전체 · 오늘 · 이번 주 · 직접 지정): 좁은 폰에서는 버튼을 조금 줄여 로고 옆 한 줄에 넣고,
