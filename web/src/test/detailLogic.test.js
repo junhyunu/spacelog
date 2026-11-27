@@ -19,7 +19,7 @@ import {
   groupAttachments,
   renameCheck,
   safeHttpUrl,
-  TITLE_MAX,
+  TITLE_EDIT_MAX,
 } from '../ui/detailLogic.js';
 
 describe('kindLabel', () => {
@@ -818,9 +818,16 @@ describe('renameCheck', () => {
   test('same as now after trimming → same', () => {
     expect(renameCheck('  아침 러닝 ', '아침 러닝')).toEqual({ kind: 'same' });
   });
-  test('new name is trimmed and cut to 200 code points', () => {
+  test('new name is trimmed', () => {
     expect(renameCheck(' 저녁 러닝 ', '아침 러닝')).toEqual({ kind: 'ok', title: '저녁 러닝' });
-    const long = '가'.repeat(TITLE_MAX + 5);
-    expect(renameCheck(long, '').title).toBe('가'.repeat(TITLE_MAX));
+  });
+  test('up to 40 code points is fine, more is long (not cut)', () => {
+    expect(renameCheck('가'.repeat(TITLE_EDIT_MAX), '')).toEqual({ kind: 'ok', title: '가'.repeat(TITLE_EDIT_MAX) });
+    expect(renameCheck('가'.repeat(TITLE_EDIT_MAX + 1), '')).toEqual({ kind: 'long' });
+    expect(renameCheck('😀'.repeat(TITLE_EDIT_MAX), '')).toEqual({ kind: 'ok', title: '😀'.repeat(TITLE_EDIT_MAX) });
+  });
+  test('an untouched long auto title is "same", so leaving it is not an error', () => {
+    const auto = '가'.repeat(120);
+    expect(renameCheck(auto, auto)).toEqual({ kind: 'same' });
   });
 });

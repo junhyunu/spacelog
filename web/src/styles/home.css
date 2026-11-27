@@ -166,7 +166,9 @@
 #hDetail *:focus-visible{outline:var(--ring) solid var(--accent);outline-offset:2px}
 /* 머리: [← 목록으로] 행성 이름 · 제목 ··· [<] n / N [>]. 제목이 첫 줄에 온다 */
 #hDetail header{display:flex;align-items:center;gap:var(--gap-3)}
-#hDetail header .back{flex:none;display:inline-flex;align-items:center;gap:6px}
+/* "목록으로"는 오른쪽 이전 · 다음 · ✎ 네모(40px)와 같은 높이 */
+#hDetail header .back{flex:none;display:inline-flex;align-items:center;gap:6px;height:40px;min-height:0;box-sizing:border-box;padding:0 12px}
+#hDetail header .tpen{width:40px;height:40px;min-height:0}
 #hDetail .hd{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 #hDetail .pname{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mute);min-width:0}
 #hDetail .pname .dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--ink);flex:none;box-sizing:border-box}
@@ -238,14 +240,14 @@
   #hTable .pickbar .btn{min-height:44px}
   #hDetail{padding:12px 12px 16px}
   /* 상세의 머리: "목록으로"는 ← 아이콘만(이전 · 다음과 같은 40px 네모). 이전 · 다음이 폭을 많이 써서 제목은 바로 아래 줄 전체에 둔다 */
-  #hDetail header{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-areas:"back pname fav pager" "title title title title";align-items:center;gap:var(--gap-2) 10px}
+  #hDetail header{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-areas:"back pname pen pager" "title title title title";align-items:center;gap:var(--gap-2) 10px}
   #hDetail header .back{grid-area:back;width:40px;height:40px;min-height:0;padding:0;justify-content:center}
   #hDetail header .back .bt{display:none}
   #hDetail .hd{display:contents}
   #hDetail .pname{grid-area:pname}
   #hDetail .pager{grid-area:pager}
   #hDetail :is(.ttl,.tedit){grid-area:title}
-  #hDetail .dfav{grid-area:fav}
+  #hDetail header .tpen{grid-area:pen}
   /* [☆][제목 · 종류 ··· 날짜][⋯]: 날짜는 종류 줄 오른쪽 끝, ⋯는 늘 보인다 */
   .srow{grid-template-columns:36px minmax(0,1fr) 36px;gap:var(--gap-2)}
   .srow > .c-pl{display:none}

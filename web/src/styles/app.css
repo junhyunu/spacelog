@@ -384,10 +384,9 @@ body:has(#panel:not([hidden])) #wHint{visibility:hidden}
      --p-bot = 아래 버튼 줄 위 끝(바닥에서 16px + (--chat-btn − 50px) / 2 + --chat-h, chat.css의 버튼 자리 그대로) + 8px + 패널 그림자 3px.
      그래서 보이는 틈은 위 · 아래 모두 8px(--gap-2). 좁은 화면은 위 막대가 숨지 않는다(topbarLogic.js) */
   #panel{--p-top:calc(var(--tr-bottom,calc(var(--edge) + 46px + env(safe-area-inset-top,0px))) + 3px + var(--gap-2));--p-bot:calc(16px + (var(--chat-btn,56px) - 50px) / 2 + var(--chat-h,46px) + var(--gap-2) + 3px + env(safe-area-inset-bottom,0px));top:var(--p-top);bottom:var(--p-bot);left:calc(var(--edge) + env(safe-area-inset-left,0px));right:calc(var(--edge) + env(safe-area-inset-right,0px));width:auto;height:auto;z-index:4}
-  /* 패널 머리: 연필(행성 꾸미기)은 ⋯ 메뉴에 같은 항목이 있어 숨긴다. 이름은 한 줄(넘치면 …), 아이콘 · 여백을 줄여 목록 줄을 더 보인다 */
+  /* 패널 머리: 이름은 한 줄(넘치면 …), 아이콘 · 여백을 줄여 목록 줄을 더 보인다 */
   #panel header{padding:10px 12px 10px 14px;gap:10px}
   #panel .planet-ico{width:44px;height:44px}
-  #panel header .ic[data-act="edit"]{display:none}
   #panel h2:not(.h2s){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
 /* 기간 버튼 4개(전체 · 오늘 · 이번 주 · 직접 지정): 좁은 폰에서는 버튼을 조금 줄여 로고 옆 한 줄에 넣고,

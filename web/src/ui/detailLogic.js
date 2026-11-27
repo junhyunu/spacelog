@@ -422,17 +422,25 @@ export function createMemoSaver({ save, delay = MEMO_DELAY, onState, onGone, ini
   };
 }
 
-/** 별 이름 한도(코드 포인트). 서버(server/stars.js TITLE_MAX) · 체험판과 같다. */
-export const TITLE_MAX = 200;
+/**
+ * 사람이 직접 쓰는 별 이름의 한도(코드 포인트): 이름 바꾸기 칸 · 기록하기의 제목 칸(index.html #svTitle).
+ * 메모 첫 줄로 만드는 이름(saveLogic.js TITLE_FROM_BODY_MAX)과 같다. 서버는 200자까지 받는다:
+ * 파일 이름 · 링크 제목으로 자동으로 만든 긴 이름은 그대로 두고, 고칠 때만 이 안으로 줄이게 한다.
+ */
+export const TITLE_EDIT_MAX = 40;
+
+/** 이 글자 수부터 "n/40"을 보인다 */
+export const TITLE_COUNT_FROM = 30;
 
 /**
- * 이름 바꾸기 칸의 글을 저장해도 되는지. 앞뒤 공백은 뗀다(서버와 같다).
- * @returns {{ kind: 'empty' } | { kind: 'same' } | { kind: 'ok', title: string }}
- *   empty: 비었다(저장하지 않고 알린다) · same: 지금 이름과 같다(저장할 것 없이 끝낸다) · ok: 저장할 이름
+ * 이름 바꾸기 칸의 글을 저장해도 되는지. 앞뒤 공백은 뗀다(서버와 같다). 길면 자르지 않고 알린다.
+ * @returns {{ kind: 'empty' } | { kind: 'same' } | { kind: 'long' } | { kind: 'ok', title: string }}
+ *   empty: 비었다 · same: 지금 이름과 같다(저장할 것 없이 끝낸다) · long: 40자를 넘는다 · ok: 저장할 이름
  */
 export function renameCheck(draft, current) {
-  const title = [...String(draft ?? '').trim()].slice(0, TITLE_MAX).join('').trim();
+  const title = String(draft ?? '').trim();
   if (!title) return { kind: 'empty' };
   if (title === String(current ?? '')) return { kind: 'same' };
+  if ([...title].length > TITLE_EDIT_MAX) return { kind: 'long' };
   return { kind: 'ok', title };
 }

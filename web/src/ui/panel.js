@@ -106,9 +106,8 @@ function listHtml(planet, stars) {
     .join('');
   return (
     `<header><div class="planet-ico" style="background:${face}" aria-hidden="true"></div>` +
-    `<div class="hd"><h2><span class="pn">${esc(planet.name)}</span> ` +
-    (locked ? '' : `<button type="button" class="ic" data-act="edit" data-focus="edit" aria-label="행성 꾸미기" title="행성 꾸미기">${ico('pencil', 16)}</button>`) +
-    '</h2>' +
+    // 행성 꾸미기는 ⋯ 메뉴에서만(머리의 연필은 없앴다)
+    `<div class="hd"><h2><span class="pn">${esc(planet.name)}</span></h2>` +
     `<div class="sub">${esc(panelCountText({ period: store.state.period, inPeriod: stars.length, total: planet.count_total, range: store.state.range }))}</div></div>` +
     (locked ? '' : `<button type="button" class="btn x ghost" data-act="menu" data-focus="menu" aria-label="행성 메뉴" aria-expanded="${menuOpen}" aria-controls="pMenu">${ico('ellipsis')}</button>`) +
     `<button type="button" class="btn x" data-act="close" data-focus="close" aria-label="닫기">${ico('x')}</button></header>` +
@@ -455,10 +454,7 @@ function onClick(e) {
     return;
   }
   if (act === 'close') closePanel({ overview: true, keepPosition: true });
-  else if (act === 'edit') {
-    actEl.focus({ preventScroll: true }); // 창이 닫히면 ✎로 돌아오게(누른 버튼에 초점이 가지 않는 브라우저도 있다)
-    openPlanetForm({ planet });
-  } else if (act === 'menu') {
+  else if (act === 'menu') {
     if (menuOpen) closeMenu({ focus: true });
     else {
       menuOpen = true;

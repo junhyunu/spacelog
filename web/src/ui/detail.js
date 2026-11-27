@@ -192,18 +192,21 @@ const CHEVRON = (d) =>
 
 // 홈의 목록 자리에 펼쳐질 때의 머리(home.css #hDetail header): [← 목록으로] 행성 이름 · 제목 ··· [<] n / N [>]
 // 좁은 화면에서는 "목록으로"가 ← 아이콘만 남는다(이름은 aria-label로 그대로).
-// 제목 자리: 제목 + ✎(이름 바꾸기). 고치는 중이면 입력칸 + [취소][저장]
-function titleHtml(star) {
-  if (titles.is(star.id)) return titleEditHtml({ bar: true, focusAttr: 'data-d', key: 'tin' });
-  return (
-    `<div class="ttl"><h2 class="h2s">${esc(star.title || '제목 없음')}</h2>` +
-    `<button type="button" class="ic tpen" data-d="rename" aria-label="이름 바꾸기" title="이름 바꾸기">${ico('pencil', 16)}</button></div>`
-  );
-}
-
-// 자주 찾음 ☆(홈 목록의 ☆와 같은 모양 · 같은 값)
+// 자주 찾음 ☆(홈 목록의 ☆와 같은 모양 · 같은 값). 제목 바로 앞에 둔다
 const favHtml = (star) =>
   `<button type="button" class="sfav dfav" data-d="fav" aria-pressed="${Boolean(star.fav)}" aria-label="자주 찾음" title="자주 찾음">${ico('star', 20)}</button>`;
+
+// 제목 자리: ☆ + 제목. 이름을 고치는 중이면 입력칸 + [취소][저장]
+function titleHtml(star) {
+  if (titles.is(star.id)) return titleEditHtml({ bar: true, focusAttr: 'data-d', key: 'tin' });
+  return `<div class="ttl">${favHtml(star)}<h2 class="h2s">${esc(star.title || '제목 없음')}</h2></div>`;
+}
+
+// 이름 바꾸기 ✎: 오른쪽 버튼 줄(우주는 ✕ 앞, 홈은 이전 · 다음 앞)에 같은 크기의 네모 버튼. 고치는 중에는 없다
+function penHtml(star, cls) {
+  if (titles.is(star.id)) return '';
+  return `<button type="button" class="btn ghost ${cls} tpen" data-d="rename" aria-label="이름 바꾸기" title="이름 바꾸기">${ico('pencil')}</button>`;
+}
 
 function homeHeadHtml(star, planet, home) {
   const face = planetFace(planet);
@@ -213,7 +216,7 @@ function homeHeadHtml(star, planet, home) {
     `<button type="button" class="btn ghost sm back" data-d="back" aria-label="목록으로">${ico('arrow-left', 16)}<span class="bt">목록으로</span></button>` +
     `<div class="hd"><div class="pname"><span class="dot" style="background:${face}"></span><span class="t">${esc(planet?.name ?? '')}</span></div>` +
     `${titleHtml(star)}</div>` +
-    favHtml(star) +
+    penHtml(star, 'pen') +
     `<div class="pager"><button type="button" class="btn ghost" data-d="prev" aria-label="이전 기록"${index <= 0 ? ' disabled' : ''}>${CHEVRON('m15 18-6-6 6-6')}</button>` +
     `<span aria-live="polite">${(index + 1).toLocaleString('ko-KR')} / ${total.toLocaleString('ko-KR')}</span>` +
     `<button type="button" class="btn ghost" data-d="next" aria-label="다음 기록"${index >= total - 1 ? ' disabled' : ''}>${CHEVRON('m9 18 6-6-6-6')}</button></div>`
@@ -228,7 +231,7 @@ function headHtml(star, planet, home) {
     `<button type="button" class="btn x ghost" data-d="back" aria-label="'${esc(name)}' 목록으로">${ico('arrow-left')}</button>` +
     `<div class="hd"><div class="sub pname"><span class="dot" style="background:${face}"></span><span class="t">${esc(name)}</span></div>` +
     `${titleHtml(star)}</div>` +
-    favHtml(star) +
+    penHtml(star, 'x') +
     `<button type="button" class="btn x" data-d="close" aria-label="닫기">${ico('x')}</button>`
   );
 }

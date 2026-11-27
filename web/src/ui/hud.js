@@ -37,6 +37,7 @@ import { planetLocked } from './planetLogic.js';
 import { registerEscape } from './escape.js';
 import { confirmDeletePlanet } from './planetDelete.js';
 import { openPlanetForm, trapTab } from './planetForm.js';
+import { mergePlanet, mergeTargets } from './planetMerge.js';
 import { openRowMenu } from './rowMenu.js';
 import {
   defaultCustom,
@@ -405,7 +406,8 @@ function onDockClick(e) {
   flyTo(planetId).then((arrived) => arrived && store.emit('land', planetId));
 }
 
-// 행성 ⋯ 메뉴: 꾸미기 · 지우기. 지우기는 행성 삭제 확인 창(안의 별을 어떻게 할지 고른다)을 거친다.
+// 행성 ⋯ 메뉴: 꾸미기 · 다른 행성과 합치기 · 지우기(홈의 행성 ⋯ 메뉴 · 행성 패널 메뉴와 같은 항목).
+// 지우기는 행성 삭제 확인 창(안의 별을 어떻게 할지 고른다)을 거친다. 합친 행성의 패널이 열려 있었으면 다시 받은 'data'에서 panel.js가 닫는다.
 // 좁은 화면에서는 서랍을 닫고 창을 연다(창이 서랍 뒤에 가리지 않게)
 function openPlanetMenu(button) {
   const planet = store.state.planets.find((p) => same(p.id, button.dataset.more));
@@ -416,6 +418,7 @@ function openPlanetMenu(button) {
   };
   openRowMenu(button, `'${planet.name}' 행성 메뉴`, [
     { key: 'edit', label: '꾸미기', run: run(() => openPlanetForm({ planet })) },
+    { key: 'merge', label: '다른 행성과 합치기', disabled: mergeTargets(planet).length === 0, run: run(() => mergePlanet(planet)) },
     {
       key: 'del',
       label: '지우기',

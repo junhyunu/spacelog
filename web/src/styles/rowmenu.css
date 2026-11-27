@@ -40,7 +40,10 @@
 #rowMenu button.danger{color:var(--danger-text);border-top:1.5px solid #d6d1f2;border-radius:0 0 10px 10px;margin-top:4px}
 @media (prefers-reduced-motion:reduce){#rowMenu{animation:none}}
 
-/* 행성 패널 별 줄 맨 앞의 자주 찾음 ☆(.sfav, home.css): [☆][별 줄 ··· ⋯] */
-.recw.fv{display:flex;align-items:center;gap:2px}
-.recw.fv > .rec{flex:1;width:auto;min-width:0}
-.recw.fv.editing{gap:var(--gap-1)}
+/* 행성 패널 별 줄의 자주 찾음 ☆(.sfav, home.css): 흰 줄 카드 안 맨 앞에 겹쳐 둔다 [☆ 그림 제목 ··· 날짜/⋯].
+   ☆는 줄 버튼(.rec) 안에 넣을 수 없어(버튼 안 버튼) ⋯처럼 위에 겹치고, 줄은 그만큼 왼쪽을 비운다.
+   세로 가운데는 transform 없이 맞춘다(누르는 순간의 scale(press.css)과 겹치지 않게) */
+.recw.fv > .sfav{position:absolute;left:3px;top:0;bottom:0;margin:auto 0;z-index:1}
+.recw.fv > .rec{padding-left:42px}
+/* 이름을 바꾸는 중: 같은 카드 모양 안에 [☆][입력칸][저장] */
+.recw.fv.editing{display:flex;align-items:center;gap:var(--gap-1);padding:5px 6px 5px 42px;background:var(--white);border:var(--line-row) solid var(--ink);border-radius:12px}

@@ -47,10 +47,12 @@
 :is(#panel,#hDetail) .arow .acts{grid-column:1 / -1}
 :is(#panel,#hDetail) .arow .acts:empty{display:none}
 
-/* 머리의 제목 자리: 제목 + ✎(이름 바꾸기). ☆(자주 찾음)는 머리 오른쪽, 닫기(우주) · 이전 · 다음(홈) 앞 */
+/* 머리의 제목 자리: ☆(자주 찾음) + 제목. ☆ 그림의 왼쪽 끝을 위 줄 행성 점에 맞춘다(버튼 36px · 그림 20px → 8px 당긴다).
+   ✎(이름 바꾸기)는 오른쪽 버튼 줄: 우주는 ✕ 앞(34px), 홈은 이전 · 다음 앞(40px) */
 :is(#panel,#hDetail) .ttl{display:flex;align-items:center;gap:2px;min-width:0}
+:is(#panel,#hDetail) .ttl .dfav{margin-left:-8px}
 :is(#panel,#hDetail) .ttl h2{min-width:0}
-:is(#panel,#hDetail) .ttl .tpen{flex:none}
+:is(#panel,#hDetail) header .tpen{flex:none;display:grid;place-items:center;padding:0}
 
 /* 별 이름 바꾸기(titleEdit.js): 상세 머리 · 행성 패널 별 줄 · 홈 별 줄이 같은 입력칸을 쓴다 */
 .tedit{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--gap-2)}
@@ -60,5 +62,9 @@
 .tedit .tin[aria-invalid="true"]{border-color:var(--danger-text)}
 .tedit .btn{flex:none}
 .tedit .tebar{display:flex;align-items:center;justify-content:flex-end;gap:var(--gap-2);flex-wrap:wrap}
-.tedit .terr{margin-right:auto;font-size:12.5px;font-weight:700;line-height:1.4;color:var(--danger-text)}
+.tedit .terr{font-size:12.5px;font-weight:700;line-height:1.4;color:var(--danger-text)}
+/* 글자 수 "n/40": 30자부터. 넘으면 빨갛게. 안내가 있으면 안내 오른쪽, 없으면 줄 왼쪽 끝 */
+.tedit .tcnt{margin-right:auto;font:500 12px var(--f-mono);color:var(--mute);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tedit .tcnt.bad{color:var(--danger-text);font-weight:700}
+.tedit .tebar:has(.tcnt[hidden]) .terr{margin-right:auto}
 .tedit[aria-busy="true"]{opacity:.7;cursor:progress}

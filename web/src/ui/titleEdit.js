@@ -1,24 +1,27 @@
 // 별 이름 바꾸기: 제목 자리가 그 자리에서 입력칸이 된다. 상세 머리(detail.js, 홈 · 우주) · 행성 패널 별 목록(panel.js) ·
 // 홈 별 목록(homeList.js)이 같이 쓴다. 입력칸은 화면이 HTML로 그리고(titleEditHtml), 그린 뒤에 bind로 붙인다.
 // 글(draft)은 여기서 쥐어서 화면을 다시 그려도(다른 별의 ☆ · 다시 받기) 쓰던 글이 남는다.
-// Enter · 저장 = 저장, Esc · 취소 = 그만두기, 칸 밖을 누르면 바뀐 게 있을 때만 저장한다. 비우면 저장하지 않는다.
+// Enter · 저장 = 저장, Esc · 취소 = 그만두기, 칸 밖을 누르면 바뀐 게 있을 때만 저장한다.
+// 비었거나 40자(TITLE_EDIT_MAX)를 넘으면 저장하지 않고 알린다. 30자부터 "n/40"을 보인다(상세 머리).
 import { esc } from '../util.js';
-import { renameCheck, TITLE_MAX } from './detailLogic.js';
+import { renameCheck, TITLE_COUNT_FROM, TITLE_EDIT_MAX } from './detailLogic.js';
 import { renameStar } from './starActions.js';
 import { toast } from './toast.js';
 
 const EMPTY = '이름을 비울 수 없어요';
+const LONG = `이름은 ${TITLE_EDIT_MAX}자까지 쓸 수 있어요`;
 
 /**
- * 입력칸 HTML. bar가 true면 아래에 [취소][저장] 줄과 비었을 때의 안내(상세 머리), 아니면 옆에 [저장]만(목록 줄).
+ * 입력칸 HTML. bar가 true면 아래에 [안내 · 글자 수][취소][저장] 줄(상세 머리), 아니면 옆에 [저장]만(목록 줄, 안내는 토스트).
+ * 글자 수 한도는 maxlength로 막지 않는다: 자동으로 만든 40자 넘는 이름도 그대로 보여 주고 줄이게 한다
  * focusAttr · key: 화면이 다시 그린 뒤 초점을 되찾는 데 쓰는 속성(data-d · data-focus · data-fk)과 값
  */
 export function titleEditHtml({ bar = false, focusAttr, key }) {
   const f = (k) => (focusAttr ? ` ${focusAttr}="${esc(k)}"` : '');
-  const input = `<input type="text" class="tin" maxlength="${TITLE_MAX}" autocomplete="off" aria-label="별 이름"${f(key)}>`;
+  const input = `<input type="text" class="tin" autocomplete="off" aria-label="별 이름"${f(key)}>`;
   if (!bar) return `<div class="tedit row" data-tedit>${input}<button type="button" class="btn yellow sm" data-tsave${f(`${key}:save`)}>저장</button></div>`;
   return (
-    `<div class="tedit" data-tedit>${input}<div class="tebar"><small class="terr" role="alert" hidden>${EMPTY}</small>` +
+    `<div class="tedit" data-tedit>${input}<div class="tebar"><small class="terr" role="alert" hidden></small><small class="tcnt" aria-live="polite" hidden></small>` +
     `<button type="button" class="btn ghost sm" data-tcancel${f(`${key}:cancel`)}>취소</button>` +
     `<button type="button" class="btn yellow sm" data-tsave${f(`${key}:save`)}>저장</button></div></div>`
   );
@@ -61,23 +64,36 @@ export function createTitleEditor({ render, focusAfter }) {
       const mine = st;
       const input = group.querySelector('input');
       const err = group.querySelector('.terr');
+      const cnt = group.querySelector('.tcnt');
       input.value = mine.draft;
+      // 30자부터 "n/40", 넘으면 빨갛게(상세 머리에만)
+      const showCount = () => {
+        if (!cnt) return;
+        const n = [...input.value.trim()].length;
+        cnt.hidden = n < TITLE_COUNT_FROM;
+        cnt.textContent = `${n}/${TITLE_EDIT_MAX}`;
+        cnt.classList.toggle('bad', n > TITLE_EDIT_MAX);
+      };
+      showCount();
       if (mine.fresh) {
         mine.fresh = false;
         input.focus({ preventScroll: true });
         input.select();
       }
-      const showErr = (on) => {
-        input.setAttribute('aria-invalid', String(on));
-        if (err) err.hidden = !on;
+      // 안내 한 줄(msg). null이면 지운다. 목록 줄에는 안내 자리가 없어 토스트로 알린다
+      const showErr = (msg) => {
+        input.setAttribute('aria-invalid', String(Boolean(msg)));
+        if (err) {
+          err.hidden = !msg;
+          err.textContent = msg ?? '';
+        } else if (msg) toast(msg);
       };
       const live = () => st === mine;
       const save = async ({ focus = true } = {}) => {
         if (!live() || mine.saving) return;
         const check = renameCheck(input.value, star.title);
-        if (check.kind === 'empty') {
-          showErr(true);
-          if (!err) toast(EMPTY);
+        if (check.kind === 'empty' || check.kind === 'long') {
+          showErr(check.kind === 'empty' ? EMPTY : LONG);
           input.focus({ preventScroll: true });
           return;
         }
@@ -104,7 +120,8 @@ export function createTitleEditor({ render, focusAfter }) {
       };
       input.addEventListener('input', () => {
         mine.draft = input.value;
-        showErr(false);
+        if (input.getAttribute('aria-invalid') === 'true') showErr(null);
+        showCount();
       });
       group.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && !e.isComposing) {
@@ -127,7 +144,9 @@ export function createTitleEditor({ render, focusAfter }) {
         if (group.contains(e.relatedTarget)) return;
         setTimeout(() => {
           if (!live() || mine.saving || !group.isConnected || group.contains(document.activeElement)) return;
-          if (renameCheck(input.value, star.title).kind === 'ok') save({ focus: false });
+          const kind = renameCheck(input.value, star.title).kind;
+          if (kind === 'ok') save({ focus: false });
+          else if (kind === 'long') showErr(LONG); // 쓰던 글을 버리지 않는다: 줄일 수 있게 남겨 둔다
           else editor.stop({ focus: false });
         }, 0);
       });
