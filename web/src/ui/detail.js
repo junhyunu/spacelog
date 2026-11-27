@@ -228,10 +228,14 @@ function headHtml(star, planet, home, split = false) {
   if (home) return homeHeadHtml(star, planet, home);
   const face = planetFace(planet);
   const name = planet?.name ?? '';
+  const editing = titles.is(star.id);
   return (
     (split ? '' : `<button type="button" class="btn x ghost" data-d="back" aria-label="'${esc(name)}' 목록으로">${ico('arrow-left')}</button>`) +
+    // 우주: ☆는 두 줄(행성 이름 · 별 이름) 왼쪽에 따로 서서 두 줄의 가운데에 온다. 행성 점과 별 이름은 같은 왼쪽 끝.
+    // 이름을 고치는 중에는 ☆ 없이 입력칸만
+    (editing ? '' : favHtml(star)) +
     `<div class="hd"><div class="sub pname"><span class="dot" style="background:${face}"></span><span class="t">${esc(name)}</span></div>` +
-    `${titleHtml(star)}</div>` +
+    `${editing ? titleHtml(star) : `<div class="ttl"><h2 class="h2s">${esc(star.title || '제목 없음')}</h2></div>`}</div>` +
     penHtml(star, 'x') +
     `<button type="button" class="btn x" data-d="close" aria-label="${split ? '상세 닫기' : '닫기'}">${ico('x')}</button>`
   );

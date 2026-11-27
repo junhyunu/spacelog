@@ -56,6 +56,9 @@
 :is(#panel,#hDetail) .ttl .dfav{position:relative;top:-2px}
 #hDetail .ttl .dfav{top:-3px}
 :is(#panel,#hDetail) .ttl h2{min-width:0}
+/* 우주 상세: ☆는 머리에 따로 서서 두 줄(행성 이름 · 별 이름)의 가운데. 그림(20px)과 버튼(36px) 사이 빈 곳만큼 양옆을 당겨
+   ☆ 그림 → 두 줄 왼쪽 끝 간격을 6px로(머리 gap 12px − 6px) */
+#panel header > .dfav{align-self:center;margin:0 -6px 0 -8px}
 :is(#panel,#hDetail) header .tpen{flex:none;display:grid;place-items:center;padding:0}
 
 /* 별 이름 바꾸기(titleEdit.js): 상세 머리 · 행성 패널 별 줄 · 홈 별 줄이 같은 입력칸을 쓴다 */
