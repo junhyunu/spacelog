@@ -40,6 +40,7 @@ let planetId = null; // 열려 있는 행성. 닫혀 있으면 null
 let view = 'list'; // 'list' | 'detail'
 let detailStar = null; // 상세에 그려진 별
 let shownKey = ''; // 상세를 마지막으로 그린 내용(detailKey). 같으면 renderDetail을 부르지 않는다
+let shownIn = null; // 그 상세를 그린 곳(#panel 또는 옆 칸 .pdet)
 let menuOpen = false;
 let openSeq = 0;
 // 여러 개 골라 옮기기: 고르는 중인지 · 고른 별 id. 행성을 바꾸거나 패널을 닫으면 둘 다 비운다
@@ -48,6 +49,37 @@ let pickedIds = new Set();
 const flashing = new Map(); // 별 id → 강조가 끝나는 시각
 
 const panelEl = () => $('panel');
+
+// 상세를 목록 옆 칸에 따로 둔다(split): 넓은 화면(1100px 이상)이고 챗봇 창이 닫혀 있을 때.
+// 그때 #panel은 투명한 틀이 되고 안에 [상세 칸 .pdet][목록 칸 .plist] 두 카드가 선다(app.css #panel.split).
+// 챗봇 창이 열렸거나 좁은 화면이면 지금처럼 한 칸: 상세가 목록 자리를 바꾼다
+const splitMq = typeof matchMedia === 'function' ? matchMedia('(min-width: 1100px)') : { matches: false };
+const chatOpen = () => Boolean($('chatPanel') && !$('chatPanel').hidden);
+const wantSplit = () => view === 'detail' && splitMq.matches && !chatOpen();
+
+// 틀을 맞추고 목록 · 상세를 그릴 곳을 준다. 한 칸이면 둘 다 #panel
+function layout(split) {
+  const el = panelEl();
+  if (!split) {
+    if (el.classList.contains('split')) {
+      el.classList.remove('split');
+      el.textContent = '';
+    }
+    return { listEl: el, detailEl: el };
+  }
+  if (!el.classList.contains('split')) {
+    el.classList.add('split');
+    el.innerHTML = '<section class="pcol pdet card" aria-label="별 상세"></section><section class="pcol plist card" aria-label="별 목록"></section>';
+  }
+  return { listEl: el.querySelector('.plist'), detailEl: el.querySelector('.pdet') };
+}
+
+// 지금 목록이 그려진 곳(누르기를 받는 곳). 한 칸 상세일 때는 없다
+function listHost() {
+  const el = panelEl();
+  if (el.classList.contains('split')) return el.querySelector('.plist');
+  return view === 'list' ? el : null;
+}
 const planetOf = (id = planetId) => store.state.planets.find((p) => same(p.id, id)) ?? null;
 const focusOn = (key) => [...panelEl().querySelectorAll('[data-focus]')].find((n) => n.dataset.focus === key && !n.disabled)?.focus({ preventScroll: true });
 
@@ -81,6 +113,8 @@ function listHtml(planet, stars) {
   const items = stars
     .map((s) => {
       const fresh = (flashing.get(String(s.id)) ?? 0) > now;
+      // 옆 칸에 상세가 열린 별(split일 때만 목록과 상세가 함께 보인다)
+      const cur = view === 'detail' && same(detailStar?.id, s.id) ? ' aria-current="true"' : '';
       const title = s.title || '제목 없음';
       if (picking) {
         // 고르는 중: 행 전체가 체크칸 하나(누르면 고르기 · 풀기). ⋯ 메뉴는 없다
@@ -98,7 +132,7 @@ function listHtml(planet, stars) {
       return (
         // 한 행 = ☆ + 상세 열기 버튼 + ⋯ 버튼. ⋯은 마우스를 올리거나 키보드로 오면 날짜 자리에 나타난다(터치는 늘)
         `<div class="recw fv">${fav}` +
-        `<button type="button" class="rec${fresh ? ' new' : ''}" data-id="${esc(s.id)}" data-focus="star:${esc(s.id)}">` +
+        `<button type="button" class="rec${fresh ? ' new' : ''}" data-id="${esc(s.id)}" data-focus="star:${esc(s.id)}"${cur}>` +
         `${thumb(s)}<span class="t">${esc(s.title || '제목 없음')}</span>${clip(s)}<span class="d">${esc(shortDate(s.created_at))}</span></button>` +
         `<button type="button" class="more" data-more-star="${esc(s.id)}" data-focus="more:${esc(s.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(`'${s.title || '제목 없음'}' 별 메뉴`)}" title="별 메뉴">${ico('ellipsis', 18)}</button></div>`
       );
@@ -117,7 +151,7 @@ function listHtml(planet, stars) {
         `<button type="button" data-m="merge" data-focus="m:merge"${only ? ' disabled' : ''}>다른 행성과 합치기</button>` +
         '<button type="button" data-m="del" data-focus="m:del">행성 삭제</button></div>'
       : '') +
-    '<div class="body">' +
+    '<div class="body" data-list>' +
     (locked ? '<div class="lockline">기본 행성이라 이름을 바꾸거나 지울 수 없어요</div>' : '') +
     // 고르는 중: 라벨 왼쪽에 전체 선택 체크칸(보이는 별 = 이 목록), 오른쪽은 "취소"
     `<div class="lblrow">${picking ? `<div class="lblpick">${pickAllHtml({ state: pickAllState(pickedIds, stars.map((s) => s.id)), focusAttr: 'data-focus' })}<div class="lbl">이 행성을 도는 별들</div></div>` : '<div class="lbl">이 행성을 도는 별들</div>'}${pickBtn}</div>` +
@@ -132,11 +166,8 @@ function listHtml(planet, stars) {
   );
 }
 
-function renderList(planet) {
-  const el = panelEl();
-  // 다시 그려도 초점과 스크롤 자리가 남게 한다
-  const focusKey = el.contains(document.activeElement) ? document.activeElement.dataset?.focus : undefined;
-  const scroll = el.querySelector('.body')?.scrollTop ?? 0;
+// el = 목록을 그릴 곳. 다시 그려도 초점(focusKey)과 스크롤 자리가 남게 한다(둘 다 틀을 바꾸기 전에 renderPanel이 잰다)
+function renderList(planet, el, focusKey, scroll) {
   const stars = panelStars(store.state.stars, planet.id);
   pickedIds = keepPicked(pickedIds, stars); // 목록에서 사라진 별(옮김 · 지움 · 기간)은 선택에서도 뺀다
   if (rowEdit.active && !stars.some((s) => rowEdit.is(s.id))) rowEdit.clear(); // 고치던 별이 목록에서 빠졌다
@@ -152,13 +183,20 @@ function renderList(planet) {
 
 /* ---------- 상세 ---------- */
 
-function showDetail(planet) {
-  // 같은 내용이면 그대로 둔다. 열쇠에 메모는 없다: 메모만 바뀐 'data'(자동 저장 뒤)로는 상세를 건드리지 않는다.
+function showDetail(planet, container, split) {
+  // 같은 내용 · 같은 자리면 그대로 둔다. 열쇠에 메모는 없다: 메모만 바뀐 'data'(자동 저장 뒤)로는 상세를 건드리지 않는다.
   // 행성은 모두(이름 · 색) 본다: 이 별의 행성 머리와 옮기기 목록에 보인다
   const next = detailKey(detailStar, store.state.planets);
-  if (next === shownKey && panelEl().firstChild) return;
+  if (next === shownKey && shownIn === container && container.firstChild) return;
   shownKey = next;
-  renderDetail(panelEl(), detailStar, planet, { onBack: backToList, onClose: () => closePanel({ overview: true, keepPosition: true }) });
+  shownIn = container;
+  // 옆 칸(split): ✕는 상세만 닫는다(목록은 남는다). 한 칸: ←은 목록으로, ✕는 패널을 닫는다
+  renderDetail(
+    container,
+    detailStar,
+    planet,
+    split ? { onBack: backToList, onClose: backToList, split: true } : { onBack: backToList, onClose: () => closePanel({ overview: true, keepPosition: true }) },
+  );
 }
 
 function setDetail(star) {
@@ -184,11 +222,16 @@ function leaveDetail() {
 
 function backToList() {
   if (planetId === null || view !== 'detail') return;
+  const id = detailStar?.id;
   leaveDetail();
   clearGuestStar();
   setSelectedStar(null);
   renderPanel();
-  panelEl().querySelector('.rec, [data-act="close"]')?.focus({ preventScroll: true });
+  // 초점은 방금 보던 별의 줄로(없으면 첫 줄 · ✕)
+  const el = panelEl();
+  const row = id === undefined ? null : el.querySelector(`.rec[data-id="${CSS.escape(String(id))}"]`);
+  (row ?? el.querySelector('.rec, [data-act="close"]'))?.focus({ preventScroll: true });
+  row?.scrollIntoView({ block: 'nearest' });
 }
 
 /* ---------- 밖에서 부르는 것 ---------- */
@@ -201,19 +244,28 @@ export function renderPanel() {
     closePanel({ overview: true }); // 다른 곳에서 지워진 행성
     return;
   }
-  panelEl().style.setProperty('--accent', planetDeep(planet));
+  const el = panelEl();
+  el.style.setProperty('--accent', planetDeep(planet));
   if (view === 'detail' && detailStar) {
     // 다시 받은 목록에 그 별이 있으면 새 값으로 바꾼다. 없으면(기간 밖 손님 별 등) 가진 것을 그대로 쓴다
     const fresh = store.state.stars.find((s) => same(s.id, detailStar.id));
     if (fresh) detailStar = fresh;
-    if (same(detailStar.planet_id, planet.id)) {
-      showDetail(planet);
-      return;
+    if (!same(detailStar.planet_id, planet.id)) {
+      leaveDetail(); // 다른 행성으로 옮겨진 별
+      setSelectedStar(null);
     }
-    leaveDetail(); // 다른 행성으로 옮겨진 별
-    setSelectedStar(null);
   }
-  renderList(planet);
+  // 틀(한 칸 ↔ 두 칸)을 바꾸기 전에 목록의 초점 · 스크롤 자리를 잰다
+  const focusKey = el.contains(document.activeElement) ? document.activeElement.dataset?.focus : undefined;
+  const scroll = el.querySelector('.body[data-list]')?.scrollTop ?? 0;
+  if (view === 'detail') {
+    const split = wantSplit();
+    const { listEl, detailEl } = layout(split);
+    if (split) renderList(planet, listEl, focusKey, scroll);
+    showDetail(planet, detailEl, split);
+    return;
+  }
+  renderList(planet, layout(false).listEl, focusKey, scroll);
 }
 
 /**
@@ -283,7 +335,9 @@ export function closePanel({ overview = false, keepPosition = false } = {}) {
   // 초점이 패널 안에 남아 있으면 뺀다(숨은 버튼에 남은 초점이 Space · Enter를 받지 않게)
   if (el.contains(document.activeElement)) document.activeElement.blur();
   el.hidden = true;
+  el.classList.remove('split');
   el.textContent = '';
+  shownIn = null;
   setSelectedStar(null);
   store.emit('panelClosed'); // 위쪽 막대가 다시 내려올지 정한다(topbar.js)
   if (overview) {
@@ -306,7 +360,7 @@ export function flashStars(starIds = []) {
       if (!flashing.has(el.dataset.id)) el.classList.remove('new');
     }
   }, FLASH_MS + 20);
-  if (planetId !== null && view === 'list') renderPanel();
+  if (planetId !== null && listHost()) renderPanel();
 }
 
 /* ---------- 메뉴 ---------- */
@@ -421,7 +475,9 @@ async function deletePicked() {
 /* ---------- 누르기 ---------- */
 
 function onClick(e) {
-  if (planetId === null || view !== 'list' || !(e.target instanceof Element)) return;
+  if (planetId === null || !(e.target instanceof Element)) return;
+  // 목록에서 누른 것만 받는다(상세는 detail.js가 받는다). 두 칸일 때는 상세가 열려 있어도 목록 칸을 누를 수 있다
+  if (!listHost()?.contains(e.target)) return;
   const planet = planetOf();
   if (!planet) return;
   if (e.target.closest('[data-tedit]')) return; // 이름 입력칸 · 저장은 titleEdit.js가 받는다
@@ -480,7 +536,8 @@ function onClick(e) {
     if (!star) return;
     setDetail(star);
     renderPanel();
-    panelEl().querySelector('[data-d="back"], button')?.focus({ preventScroll: true });
+    // 한 칸: 초점은 상세의 ←로. 두 칸: 목록의 그 줄에 남는다(다른 별을 이어서 고를 수 있게)
+    if (!panelEl().classList.contains('split')) panelEl().querySelector('[data-d="back"], button')?.focus({ preventScroll: true });
   }
 }
 
@@ -553,6 +610,13 @@ export function initPanel() {
     }
   });
   document.addEventListener('pointerdown', onPointerDownOutside, true);
+  // 챗봇 창을 열고 닫거나 화면 폭이 바뀌면 상세를 한 칸 ↔ 두 칸으로 다시 나눈다
+  const relayout = () => {
+    if (planetId !== null && view === 'detail') renderPanel();
+  };
+  store.on('chatOpened', relayout);
+  store.on('chatClosed', relayout);
+  splitMq.addEventListener?.('change', relayout);
 
   // Esc: 상세에서 목록(30) → 패널 닫기(20, 메뉴가 열려 있으면 메뉴부터, 고르는 중이면 고르기부터 끝낸다)
   registerEscape(30, () => {

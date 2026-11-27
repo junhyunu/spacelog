@@ -4,7 +4,7 @@
 #panel h2{overflow-wrap:anywhere}
 #panel .rec{width:100%;min-height:44px;box-sizing:border-box}
 /* 올림: 줄 위 어디든(⋯ 위 포함) 연보라. 고르는 중에 고른 줄(.on)은 그 바탕 그대로 */
-@media (hover:hover){#panel :is(.rec:hover,.recw:hover > .rec):not(.on){background:var(--hover)}}
+@media (hover:hover){#panel :is(.rec:hover,.recw:hover > .rec):not(.on,[aria-current="true"]){background:var(--hover)}}
 #panel .th img{width:100%;height:100%;object-fit:cover;display:block}
 #panel .menu button{min-height:44px}
 #panel .pname{display:flex;align-items:center;gap:6px;margin:0 0 2px;min-width:0}

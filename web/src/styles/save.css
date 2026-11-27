@@ -36,7 +36,9 @@
 
 /* 첨부 칸: 라벨(오른쪽에 개수 "1/50") → 담긴 칩 → 더하기 버튼(파일 첨부 · 링크 붙이기) → 링크 주소 줄 */
 #save .att{gap:var(--gap-2)}
-#save .lblrow{display:flex;align-items:baseline;justify-content:space-between;gap:var(--gap-2)}
+/* 라벨 줄: 공통 .lblrow의 최소 높이 30px(행성 패널 "여러 개 고르기" 버튼 자리)는 여기서 뺀다. 라벨 → 버튼 간격을
+   제목 · 메모 · 행성 칸(라벨 → 칸 6px)과 같게: 칸 사이 간격 8px에서 2px을 당긴다 */
+#save .lblrow{display:flex;align-items:baseline;justify-content:space-between;gap:var(--gap-2);min-height:0;margin-bottom:-2px}
 #save .lblrow .cnt{font:500 11.5px var(--f-mono);color:var(--mute);font-variant-numeric:tabular-nums}
 /* 더하기 버튼은 가볍게(흰 바탕 · 그림자 없음): 창에서 가장 강한 것은 "별 띄우기" 하나다 */
 #save .tools{display:flex;align-items:center;gap:var(--gap-2);flex-wrap:wrap}

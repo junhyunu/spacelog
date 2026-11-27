@@ -55,6 +55,15 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 @media (max-width:1099.98px){
   body:has(#chatPanel:not([hidden])) #panel{visibility:hidden}
 }
+/* 별 상세를 목록 옆에(panel.js split: 1100px 이상 · 챗봇 창이 닫혀 있을 때). #panel은 투명한 틀이 되고
+   [상세 칸 .pdet][목록 칸 .plist] 두 카드가 12px 띄워 선다. 목록 칸은 한 칸일 때와 같은 자리 · 같은 폭(380px) */
+@media (min-width:1100px){
+  #panel.split{width:calc(380px * 2 + 12px);flex-direction:row;gap:12px;background:none;border:0;border-radius:0;box-shadow:none;overflow:visible;animation:none}
+  #panel.split > .pcol{flex:1 1 0;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+  #panel.split > .pdet{animation:pop .22s cubic-bezier(.3,1.5,.6,1)}
+}
+/* 옆 칸에 상세가 열린 별의 줄: 고르기에서 고른 줄과 같은 연노랑 */
+#panel .recw > .rec[aria-current="true"]{background:color-mix(in srgb,var(--yellow) 22%,var(--white));border-color:var(--ink)}
 /* 우주 안(넓은 화면)의 챗봇 창은 처음부터 행성 패널과 같은 위 · 아래 끝을 쓴다: 기간 바 아래 12px ~ 바닥에서 84px.
    그래서 혼자 열려 있다가 행성 패널이 옆에 와도 크기가 바뀌지 않는다. 홈(기간 바 없음)은 chat.css의 크기 그대로, 760px 이하는 전체 화면 */
 @media (min-width:761px){
@@ -409,7 +418,7 @@ body:has(#panel:not([hidden])) #wHint{visibility:hidden}
   body:has(#range:not([hidden])) #period .range{flex:1 1 100%;min-width:0;padding:0 4px}
   body:has(#range:not([hidden])) #period .range input{flex:1;min-width:0}
 }
-@media (prefers-reduced-motion:reduce){#panel{animation:none;transition:none}.rec.new{animation:none}#wLog.beckon::before{animation:none}#left.drawer #side{animation:none}#helpToggle .i{transition:none}}
+@media (prefers-reduced-motion:reduce){#panel,#panel.split > .pdet{animation:none;transition:none}.rec.new{animation:none}#wLog.beckon::before{animation:none}#left.drawer #side{animation:none}#helpToggle .i{transition:none}}
 
 /* ---------- 별 찾기 · 기간 버튼(#pTools · #wSearch, search.js · hud.js) ----------
    넓은 화면: 기간 바 바로 아래 줄(--tr-bottom에 함께 들어가 행성 패널 · 토스트가 그 아래에서 시작한다). 결과 목록은 그 아래에 떠서 자리를 밀지 않는다.

@@ -427,7 +427,9 @@ let viewShift = 0;
 function viewShiftTarget() {
   const panelEl = document.getElementById('panel');
   const chatEl = document.getElementById('chatPanel');
-  if (!panelEl || panelEl.hidden || !chatEl || chatEl.hidden) return 0;
+  if (!panelEl || panelEl.hidden) return 0;
+  // 챗봇 창이 옆에 있거나, 상세가 목록 옆 칸에 열려 있으면(panel.js split) 오른쪽이 넓게 가려진다
+  if ((!chatEl || chatEl.hidden) && !panelEl.classList.contains('split')) return 0;
   if (getComputedStyle(panelEl).visibility === 'hidden') return 0; // 좁은 창: 행성 패널이 숨어 있다
   const side = document.getElementById('side');
   const sideRect = side && !side.closest('[hidden]') && side.offsetParent !== null ? side.getBoundingClientRect() : null;

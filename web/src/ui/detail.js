@@ -223,16 +223,17 @@ function homeHeadHtml(star, planet, home) {
   );
 }
 
-function headHtml(star, planet, home) {
+// split: 목록 옆 칸에 따로 열린 상세(panel.js). 목록이 옆에 보이니 ←은 없고, ✕는 상세만 닫는다
+function headHtml(star, planet, home, split = false) {
   if (home) return homeHeadHtml(star, planet, home);
   const face = planetFace(planet);
   const name = planet?.name ?? '';
   return (
-    `<button type="button" class="btn x ghost" data-d="back" aria-label="'${esc(name)}' 목록으로">${ico('arrow-left')}</button>` +
+    (split ? '' : `<button type="button" class="btn x ghost" data-d="back" aria-label="'${esc(name)}' 목록으로">${ico('arrow-left')}</button>`) +
     `<div class="hd"><div class="sub pname"><span class="dot" style="background:${face}"></span><span class="t">${esc(name)}</span></div>` +
     `${titleHtml(star)}</div>` +
     penHtml(star, 'x') +
-    `<button type="button" class="btn x" data-d="close" aria-label="닫기">${ico('x')}</button>`
+    `<button type="button" class="btn x" data-d="close" aria-label="${split ? '상세 닫기' : '닫기'}">${ico('x')}</button>`
   );
 }
 
@@ -504,14 +505,14 @@ function onThumbError(img) {
 /* ---------- 그리기 ---------- */
 
 function partHtml(ctx, part) {
-  if (part === 'head') return headHtml(ctx.star, ctx.planet, ctx.home);
+  if (part === 'head') return headHtml(ctx.star, ctx.planet, ctx.home, ctx.split);
   if (part === 'top') return topHtml(ctx, ctx.star);
   return bottomHtml(ctx.star, ctx.home);
 }
 
 function bindPart(ctx, part, el) {
   if (part === 'head') {
-    el.querySelector('[data-d="back"]').addEventListener('click', () => ctx.handlers.onBack?.());
+    el.querySelector('[data-d="back"]')?.addEventListener('click', () => ctx.handlers.onBack?.());
     el.querySelector('[data-d="close"]')?.addEventListener('click', () => ctx.handlers.onClose?.());
     // 홈의 머리: 이전 · 다음
     el.querySelector('[data-d="prev"]')?.addEventListener('click', () => ctx.home?.onPrev?.());
@@ -596,7 +597,7 @@ function showCount(ctx) {
  *   home을 주면 홈의 목록 자리에 펼치는 모양으로 그린다(homeList.js):
  *   { index, total, onPrev, onNext } 머리의 "n / N"과 이전 · 다음, onFly "우주에서 보기", onMoved(planetId) 행성을 옮긴 뒤
  */
-export function renderDetail(container, star, planet, { onBack, onClose, home = null } = {}) {
+export function renderDetail(container, star, planet, { onBack, onClose, home = null, split = false } = {}) {
   const id = String(star.id);
   // 늦게 온 다시 받기가 옛 메모를 들고 왔으면 방금 저장한 메모를 쓴다(화면이 쥔 별도 그 자리에서 고친다)
   if (ledger.apply([star])) ledger.apply(store.state.stars);
@@ -608,6 +609,7 @@ export function renderDetail(container, star, planet, { onBack, onClose, home = 
     if (current.view && !groupAttachments(star).images.some((a) => same(a.id, current.view))) current.view = null;
     current.handlers = { onBack, onClose };
     current.home = home;
+    current.split = split;
     for (const part of ['head', 'top', 'bottom']) renderPart(current, part);
     return;
   }
@@ -623,6 +625,7 @@ export function renderDetail(container, star, planet, { onBack, onClose, home = 
     saver,
     handlers: { onBack, onClose },
     home,
+    split,
     html: {},
     busy: false,
     moving: false,
