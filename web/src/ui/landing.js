@@ -27,18 +27,19 @@ const KIND_KO = { astronaut: '우주인', cat: '고양이', robot: '로봇', bea
 /** 캐릭터 그림 이름(방향 빼고): 종류-슈트(0 기본 · 1 색) */
 export const LANDING_CHARS = Object.freeze(Object.keys(KIND_KO).flatMap((k) => [`${k}-0`, `${k}-1`]));
 
-// 자리: x · y = 장면 안의 위치(가운데 기준), w = 폭(숫자면 vw, 글자면 CSS 값 그대로). m = 좁은 화면의 자리(없으면 좁은 화면에서 숨김).
-// m.tallOnly = 좁고 낮은 화면(세로 740px 이하)에서는 숨김. far = 멀리 있는 작은 행성(조금 어둡게), label = 이름표, face = 캐릭터가 바라보는 쪽(r · l), fl = 둥실 박자
+// 넓은 화면의 자리 · 크기는 블랙홀에 맞춘다: 단위 u = 블랙홀 폭의 1/34, 가운데 = 블랙홀 가운데(layout()이 재어 --u · --cx · --cy 로 넣는다).
+//   dx · dy = 블랙홀 가운데에서 떨어진 거리(u), w = 폭(u). 화면이 가로로 길든 세로로 짧든 블랙홀과의 비율이 같다.
+//   edge = 화면 모서리에 걸친 큰 행성: x · y 는 장면 안의 % 자리(모서리에 붙어 있어야 해서), 크기만 u.
+// m = 좁은 화면의 자리(x · y %, w CSS 값). 없으면 좁은 화면에서 숨김. m.tallOnly = 좁고 낮은 화면(세로 740px 이하)에서도 숨김.
+// label = 이름표, face = 캐릭터가 바라보는 쪽(r · l), tilt = 기울기, fl = 둥실 박자
 const SLOTS = [
-  { kind: 'planet', id: 'photo', x: '6%', y: '90%', w: 40, fl: '', m: { x: '8%', y: '96%', w: 'min(60vw,34vh)' } },
-  { kind: 'planet', id: 'travel', x: '17%', y: '42%', w: 16, fl: '', label: true, m: { x: '84%', y: '90%', w: 'min(30vw,17vh)' } },
-  { kind: 'planet', id: 'study', x: '83%', y: '76%', w: 17, fl: 'b', label: true },
-  { kind: 'planet', id: 'workout', x: '80%', y: '33%', w: 13, fl: 'c', label: true, m: { x: '82%', y: '19%', w: 'min(22vw,11vh)', tallOnly: true } },
-  { kind: 'char', id: 'astronaut-0', x: '31%', y: '66%', w: 10, fl: '', face: 'r', tilt: 16, m: { x: '17%', y: '18%', w: 'min(24vw,12vh)' } },
-  { kind: 'char', id: 'human-0', x: '68%', y: '63%', w: 8.5, fl: 'b', face: 'l', tilt: -12 },
+  { kind: 'planet', id: 'photo', edge: true, x: '5%', y: '92%', w: 36, fl: '', m: { x: '8%', y: '96%', w: 'min(60vw,34vh)' } },
+  { kind: 'planet', id: 'travel', dx: -35, dy: -6, w: 15, fl: '', label: true, m: { x: '84%', y: '90%', w: 'min(30vw,17vh)' } },
+  { kind: 'planet', id: 'workout', dx: 33, dy: -10, w: 13, fl: 'c', label: true, m: { x: '82%', y: '19%', w: 'min(22vw,11vh)', tallOnly: true } },
+  { kind: 'planet', id: 'study', dx: 35, dy: 15, w: 15, fl: 'b', label: true },
+  { kind: 'char', id: 'astronaut-0', dx: -21, dy: 10, w: 9.5, fl: '', face: 'r', tilt: 16, m: { x: '17%', y: '18%', w: 'min(24vw,12vh)' } },
+  { kind: 'char', id: 'human-0', dx: 20, dy: 9, w: 8.5, fl: 'b', face: 'l', tilt: -12 },
 ];
-
-const size = (w) => (typeof w === 'number' ? `${w}vw` : w);
 let scene = null;
 let live = null;
 let preloaded = false;
@@ -169,9 +170,9 @@ export function initLanding(home) {
   slotList = SLOTS.map((d) => ({ ...d, cur: d.id }));
   for (const s of slotList) {
     const box = document.createElement('div');
-    box.className = `ls ls-${s.kind}${s.far ? ' far' : ''}${s.m ? '' : ' wide-only'}${s.m?.tallOnly ? ' tall-only' : ''}${s.fl ? ` fl-${s.fl}` : ''}`;
+    box.className = `ls ls-${s.kind}${s.edge ? ' edge' : ''}${s.far ? ' far' : ''}${s.m ? '' : ' wide-only'}${s.m?.tallOnly ? ' tall-only' : ''}${s.fl ? ` fl-${s.fl}` : ''}`;
     const m = s.m || s;
-    box.style.cssText = `--x:${s.x};--y:${s.y};--w:${size(s.w)};--mx:${m.x};--my:${m.y};--mw:${size(m.w)};--tilt:${s.tilt || 0}deg`;
+    box.style.cssText = `--x:${s.x ?? '50%'};--y:${s.y ?? '50%'};--dx:${s.dx ?? 0};--dy:${s.dy ?? 0};--w:${s.w};--mx:${m.x};--my:${m.y};--mw:${m.w};--tilt:${s.tilt || 0}deg`;
     s.btn = document.createElement('button');
     s.btn.type = 'button';
     s.btn.className = 'ls-hit';
@@ -198,6 +199,24 @@ export function initLanding(home) {
   live.setAttribute('aria-live', 'polite');
   scene.appendChild(live);
   home.appendChild(scene);
+  // 블랙홀의 크기 · 자리를 재어 넓은 화면의 기준(--u · --cx · --cy)으로 넣는다. 창 크기 · 로그아웃(보이기 시작) · 서체 로딩 때 다시
+  const bh = home.querySelector('.bh-wrap');
+  const layout = () => {
+    if (!bh || !scene.offsetWidth) return;
+    const sr = scene.getBoundingClientRect();
+    const br = bh.getBoundingClientRect();
+    if (!br.width) return;
+    scene.style.setProperty('--u', `${(br.width / 34).toFixed(2)}px`);
+    scene.style.setProperty('--cx', `${Math.round(br.left - sr.left + br.width / 2)}px`);
+    scene.style.setProperty('--cy', `${Math.round(br.top - sr.top + br.height / 2)}px`);
+  };
+  layout();
+  if (typeof ResizeObserver === 'function') {
+    const ro = new ResizeObserver(layout);
+    ro.observe(scene);
+    if (bh) ro.observe(bh);
+  } else addEventListener('resize', layout);
+  document.fonts?.ready?.then(layout).catch(() => {});
   const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2500));
   idle(preloadAll);
 }
