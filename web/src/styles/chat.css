@@ -118,7 +118,11 @@ body:has(#left.drawer) #chatBtn{visibility:hidden}
 .cv .del{width:36px;height:36px;flex:none}
 
 /* 설정 탭 */
-.cp-set section{display:flex;flex-direction:column;gap:8px}
+/* 간격 세 단계: 묶음 사이 24px ≫ 문단 사이 8px > 제목과 본문 사이 6px. 제목은 아래 본문에 붙고 묶음끼리는 떨어져 보인다 */
+.cp-set{gap:var(--gap-5)}
+.cp-set section{display:flex;flex-direction:column;gap:var(--gap-1)}
+.cp-set section > .cp-sub + .cp-sub{margin-top:2px} /* 문단 사이 6 + 2 = 8px */
+.cp-set section > .cp-idx{margin-top:4px} /* 버튼 위 6 + 4 = 10px */
 .cp-sw{position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;cursor:pointer}
 .cp-sw .t{font-family:var(--f-body);font-weight:800;font-size:16px}
 .cp-sw input{position:absolute;right:0;top:50%;transform:translateY(-50%);width:56px;height:44px;margin:0;opacity:0;cursor:pointer}
