@@ -3,6 +3,9 @@
 //   셋 다 5초 동안 [되돌리기]. 지우기는 그 5초가 지나야(또는 화면을 나가면) 실제로 지운다.
 //   카드는 처음부터 상세(우주 상세 패널과 같은 칸, 읽기 전용). 이 화면에서 본 것은 "봤음"이 아니다(고르기 전까지 그대로).
 //   PC: 카드 양옆 ‹ › · 키보드 ← →. 좁은 화면: 카드 아래 ‹ n / m › · 카드를 옆으로 밀기(넘기기만).
+//   오른쪽 위 톱니 = 설정 카드(계정 설정의 "잠든 별 블랙홀" 칸과 같은 부품, remindSettings.js). 기간은 누르는 즉시 저장하고
+//   새 기간으로 다시 받는다. "끄기"는 확인 줄을 거쳐 화면을 닫는다.
+//   여는 곳은 둘: 우주의 블랙홀(from 'world') · 홈의 잠든 별 안내(from 'home', 우주를 거치지 않는다). 닫으면 온 곳으로 돌아간다.
 // 잠든 별 수(store.state.remind = { days, total })도 여기서 센다: 우주의 블랙홀 · 홈 안내가 'remind' 를 듣는다.
 import { api } from '../api.js';
 import { store } from '../store.js';
@@ -21,6 +24,8 @@ import {
   stepIndex,
   swipeDir,
 } from './remindLogic.js';
+import { closeRemindSettings, openRemindSettingsIn, remindSettingsBack } from './remindSettings.js';
+import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
 const narrow = () => matchMedia('(max-width: 760px)').matches;
@@ -72,9 +77,17 @@ function shell() {
   return (
     '<canvas class="rm-sky" aria-hidden="true"></canvas>' +
     '<div class="rm-head"><p class="rm-eb">잠든 별 블랙홀</p><h2 class="rm-h" id="rmTitle">잠든 별 <b class="rm-n">0</b>개</h2><p class="rm-sub"></p></div>' +
-    `<div class="rm-acts"><button type="button" class="btn ghost" data-r="offall">모두 알림 끄기</button><button type="button" class="btn x" data-r="exit" aria-label="잠든 별 블랙홀 닫기">${ico('x')}</button></div>` +
+    `<div class="rm-acts"><button type="button" class="btn ghost" data-r="offall">모두 알림 끄기</button>` +
+    `<button type="button" class="btn x" data-r="set" aria-label="잠든 별 블랙홀 설정" aria-expanded="false" aria-controls="rmSet">${ico('settings')}</button>` +
+    `<button type="button" class="btn x" data-r="exit" aria-label="잠든 별 블랙홀 닫기">${ico('x')}</button></div>` +
     '<div class="rm-confirm card" role="alertdialog" aria-label="모두 알림 끄기 확인" hidden><span>남은 <b class="rm-n">0</b>개 모두 알림을 끌까요?</span>' +
     '<span class="row"><button type="button" class="btn ghost" data-r="offall-no">취소</button><button type="button" class="btn" data-r="offall-yes">모두 알림 끄기</button></span></div>' +
+    // 설정 카드: 기간 · 알림 끈 별(remindSettings.js 가 채운다). "끄기"를 고르면 맨 아래에 확인 줄
+    '<div class="rm-set card" id="rmSet" role="dialog" aria-label="잠든 별 블랙홀 설정" hidden>' +
+    '<div class="rs" data-set="box"></div><div class="rs-all" data-set="all" hidden></div>' +
+    '<div class="rm-setoff" role="alertdialog" aria-label="블랙홀 끄기 확인" hidden><span>블랙홀을 끌까요?<br>계정 설정에서 다시 켤 수 있어요.</span>' +
+    '<span class="row"><button type="button" class="btn ghost" data-r="setoff-no">취소</button><button type="button" class="btn" data-r="setoff-yes">끄기</button></span></div>' +
+    '</div>' +
     '<div class="rm-body">' +
     `<div class="rm-stage"><button type="button" class="btn x rm-nav l" data-r="prev" aria-label="이전 별">${PREV}</button>` +
     '<div class="rm-slot"></div>' +
@@ -102,6 +115,7 @@ function paint() {
   q('.rm-help').textContent = `나중에 다시 = ${S.days}일 뒤 다시 모여요 · 알림 끄기 = 다시 모으지 않아요`;
   q('.rm-dots').innerHTML = Array.from({ length: Math.min(n, 10) }, (_, k) => `<i${k === Math.min(S.index, 9) ? ' class="on"' : ''}></i>`).join('');
   q('.rm-pos').textContent = n ? `${S.index + 1} / ${n}` : '';
+  q('.rm-done .btn').textContent = S.from === 'home' ? '홈으로 돌아가기' : '우주로 돌아가기';
   for (const b of $('remind').querySelectorAll('[data-r="prev"]')) b.disabled = S.index <= 0;
   for (const b of $('remind').querySelectorAll('[data-r="next"]')) b.disabled = S.index >= n - 1;
 }
@@ -311,7 +325,7 @@ async function nextBatch() {
   else finish();
 }
 
-function finish() {
+function finish({ focus = true } = {}) {
   q('.rm-body').hidden = true;
   q('.rm-acts [data-r="offall"]').hidden = true;
   const done = q('.rm-done');
@@ -323,7 +337,7 @@ function finish() {
     fill: 'backwards',
   });
   paint();
-  done.querySelector('.btn').focus({ preventScroll: true });
+  if (focus) done.querySelector('.btn').focus({ preventScroll: true });
 }
 
 function unfinish() {
@@ -358,6 +372,108 @@ async function offAll() {
   q('.rm-slot').innerHTML = '';
   showToast(`${n.toLocaleString('ko-KR')}개 모두 알림을 껐어요`, false);
   finish();
+}
+
+/* ---------- 설정 카드 ---------- */
+
+const setOpen = () => Boolean(S) && !q('.rm-set').hidden;
+
+function settingsHost() {
+  const card = q('.rm-set');
+  return {
+    box: card.querySelector('[data-set="box"]'),
+    all: card.querySelector('[data-set="all"]'),
+    wrap: card,
+    backLabel: '설정으로 돌아가기',
+    onDays: changeDays,
+    say: (text) => showToast(text, false),
+  };
+}
+
+function toggleSettings(open, { focus = true } = {}) {
+  const card = q('.rm-set');
+  const btn = q('[data-r="set"]');
+  if (open === !card.hidden) return;
+  card.hidden = !open;
+  btn.setAttribute('aria-expanded', String(open));
+  q('.rm-setoff').hidden = true;
+  if (open) {
+    q('.rm-confirm').hidden = true;
+    S.setHost = settingsHost();
+    openRemindSettingsIn(S.setHost).then(() => {
+      if (setOpen()) card.querySelector('[data-rs="days"][aria-checked="true"]')?.focus({ preventScroll: true });
+    });
+  } else {
+    closeRemindSettings(S.setHost);
+    S.setHost = null;
+    if (focus) btn.focus({ preventScroll: true });
+  }
+}
+
+// 기간을 눌렀다(설정 카드). 저장됐으면 true. "끄기"는 확인 줄에서 답을 받은 뒤에 정한다
+function changeDays(days) {
+  if (!S || S.busy) return Promise.resolve(false);
+  if (days === 0) {
+    const row = q('.rm-setoff');
+    row.hidden = false;
+    row.querySelector('[data-r="setoff-no"]').focus({ preventScroll: true });
+    return Promise.resolve(false);
+  }
+  return applyDays(days);
+}
+
+// 새 기간을 저장하고 잠든 별을 그 기간으로 다시 받는다
+async function applyDays(days) {
+  S.busy = true;
+  try {
+    // 되돌리기는 여기서 끝낸다(미뤄 둔 지우기는 지금 지운다): 다시 받는 목록에 지운 별이 섞이지 않게
+    clearTimeout(S.toastTimer);
+    q('.rm-toast').hidden = true;
+    const u = S.undo;
+    S.undo = null;
+    if (u?.kind === 'del') await commitDelete(u.star);
+    await api.saveRemindSettings(days);
+    const res = await api.remind({ limit: REMIND_BATCH });
+    if (!S) return true;
+    S.queue = res.stars;
+    S.total = res.total;
+    S.days = res.days;
+    S.index = 0;
+    S.changed = true;
+  } catch {
+    if (S) {
+      S.busy = false;
+      showToast('기간을 바꾸지 못했어요. 다시 눌러 주세요', false);
+    }
+    return false;
+  }
+  S.busy = false;
+  if (S.queue.length) {
+    if (!q('.rm-done').hidden) unfinish();
+    draw('hole');
+  } else {
+    q('.rm-slot').innerHTML = '';
+    if (q('.rm-done').hidden) finish({ focus: false });
+    else paint();
+  }
+  showToast(`${days}일 넘게 열어 보지 않은 별을 모았어요`, false);
+  return true;
+}
+
+// "끄기"를 확인했다: 저장하고 화면을 닫는다(블랙홀이 없어진다)
+async function turnOffRemind() {
+  if (!S || S.busy) return;
+  S.busy = true;
+  try {
+    await api.saveRemindSettings(0);
+  } catch {
+    S.busy = false;
+    showToast('끄지 못했어요. 다시 눌러 주세요', false);
+    return;
+  }
+  S.busy = false;
+  await closeRemind();
+  toast('잠든 별 블랙홀을 껐어요. 계정 설정에서 다시 켤 수 있어요');
 }
 
 /* ---------- 하늘(블랙홀 · 알림 끈 별) ---------- */
@@ -452,12 +568,20 @@ function bindSwipe(stage) {
 
 function onClick(e) {
   const r = e.target.closest('[data-r]')?.dataset.r;
+  // 설정 카드 밖을 누르면 카드를 접는다(톱니 자신은 아래에서 여닫는다)
+  if (setOpen() && r !== 'set' && !e.target.closest('.rm-set')) toggleSettings(false, { focus: false });
   if (!r) return;
-  if (r === 'prev') go(-1);
+  if (r === 'set') toggleSettings(q('.rm-set').hidden);
+  else if (r === 'setoff-no') {
+    q('.rm-setoff').hidden = true;
+    q('.rm-set [data-rs="days"][aria-checked="true"]')?.focus({ preventScroll: true });
+  } else if (r === 'setoff-yes') turnOffRemind();
+  else if (r === 'prev') go(-1);
   else if (r === 'next') go(1);
   else if (r === 'later' || r === 'off' || r === 'del') decide(r);
   else if (r === 'undo') undo();
   else if (r === 'offall') {
+    toggleSettings(false, { focus: false });
     q('.rm-confirm').hidden = false;
     q('.rm-confirm [data-r="offall-no"]').focus({ preventScroll: true });
   } else if (r === 'offall-no') q('.rm-confirm').hidden = true;
@@ -467,6 +591,7 @@ function onClick(e) {
 
 function onKey(e) {
   if (!S || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '')) return;
+  if (setOpen()) return; // 설정 카드가 열려 있으면 별을 넘기지 않는다
   if (e.key === 'ArrowRight') {
     e.preventDefault();
     go(1);
@@ -478,10 +603,11 @@ function onKey(e) {
 
 /**
  * 잠든 별 화면을 연다. 데이터를 받은 뒤(after 가 있으면 그것도 끝난 뒤) 보인다. 받지 못하면 열지 않고 false.
- * @param {{ after?: Promise, onHide?: () => void, onClose?: (info: { changed: boolean, deleted: boolean }) => void }} opts
- *   onHide: 닫힐 때 화면을 숨기기 바로 전(같은 차례) · onClose: 다 닫은 뒤(지우기 · 다시 세기까지 끝난 뒤)
+ * @param {{ from?: 'world' | 'home', after?: Promise, onHide?: () => void, onClose?: (info: { changed: boolean, deleted: boolean }) => void }} opts
+ *   from: 온 곳(끝 화면의 돌아가기 버튼 이름) · onHide: 닫힐 때 화면을 숨기기 바로 전(같은 차례) ·
+ *   onClose: 다 닫은 뒤(지우기 · 다시 세기까지 끝난 뒤)
  */
-export async function openRemind({ after, onHide, onClose } = {}) {
+export async function openRemind({ from = 'world', after, onHide, onClose } = {}) {
   if (S || opening) return true;
   opening = true;
   let res;
@@ -508,6 +634,8 @@ export async function openRemind({ after, onHide, onClose } = {}) {
     raf: 0,
     changed: false,
     deleted: false,
+    from,
+    setHost: null,
     onHide,
     onClose,
     focusBack: document.activeElement,
@@ -533,6 +661,7 @@ export async function closeRemind() {
   s.undo = null;
   const work = pending ? commitDelete(pending) : Promise.resolve();
   cancelAnimationFrame(s.raf);
+  closeRemindSettings(s.setHost);
   S = null;
   const root = $('remind');
   root.removeEventListener('click', onClick);
@@ -558,8 +687,13 @@ export function initRemind() {
 registerEscape(80, () => {
   if (!S) return false;
   const confirm = q('.rm-confirm');
+  const setoff = q('.rm-setoff');
   if (confirm && !confirm.hidden) confirm.hidden = true;
-  else closeRemind();
+  else if (setOpen()) {
+    // 설정 카드: 끄기 확인 줄 → 알림 끈 별 전체 목록 → 카드 순으로 하나씩 접는다
+    if (!setoff.hidden) setoff.hidden = true;
+    else if (!remindSettingsBack()) toggleSettings(false);
+  } else closeRemind();
   return true;
 });
 

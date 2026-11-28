@@ -143,7 +143,7 @@ initHud();
 initSearch();
 // 잠든 별 블랙홀: 잠든 별 수를 센다('data' · 'seen' 때마다). 화면은 우주의 블랙홀('blackHole') · 홈 안내가 연다
 initRemind();
-initRemindTransition({ enter: enterWorld });
+initRemindTransition();
 
 // Esc 순서(escape.js): 확인 창 → 행성 꾸미기 창 → 저장 창 → 전환 건너뛰기 → 좁은 화면의 왼쪽 서랍 → 상세에서 목록 → 챗봇 창 닫기 → 패널 닫기
 setEscapeGuards({ isAskOpen, isTransitioning });

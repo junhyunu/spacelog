@@ -2,6 +2,8 @@
 // 우주 화면을 한 장 찍어(WebGL 캔버스) 그 위에 그린다: 화면이 블랙홀 쪽으로 줄어들며 안쪽으로 줄무늬 잔상(줌 블러)을 남기고,
 // 블랙홀이 커져 화면을 덮은 뒤 잠든 별 화면이 열린다. 위의 조작 UI 는 찍은 장면이 덮으며 흐려진다.
 // "동작 줄이기"면 짧게 흐려지기만 한다.
+// 홈의 잠든 별 안내로 올 때는 우주를 거치지 않는다: 안내 자리에서 어두운 원이 퍼져 화면을 덮고 잠든 별 화면이 열린다.
+// 닫으면 홈으로 돌아온다(openFromHome).
 import { store } from '../store.js';
 import { settleBlackHole, blackHoleOnScreen } from '../three/blackhole.js';
 import { stopFlight } from '../three/controls.js';
@@ -151,20 +153,70 @@ async function surface(cv) {
   }
 }
 
+// 홈 위를 덮는 어두운 막. 잠든 별 화면(#remind, z 41)과 같은 색이라 막이 다 퍼진 뒤 화면이 열려도 이어져 보인다
+function veil() {
+  const el = document.createElement('div');
+  el.id = 'remindDive'; // 떠 있는 동안 앱 알림을 숨긴다(remind.css)
+  el.setAttribute('aria-hidden', 'true');
+  el.style.cssText = 'position:fixed;inset:0;z-index:40;background:#05030d;pointer-events:auto';
+  document.body.append(el);
+  return el;
+}
+
+// 막을 (x, y)에서 원으로 펼치거나(open) 그 자리로 오므린다. 동작 줄이기면 흐려지기만 한다
+function sweep(el, x, y, open, ms) {
+  const far = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y)) + 8;
+  const at = `at ${x}px ${y}px`;
+  const frames = reduced()
+    ? [{ opacity: open ? 0 : 1 }, { opacity: open ? 1 : 0 }]
+    : [{ clipPath: `circle(${open ? 0 : far}px ${at})` }, { clipPath: `circle(${open ? far : 0}px ${at})` }];
+  return el.animate(frames, { duration: reduced() ? 200 : ms, easing: open ? 'cubic-bezier(.5,0,.9,.5)' : 'cubic-bezier(.1,.5,.3,1)', fill: 'forwards' }).finished;
+}
+
+/** 홈의 잠든 별 안내에서 바로 잠든 별 화면을 연다(우주를 거치지 않는다). 닫으면 홈으로 돌아온다. 던지지 않는다. */
+export async function openRemindFromHome() {
+  if (busy || isRemindOpen() || store.state.inWorld) return false;
+  busy = true;
+  try {
+    // 안내 알약의 가운데에서 퍼진다(없으면 화면 가운데)
+    const r = document.getElementById('hRemind')?.getBoundingClientRect();
+    const x = r && r.width ? r.left + r.width / 2 : innerWidth / 2;
+    const y = r && r.height ? r.top + r.height / 2 : innerHeight / 2;
+    const el = veil();
+    const covering = sweep(el, x, y, true, 320);
+    const ok = await openRemind({
+      from: 'home',
+      after: covering,
+      onHide: () => {
+        el.style.visibility = 'visible'; // 닫히는 순간 막으로 이어 준다
+      },
+      onClose: async () => {
+        await sweep(el, x, y, false, 380);
+        el.remove();
+      },
+    });
+    await covering;
+    if (!ok) {
+      await sweep(el, x, y, false, 300);
+      el.remove();
+      toast('잠든 별을 불러오지 못했어요');
+      return false;
+    }
+    el.style.visibility = 'hidden'; // 잠든 별 화면이 덮는다(나올 때 다시 쓴다)
+    return true;
+  } finally {
+    busy = false;
+  }
+}
+
 /**
  * 'blackHole'(우주의 블랙홀을 누름) → 빨려 들어간다.
- * 'remindFromHome'(홈 안내를 누름) → 우주로 들어가 블랙홀을 잠깐 보인 뒤 빨려 들어간다.
+ * 'remindFromHome'(홈 안내를 누름) → 우주를 거치지 않고 바로 잠든 별 화면을 연다.
  * 우주에서 나가면(홈으로) 열려 있던 잠든 별 화면도 닫는다.
- * enter: transition.js 의 enterWorld(서로 불러오지 않도록 main.js 가 넘겨준다)
  */
-export function initRemindTransition({ enter } = {}) {
+export function initRemindTransition() {
   store.on('blackHole', () => diveIntoRemind());
-  store.on('remindFromHome', async () => {
-    if (store.state.inWorld) return diveIntoRemind();
-    if (typeof enter !== 'function' || !(await enter({}))) return false;
-    await new Promise((r) => setTimeout(r, reduced() ? 0 : 700));
-    return diveIntoRemind();
-  });
+  store.on('remindFromHome', () => (store.state.inWorld ? diveIntoRemind() : openRemindFromHome()));
   store.on('leaveWorld', () => {
     if (isRemindOpen()) closeRemind();
   });

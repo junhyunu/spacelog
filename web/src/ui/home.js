@@ -282,7 +282,7 @@ function onClick(e) {
     if (isSignedIn()) onEnter({});
     else showLoginHint();
   } else if (el.id === 'hRemind') {
-    if (isSignedIn()) store.emit('remindFromHome'); // remindTransition.js: 우주로 들어간 뒤 블랙홀로 빨려 들어간다
+    if (isSignedIn()) store.emit('remindFromHome'); // remindTransition.js: 우주를 거치지 않고 바로 잠든 별 화면을 연다(닫으면 홈으로)
   } else if (el.id === 'hLogin' || el.dataset.act === 'login') store.emit('openLogin');
   else if (el.id === 'hLogout') store.emit('signOut');
   else if (el.id === 'hMe') setMeMenu($('hMeMenu').hidden);
