@@ -43,12 +43,11 @@ const narrowMq = typeof matchMedia === 'function' ? matchMedia('(max-width: 760p
 const sideBySideMq = typeof matchMedia === 'function' ? matchMedia('(min-width: 1100px)') : { matches: false };
 const POLL_MS = 30_000;
 const INDEX_POLL_MS = 2_000;
-const num = (v) => (Number(v) || 0).toLocaleString('ko-KR');
 const faceOf = (p) => planetFace(p);
 
 const NOTICE = '챗봇을 켜면 질문에 필요한 기록 내용이 OpenAI로 보내져요.';
 const PRIVACY =
-  '파일과 기록은 내 PC에 있고, 챗봇을 켜면 질문에 필요한 내용과 색인할 내용만 OpenAI로 보내져요. 빼 둔 행성의 별은 읽지 않아요.';
+  '파일과 기록은 내 PC에 있고, 챗봇을 켜면 질문에 필요한 내용과 챗봇이 읽어 둘 내용만 OpenAI로 보내져요. 빼 둔 행성의 별은 읽지 않아요.';
 const HISTORY_NOTE = '행성을 빼도, 그 전에 같은 대화에서 나눈 내용은 이어 묻기에 쓰일 수 있어요. 새 대화를 시작하면 쓰이지 않아요.';
 
 let btn = null;
@@ -544,12 +543,8 @@ async function onConvClick(e) {
 }
 
 /* ---------- 설정 탭 ---------- */
-function keyLine() {
-  if (settings?.key === true) return '연결됨';
-  if (settings?.key === false) return '없음';
-  return '미확인';
-}
-
+// 배포된 서비스의 사용자가 보는 화면으로 쓴다: 키 상태 · 요청 수처럼 운영자가 볼 것은 두지 않는다.
+// 쓸 수 없을 때만 한 줄로 알리고(unavailableMessage), 다시 읽기는 평소에 누를 일이 없어 맨 아래에 까닭과 함께 둔다.
 function renderSettings(body) {
   setHead('설정');
   const s = settings ?? {};
@@ -561,15 +556,17 @@ function renderSettings(body) {
     `${s.enabled ? ' checked' : ''}><span class="knob" aria-hidden="true"></span></label>` +
     '<section><div class="lbl" id="cpSetEx">챗봇이 읽지 않을 행성</div>' +
     `<div role="group" aria-labelledby="cpSetEx" data-planets>${planetChecks(s.excluded_planets)}</div></section>` +
-    '<section><div class="lbl">상태</div>' +
-    `<p class="cp-line">OpenAI 키: <b>${esc(keyLine())}</b></p>` +
+    '<section><div class="lbl">챗봇이 읽은 기록</div>' +
     (why ? `<p class="cp-line warn">${esc(why)}</p>` : '') +
     `<p class="cp-line" data-index>${esc(indexLine(s.index))}</p>` +
-    '<div class="cp-idx">' +
-    (failed ? `<span class="cp-line">${esc(failed)}</span><button type="button" class="btn sm" data-act="retry">${ico('refresh-cw', 14)} 다시 시도</button>` : '') +
-    '<button type="button" class="btn ghost sm" data-act="all">처음부터 다시 읽기</button></div>' +
-    `<p class="cp-line">이번 달 요청 <b>${esc(num(s.usage?.requests))}</b>번</p></section>` +
-    `<section><div class="lbl">OpenAI 안내</div><p class="cp-sub">${esc(PRIVACY)}</p><p class="cp-sub">${esc(HISTORY_NOTE)}</p></section>` +
+    (failed
+      ? `<div class="cp-idx"><span class="cp-line">${esc(failed)}</span><button type="button" class="btn sm" data-act="retry">${ico('refresh-cw', 14)} 다시 시도</button></div>`
+      : '') +
+    '</section>' +
+    `<section><div class="lbl">내 기록은 어디로 가나요</div><p class="cp-sub">${esc(PRIVACY)}</p><p class="cp-sub">${esc(HISTORY_NOTE)}</p></section>` +
+    '<section><div class="lbl">답이 이상한가요?</div>' +
+    '<p class="cp-sub">답이 엉뚱하거나 예전 내용으로 답하면 눌러 보세요. 챗봇이 모든 별을 새로 읽어요.</p>' +
+    '<div class="cp-idx"><button type="button" class="btn ghost sm" data-act="all">모든 별 다시 읽기</button></div></section>' +
     '</div>';
 
   body.querySelector('[data-act="switch"]').addEventListener('change', async (e) => {
@@ -615,8 +612,8 @@ function renderSettings(body) {
   body.querySelector('[data-act="retry"]')?.addEventListener('click', () => reindex('failed'));
   body.querySelector('[data-act="all"]').addEventListener('click', async () => {
     const yes = await ask({
-      title: '챗봇이 기록을 처음부터 다시 읽을까요?',
-      desc: '읽은 내용을 지우고 모든 별을 다시 읽어요. 그동안 OpenAI 요청이 생기고, 다 읽을 때까지 답이 덜 정확할 수 있어요.',
+      title: '챗봇이 모든 별을 다시 읽을까요?',
+      desc: '읽어 둔 내용을 지우고 모든 별을 새로 읽어요. 다 읽을 때까지 답이 덜 정확할 수 있어요.',
       confirmLabel: '다시 읽기',
       confirmKind: 'yellow',
     });
@@ -660,7 +657,7 @@ async function reindex(scope) {
   try {
     const r = await api.reindex(scope);
     if (settings) settings.index = r.index;
-    toast(scope === 'all' ? '처음부터 다시 읽기 시작했어요' : '다시 읽기 시작했어요');
+    toast(scope === 'all' ? '모든 별을 다시 읽기 시작했어요' : '다시 읽기 시작했어요');
   } catch (err) {
     if (err?.code !== 'offline') toast(errorMessage(err?.code === 'chat_off' ? 'chat_off' : 'rag_unavailable'));
   }

@@ -122,9 +122,11 @@ OpenAI를 부르지 않는 가짜 모델로 돌아요.
 | 증상 | 해결 |
 |---|---|
 | `npm run rag:setup`이 "파이썬 3.11 이상을 찾지 못했어요" | 파이썬을 설치하고 PATH에 넣은 뒤 터미널을 다시 열어 다시 실행해요 |
-| 챗봇 창에 "챗봇을 준비하지 못했어요" | `npm run rag:setup`을 아직 안 했거나 실패한 거예요. 다시 실행해요 |
-| "OpenAI 키가 없어요" | `.env`에 `OPENAI_API_KEY`를 넣고 서버를 다시 켜요 |
-| "챗봇 서버 포트를 다른 프로그램이 쓰고 있어요" | 다른 spaceLog를 닫거나, `SPACELOG_RAG_PORT`로 다른 포트를 정해요 |
+| 챗봇 창에 "지금은 챗봇을 쓸 수 없어요"가 계속 떠요 | 화면은 까닭을 말하지 않아요(서비스 사용자 기준으로 쓴 문구예요). 서버를 켠 채 브라우저에서 `http://127.0.0.1:4747/api/chat/settings` 를 열어 `rag` 와 `key` 를 보고 아래 줄에서 찾아요 |
+| `rag.state` 가 `missing` | `npm run rag:setup`을 아직 안 했거나 실패한 거예요. 다시 실행해요 |
+| `key` 가 `false` | OpenAI 키가 없는 거예요. `.env`에 `OPENAI_API_KEY`를 넣고 서버를 다시 켜요 |
+| `rag.reason` 이 `port_in_use` | 챗봇 서버 포트를 다른 프로그램이 쓰고 있어요. 다른 spaceLog를 닫거나, `SPACELOG_RAG_PORT`로 다른 포트를 정해요 |
+| `rag.reason` 이 `too_many_restarts`, 또는 `rag.state` 가 `off` | 챗봇 서버가 멈췄어요. spaceLog 서버를 다시 켜요 |
 | `rag/.venv`가 깨졌다는 메시지, 파이썬을 지우거나 옮긴 뒤 | `rag/.venv` 폴더를 지우고 `npm run rag:setup`을 다시 실행해요 |
 
 ## 데모로 점검하기

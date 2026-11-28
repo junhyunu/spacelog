@@ -41,11 +41,14 @@ function clock(iso, now) {
 
 /** 설정 탭의 색인 상태 한 줄(스펙 7장). 빼 둔 행성의 별은 세지 않는다. */
 export function indexLine(index, now = new Date()) {
-  if (!index || typeof index !== 'object') return '챗봇이 읽은 기록: 미확인';
+  if (!index || typeof index !== 'object') return '읽은 기록을 확인하지 못했어요';
   const total = Math.max(0, (Number(index.total) || 0) - (Number(index.skipped) || 0));
   const done = Number(index.done) || 0;
   if (index.indexing) return `읽는 중… ${num(done)} / ${num(total)}`;
-  return `챗봇이 읽은 기록: 별 ${num(total)}개 중 ${num(done)}개 · 마지막으로 읽은 시각 ${clock(index.last_indexed_at, now)}`;
+  if (total === 0) return '챗봇이 읽을 별이 아직 없어요';
+  // 마지막으로 읽은 때는 알 때만 붙인다
+  const at = Number.isNaN(Date.parse(index.last_indexed_at)) ? '' : ` · ${clock(index.last_indexed_at, now)}`;
+  return done >= total ? `챗봇이 별 ${num(total)}개를 모두 읽었어요${at}` : `챗봇이 별 ${num(total)}개 중 ${num(done)}개를 읽었어요${at}`;
 }
 
 /** 읽지 못한 별이 있으면 그 줄, 없으면 ''. */
@@ -68,6 +71,10 @@ export function sourceCardModel(source, planets = [], now = new Date()) {
   };
 }
 
+// 사용자가 고칠 수 없는 까닭(설치 안 됨 · 키 없음 · 포트 겹침 · 서버 꺼짐)은 까닭을 말하지 않고 이 한 줄만 보인다.
+// 화면은 배포된 서비스의 사용자 기준이다. 까닭은 GET /api/chat/settings 의 rag · key 로 본다(README "문제가 생기면")
+const UNAVAILABLE = '지금은 챗봇을 쓸 수 없어요. 잠시 뒤에 다시 해 주세요';
+
 /**
  * 챗봇을 쓸 수 없는 이유(없으면 ''). status = { rag: { state, reason }, key }.
  * key는 파이썬이 ready일 때만 true/false, 모르면 null(그때는 막지 않는다).
@@ -75,15 +82,14 @@ export function sourceCardModel(source, planets = [], now = new Date()) {
 export function unavailableMessage(status) {
   const state = status?.rag?.state;
   const reason = status?.rag?.reason;
-  if (state === 'ready') return status?.key === false ? 'OpenAI 키가 없어요. .env 파일에 키를 넣고 서버를 다시 켜 주세요' : '';
-  if (state === 'missing') return '챗봇을 준비하지 못했어요. README의 챗봇 설치 순서를 따라 주세요';
+  if (state === 'ready') return status?.key === false ? UNAVAILABLE : '';
+  if (state === 'missing') return UNAVAILABLE;
   if (state === 'starting') return '챗봇을 준비하는 중이에요. 잠시 뒤에 다시 열어 주세요';
   if (state === 'crashed') {
-    if (reason === 'port_in_use') return '챗봇 서버 포트를 다른 프로그램이 쓰고 있어요. 다른 spaceLog가 켜져 있으면 닫아 주세요';
-    if (reason === 'too_many_restarts') return '챗봇 서버가 계속 멈춰요. spaceLog 서버를 다시 켜 주세요';
-    return '챗봇 서버가 멈춰서 다시 켜는 중이에요. 잠시 뒤에 다시 열어 주세요';
+    if (reason === 'port_in_use' || reason === 'too_many_restarts') return UNAVAILABLE;
+    return '챗봇을 다시 준비하는 중이에요. 잠시 뒤에 다시 열어 주세요'; // 저절로 다시 켜진다
   }
-  if (state === 'off') return '챗봇 서버가 꺼져 있어요. spaceLog 서버를 다시 켜 주세요';
+  if (state === 'off') return UNAVAILABLE;
   return '챗봇 상태를 확인하지 못했어요. 잠시 뒤에 다시 열어 주세요';
 }
 
@@ -124,9 +130,9 @@ export function relativeTime(iso, now = new Date()) {
 }
 
 const ERRORS = {
-  rag_unavailable: '챗봇 서버와 연결되지 않았어요. 잠시 뒤에 다시 물어 주세요',
-  key_missing: 'OpenAI 키가 없어요. .env 파일에 키를 넣고 서버를 다시 켜 주세요',
-  openai_error: 'OpenAI에서 답을 받지 못했어요. 잠시 뒤에 다시 물어 주세요',
+  rag_unavailable: '챗봇과 연결되지 않았어요. 잠시 뒤에 다시 물어 주세요',
+  key_missing: UNAVAILABLE,
+  openai_error: '답을 받지 못했어요. 잠시 뒤에 다시 물어 주세요',
   too_broad: '범위가 너무 넓어요. 기간이나 행성을 좁혀 주세요',
   bad_request: '질문을 읽지 못했어요. 조금 바꿔서 다시 물어 주세요',
   interrupted: '답을 끝내지 못했어요. 다시 물어 주세요',

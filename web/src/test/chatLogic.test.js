@@ -71,18 +71,18 @@ describe('indexLine', () => {
   test('done line with last time (today → time only)', () => {
     const at = new Date(2026, 10, 13, 15, 20).toISOString();
     expect(indexLine({ total: 132, done: 130, failed: 2, pending: 0, skipped: 0, indexing: false, last_indexed_at: at }, now)).toBe(
-      '챗봇이 읽은 기록: 별 132개 중 130개 · 마지막으로 읽은 시각 오후 3:20',
+      '챗봇이 별 132개 중 130개를 읽었어요 · 오후 3:20',
     );
   });
   test('skipped stars are not counted', () => {
     expect(indexLine({ total: 10, done: 4, failed: 0, pending: 0, skipped: 6, indexing: false, last_indexed_at: null }, now)).toBe(
-      '챗봇이 읽은 기록: 별 4개 중 4개 · 마지막으로 읽은 시각 미확인',
+      '챗봇이 별 4개를 모두 읽었어요',
     );
   });
   test('another day shows the date', () => {
     const at = new Date(2026, 10, 12, 9, 5).toISOString();
     expect(indexLine({ total: 1, done: 1, failed: 0, pending: 0, skipped: 0, last_indexed_at: at }, now)).toBe(
-      '챗봇이 읽은 기록: 별 1개 중 1개 · 마지막으로 읽은 시각 11.12 오전 9:05',
+      '챗봇이 별 1개를 모두 읽었어요 · 11.12 오전 9:05',
     );
   });
   test('indexing → progress', () => {
@@ -91,8 +91,11 @@ describe('indexLine', () => {
   test('thousands get separators', () => {
     expect(indexLine({ total: 1240, done: 45, failed: 0, pending: 0, skipped: 0, indexing: true }, now)).toBe('읽는 중… 45 / 1,240');
   });
+  test('nothing to read yet', () => {
+    expect(indexLine({ total: 3, done: 0, failed: 0, pending: 0, skipped: 3, indexing: false, last_indexed_at: null }, now)).toBe('챗봇이 읽을 별이 아직 없어요');
+  });
   test('missing status → 미확인', () => {
-    expect(indexLine(null, now)).toBe('챗봇이 읽은 기록: 미확인');
+    expect(indexLine(null, now)).toBe('읽은 기록을 확인하지 못했어요');
   });
   test('failedLine', () => {
     expect(failedLine({ failed: 2 })).toBe('읽지 못한 별 2개');
@@ -131,15 +134,13 @@ describe('unavailableMessage', () => {
     expect(unavailableMessage({ rag: { state: 'ready' }, key: null })).toBe('');
   });
   test('python missing', () => {
-    expect(unavailableMessage({ rag: { state: 'missing', reason: 'not_installed' } })).toBe('챗봇을 준비하지 못했어요. README의 챗봇 설치 순서를 따라 주세요');
+    expect(unavailableMessage({ rag: { state: 'missing', reason: 'not_installed' } })).toBe('지금은 챗봇을 쓸 수 없어요. 잠시 뒤에 다시 해 주세요');
   });
   test('key missing', () => {
-    expect(unavailableMessage({ rag: { state: 'ready' }, key: false })).toBe('OpenAI 키가 없어요. .env 파일에 키를 넣고 서버를 다시 켜 주세요');
+    expect(unavailableMessage({ rag: { state: 'ready' }, key: false })).toBe('지금은 챗봇을 쓸 수 없어요. 잠시 뒤에 다시 해 주세요');
   });
   test('port in use', () => {
-    expect(unavailableMessage({ rag: { state: 'crashed', reason: 'port_in_use' } })).toBe(
-      '챗봇 서버 포트를 다른 프로그램이 쓰고 있어요. 다른 spaceLog가 켜져 있으면 닫아 주세요',
-    );
+    expect(unavailableMessage({ rag: { state: 'crashed', reason: 'port_in_use' } })).toBe('지금은 챗봇을 쓸 수 없어요. 잠시 뒤에 다시 해 주세요');
   });
   test('starting, crashed, gave up, off all have copy', () => {
     for (const rag of [{ state: 'starting' }, { state: 'crashed', reason: 'exited' }, { state: 'crashed', reason: 'too_many_restarts' }, { state: 'off' }, {}]) {
@@ -148,7 +149,12 @@ describe('unavailableMessage', () => {
       expect(s).not.toMatch(/!/);
     }
     expect(unavailableMessage({ rag: { state: 'starting' } })).toMatch(/준비하는 중/);
-    expect(unavailableMessage({ rag: { state: 'crashed', reason: 'too_many_restarts' } })).toMatch(/다시 켜 주세요/);
+    expect(unavailableMessage({ rag: { state: 'crashed', reason: 'exited' } })).toMatch(/다시 준비하는 중/);
+    // 사용자가 고칠 수 없는 까닭은 모두 같은 한 줄이고, 운영자 말(서버 · 포트 · 키 · README)이 없다
+    for (const rag of [{ state: 'crashed', reason: 'too_many_restarts' }, { state: 'off' }]) expect(unavailableMessage({ rag })).toBe('지금은 챗봇을 쓸 수 없어요. 잠시 뒤에 다시 해 주세요');
+    for (const rag of [{ state: 'missing' }, { state: 'starting' }, { state: 'crashed', reason: 'exited' }, { state: 'crashed', reason: 'port_in_use' }, { state: 'off' }, {}]) {
+      expect(unavailableMessage({ rag })).not.toMatch(/서버|포트|키|README|spaceLog|OpenAI/);
+    }
   });
   test('no status at all → unknown copy', () => {
     expect(unavailableMessage(null)).not.toBe('');
