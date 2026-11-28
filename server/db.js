@@ -10,7 +10,10 @@ import { ensureUnsorted } from './planets.js';
 // 3 = 메모를 본문으로 합침(별의 글은 body 하나. memo 열은 남기지만 쓰지 않는다).
 // 4 = 답 → 띄운 별(messages.saved_star_id). "별로 저장"으로 그 답을 별로 띄웠으면 그 별 id. 별을 지워도 남지만 읽을 때 없는 별은 무시한다.
 // 5 = 자주 찾음(stars.fav 0 · 1). 홈 목록의 ☆. 옛 별은 모두 0 으로 시작한다.
-export const SCHEMA_VERSION = 5;
+// 6 = 잠든 별 블랙홀(리마인드). stars.seen_at = 마지막으로 본 때(상세를 열거나 챗봇 출처를 누른 때, 새 별은 넣은 때),
+//     stars.remind_off_at = 알림을 끈 때(비어 있으면 알림이 켜진 별). 옛 별은 옮긴 때를 본 때로 친다
+//     (업데이트 첫날 오래된 별이 한꺼번에 블랙홀로 몰리지 않게).
+export const SCHEMA_VERSION = 6;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS planets (
@@ -26,7 +29,8 @@ CREATE TABLE IF NOT EXISTS stars (
   file_name TEXT, file_ext TEXT, file_size INTEGER, file_hash TEXT,
   vault_path TEXT, thumb_path TEXT, memo TEXT NOT NULL DEFAULT '',
   planet_id TEXT NOT NULL REFERENCES planets(id), created_at TEXT NOT NULL,
-  search_text TEXT NOT NULL DEFAULT '', fav INTEGER NOT NULL DEFAULT 0);
+  search_text TEXT NOT NULL DEFAULT '', fav INTEGER NOT NULL DEFAULT 0,
+  seen_at TEXT, remind_off_at TEXT);
 CREATE INDEX IF NOT EXISTS stars_planet_created ON stars(planet_id, created_at);
 CREATE TABLE IF NOT EXISTS attachments (
   id TEXT PRIMARY KEY,
@@ -206,6 +210,12 @@ export function openDb(dataDir) {
         // 4 → 5: stars 에 fav 를 더한다(새 DB 는 위 SCHEMA 가 이미 그 칸을 가진 표를 만들었다)
         const starCols = db.prepare("SELECT name FROM pragma_table_info('stars')").all().map((r) => r.name);
         if (!starCols.includes('fav')) db.exec('ALTER TABLE stars ADD COLUMN fav INTEGER NOT NULL DEFAULT 0');
+        // 5 → 6: seen_at · remind_off_at 를 더하고, 이미 있던 별은 지금을 본 때로 친다
+        if (!starCols.includes('remind_off_at')) db.exec('ALTER TABLE stars ADD COLUMN remind_off_at TEXT');
+        if (!starCols.includes('seen_at')) {
+          db.exec('ALTER TABLE stars ADD COLUMN seen_at TEXT');
+          db.prepare('UPDATE stars SET seen_at = ? WHERE seen_at IS NULL').run(new Date().toISOString());
+        }
         db.pragma(`user_version = ${SCHEMA_VERSION}`);
       }).immediate();
     }

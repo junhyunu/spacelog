@@ -35,7 +35,9 @@
       <h2 id="hGreet" data-suck></h2>
       <div class="hstats" id="hStats" data-suck></div>
       <div class="bh-wrap"><canvas id="bhCanvas" aria-hidden="true"></canvas><button type="button" class="btn violet" id="enterBtn">우주로 들어가기</button></div>
-      <p class="hint auth-in" data-suck>버튼을 누르면 블랙홀을 지나 내 우주로 들어가요</p>
+      <p class="hint auth-in" id="hHint" data-suck>버튼을 누르면 블랙홀을 지나 내 우주로 들어가요</p>
+      <!-- 잠든 별이 있으면 위 안내문 대신 뜬다(home.js). 누르면 우주로 들어가 바로 잠든 별 블랙홀로 빨려 들어간다 -->
+      <button type="button" class="h-remind auth-in" id="hRemind" data-suck hidden><canvas class="hr-ico" width="64" height="64" aria-hidden="true"></canvas><span class="hr-t">잠든 별 <b id="hRemindN">0</b>개가 <span class="hr-long">블랙홀에 </span>모였어요</span><em>보러 가기 ›</em></button>
       <p class="hint auth-out" id="hIntro">기록을 별로 띄워 모아 두는 나만의 우주예요</p>
       <!-- 로그인 전에 "우주로 들어가기"를 누르면 뜨는 말풍선. 꼬리가 위로 버튼을 가리킨다 -->
       <div id="hLoginHint" class="card auth-out" role="note" aria-labelledby="hLoginHintTitle" hidden><b id="hLoginHintTitle">로그인하면 내 우주로 들어갈 수 있어요</b><button type="button" class="btn" data-act="login">로그인</button></div>
@@ -276,6 +278,9 @@
     <header><h3 id="acTitle">계정 설정</h3><button type="button" class="btn x ghost" id="acX" aria-label="닫기"><svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></header>
     <label class="fld"><span class="lbl">우주선장 이름</span><input type="text" id="acName" maxlength="20" autocomplete="off" placeholder="예: 우주선장"></label>
     <div class="fld"><span class="lbl">로그인한 계정</span><p class="acct" id="acEmail"></p></div>
+    <!-- 잠든 별 블랙홀: 기간 · 알림 끈 별(remindSettings.js가 채운다). 전체 목록은 같은 창 안에서 #acRemindAll 로 바뀐다 -->
+    <div class="fld rs" id="acRemind"></div>
+    <div class="rs-all" id="acRemindAll" hidden></div>
     <fieldset class="fld pw">
       <legend class="lbl">비밀번호 변경</legend>
       <label>지금 비밀번호<input type="password" id="acPwNow" autocomplete="current-password"></label>
@@ -308,6 +313,9 @@
 <!-- 처음 한 번 말풍선: 버튼 바로 위(우주 안에서만). ✕로 끄거나 챗봇을 한 번 열면 다시 뜨지 않는다 -->
 <div id="chatHint" class="card" role="note" aria-labelledby="chatHintTitle" hidden><p><b id="chatHintTitle">기록에게 물어보세요</b><span>모아 둔 별에서 답을 찾아 드려요</span></p><button type="button" class="btn ghost x" id="chatHintX" aria-label="안내 닫기"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div>
 <button type="button" id="chatBtn" aria-label="챗봇 열기" aria-expanded="false" aria-controls="chatPanel"></button>
+
+<!-- 잠든 별 블랙홀(리마인드) 화면: 오래 안 본 별을 한 장씩. remind.js가 채운다 -->
+<section id="remind" role="dialog" aria-modal="true" aria-labelledby="rmTitle" hidden></section>
 
 <div id="toast" class="card" role="status" aria-live="polite" hidden></div>
 

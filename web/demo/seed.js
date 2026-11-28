@@ -49,6 +49,8 @@ const LONG_RETRO = [
 
 // 별. p = 행성 key(없으면 미분류), d = 며칠 전(0 = 오늘), t = 'HH:MM'(오늘인데 아직 안 된 시각이면 지금보다 조금 전으로)
 // title 이 없으면 서버가 본문 첫 줄 · 파일 이름 · 링크 제목으로 정한다. key 는 대화 기록의 출처로 쓴다.
+// sleep = 마지막으로 본 때가 며칠 전인지(잠든 별 블랙홀). sleep 이 있는 별만 처음부터 블랙홀에 모인다(14일 기준 6개).
+// 나머지는 최근 일주일 안에 본 것으로 친다(seenDaysAgo).
 export const STARS = [
   // ── 미분류(25) ──
   { d: 0, t: '09:12', title: '이번 주 할 일', body: '- Flask 과제 테스트 붙이기\n- 팀 회의 안건 정리\n- 제주 렌터카 확정\n- 도서관 책 반납 (금)' },
@@ -69,12 +71,12 @@ export const STARS = [
   { d: 12, t: '09:40', title: '택배 반품 접수', body: '사이즈 안 맞는 운동화. 수거 기사님 목요일 방문.' },
   { d: 13, t: '14:25', title: 'HTTP 상태 코드 표', links: ['https://developer.mozilla.org/en-US/docs/Web/HTTP/Status'] },
   { d: 15, t: '07:55', title: '아이디어: 습관 앱', body: '체크만 하는 습관 앱 말고, 왜 빼먹었는지 한 줄 적게 하는 앱.' },
-  { d: 17, t: '13:05', title: '카페 메뉴판', files: [png('cafe-menu.png', [120, 84, 60], [230, 210, 180], 200, 260)] },
+  { d: 17, sleep: 17, t: '13:05', title: '카페 메뉴판', files: [png('cafe-menu.png', [120, 84, 60], [230, 210, 180], 200, 260)] },
   { d: 19, t: '16:45', title: 'Flask 에러 메시지 메모', body: 'werkzeug.exceptions.BadRequest: 400 Bad Request\n→ request.json 을 읽을 때 Content-Type 이 application/json 이 아니면 난다.\n→ 프런트에서 headers 빠뜨린 것이 원인.' },
   { d: 21, t: '21:30', title: '선물 리스트', body: '동생: 무선 이어폰 케이스\n아빠: 등산 양말\n친구 집들이: 디퓨저' },
   { d: 24, t: '22:00', title: '지난주 회고 한 줄', body: '계획은 많았고 한 건 절반. 그래도 매일 기록은 했다.' },
   { d: 27, t: '10:10', title: '오래된 메모', body: '버스 카드 충전하기' },
-  { d: 30, t: '15:30', title: '주소 복사해 둔 것', links: ['https://ko.wikipedia.org/wiki/서울특별시'] },
+  { d: 30, sleep: 30, t: '15:30', title: '주소 복사해 둔 것', links: ['https://ko.wikipedia.org/wiki/서울특별시'] },
   { d: 34, t: '20:00', title: '첫 메모', body: 'spaceLog 처음 써 봄. 아무거나 일단 띄워 두기.' },
 
   // ── 원티드 AI 교육(16) ──
@@ -104,8 +106,8 @@ export const STARS = [
   { key: 'book2', p: 'book', d: 4, t: '22:30', title: '『아주 작은 습관의 힘』 메모', body: '목표보다 시스템. 1%씩 나아지면 1년 뒤 37배.\n습관을 쉽게 만들려면 보이게, 쉽게, 만족스럽게.\n→ 러닝화를 현관 앞에 꺼내 두기 시작함.' },
   { p: 'book', d: 9, t: '12:40', title: '읽고 싶은 책', body: '- 『클린 코드』\n- 『사피엔스』 (읽는 중)\n- 『불편한 편의점』\n- 『프로젝트 헤일메리』' },
   { p: 'book', d: 13, t: '19:10', title: '책 표지 사진', files: [png('book-cover.png', [40, 90, 70], [200, 220, 160], 180, 260)] },
-  { key: 'book3', p: 'book', d: 18, t: '21:45', title: '『사피엔스』 3장 정리', body: '수렵채집 시대의 사람들은 생각보다 다양한 음식을 먹고, 일하는 시간도 짧았을 수 있다는 주장.\n농업 혁명이 꼭 삶을 편하게 만든 건 아니었다는 관점이 새로웠다.' },
-  { p: 'book', d: 25, t: '10:20', title: '한강 작가 위키', links: ['https://ko.wikipedia.org/wiki/한강_(작가)'] },
+  { key: 'book3', p: 'book', d: 18, sleep: 18, t: '21:45', title: '『사피엔스』 3장 정리', body: '수렵채집 시대의 사람들은 생각보다 다양한 음식을 먹고, 일하는 시간도 짧았을 수 있다는 주장.\n농업 혁명이 꼭 삶을 편하게 만든 건 아니었다는 관점이 새로웠다.' },
+  { p: 'book', d: 25, sleep: 25, t: '10:20', title: '한강 작가 위키', links: ['https://ko.wikipedia.org/wiki/한강_(작가)'] },
   { p: 'book', d: 31, t: '18:00', title: '독서 모임 일정', body: '매달 마지막 토요일 오후 3시, 동네 북카페.' },
 
   // ── 여행 계획(6) ──
@@ -113,7 +115,7 @@ export const STARS = [
   { key: 'jeju2', p: 'trip', d: 3, t: '22:05', title: '제주 준비물', body: '- 바람막이\n- 보조배터리\n- 선크림\n- 운동화 (오름 올라갈 것)\n- 신분증, 운전면허증\n- 상비약 (멀미약)' },
   { key: 'jeju3', p: 'trip', d: 7, t: '13:30', title: '항공권 비교', files: [txt('항공권 비교.csv', '항공사,출발,도착,왕복 가격\n제주항공,금 07:10,일 20:30,89000\n티웨이,금 08:05,일 21:10,76500\n대한항공,금 09:00,일 19:40,132000\n')] },
   { p: 'trip', d: 11, t: '10:00', title: '렌터카 예약 메모', body: '완전자차 필수. 공항 셔틀 타는 곳 3번 게이트.' },
-  { p: 'trip', d: 20, t: '20:30', title: '부산 당일치기 코스', body: 'KTX 7시 → 해운대 → 청사포 다릿돌 전망대 → 광안리 저녁 → 막차' },
+  { p: 'trip', d: 20, sleep: 20, t: '20:30', title: '부산 당일치기 코스', body: 'KTX 7시 → 해운대 → 청사포 다릿돌 전망대 → 광안리 저녁 → 막차' },
   { p: 'trip', d: 33, t: '23:00', title: '여행 가고 싶은 곳', body: '교토, 치앙마이, 강릉, 통영' },
 
   // ── 일상기록(7) ──
@@ -130,7 +132,7 @@ export const STARS = [
   { p: 'idea', d: 6, t: '15:35', title: '회의록 검색 도구 아이디어', body: '사내 회의록을 RAG로 검색하는 도구. "지난달 결정한 것" 같은 질문에 답하게.\nFlask로 API만 먼저 만들고 화면은 나중에.' },
   { p: 'idea', d: 10, t: '21:05', title: '주말 사이드 프로젝트', body: '동네 도서관 신착 도서 알림 봇. 크롤링 + 텔레그램.' },
   { p: 'idea', d: 16, t: '13:20', title: 'Notion 대신 쓸 정리법', body: '폴더는 3개만: 지금 하는 것, 언젠가, 끝난 것.' },
-  { p: 'idea', d: 26, t: '19:40', title: '온보딩 개선 메모', body: '첫 화면에서 할 일을 하나만 보여 주기. 설명은 나중에.' },
+  { p: 'idea', d: 26, sleep: 26, t: '19:40', title: '온보딩 개선 메모', body: '첫 화면에서 할 일을 하나만 보여 주기. 설명은 나중에.' },
 
   // ── 운동(5) ──
   { key: 'run', p: 'gym', d: 1, t: '07:10', fav: true, title: '러닝 5km', body: '5.02km, 29분 40초. 페이스 5\'55". 마지막 1km 숨참.' },
@@ -376,9 +378,20 @@ export function layoutConversation(conv, anchorMs = Date.now()) {
  * 기준 시각에 맞춘 심을 데이터 전체(체험판용). 파일 바이트는 만들지 않는다(seedFileBytes 로 따로).
  * → { anchor, planets: [{ key, ..., created_at }], stars: [{ ...명세, index, created_at }], conversations: [layoutConversation] }
  */
+/** 별을 마지막으로 본 때가 며칠 전인지: sleep 이 있으면 그대로, 2주 안에 넣은 별은 넣은 날, 그보다 오래된 별은 최근 일주일 안. */
+export function seenDaysAgo(s) {
+  if (typeof s.sleep === 'number') return s.sleep;
+  return s.d <= 13 ? s.d : s.d % 7;
+}
+
 export function resolveSeed(anchor) {
   const at = new Date(anchor);
-  const stars = STARS.map((s, index) => ({ ...s, index, created_at: plannedDate(s.d, s.t, index, at).toISOString() }));
+  const stars = STARS.map((s, index) => ({
+    ...s,
+    index,
+    created_at: plannedDate(s.d, s.t, index, at).toISOString(),
+    seen_at: plannedDate(seenDaysAgo(s), s.t, index, at).toISOString(),
+  }));
   const planetAt = planetDate(stars.map((s) => s.created_at)).toISOString();
   const planets = PLANETS.map((p) => ({ ...p, created_at: planetAt }));
   const conversations = CONVERSATIONS.map((c) => layoutConversation(c, at.getTime()));

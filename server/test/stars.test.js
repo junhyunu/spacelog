@@ -7,8 +7,8 @@ import { cleanup, makeApp } from './helpers.js';
 const HOST = { host: '127.0.0.1:4747' };
 // 별 응답의 칸.
 const STAR_KEYS = [
-  'id', 'type', 'title', 'body', 'memo', 'fav', 'planet_id', 'created_at', 'has_thumb', 'thumb_attachment_id',
-  'attachment_count', 'attachments',
+  'id', 'type', 'title', 'body', 'memo', 'fav', 'planet_id', 'created_at', 'seen_at', 'remind_off', 'has_thumb',
+  'thumb_attachment_id', 'attachment_count', 'attachments',
 ].sort();
 const ATTACHMENT_KEYS = ['id', 'kind', 'position', 'file_name', 'file_ext', 'file_size', 'url', 'link_title', 'has_thumb'].sort();
 
@@ -78,12 +78,15 @@ test('text star: title defaults to first line, max 40 chars', async () => {
     fav: false,
     planet_id: planet.id,
     created_at: expect.any(String),
+    seen_at: expect.any(String),
+    remind_off: false,
     has_thumb: false,
     thumb_attachment_id: null,
     attachment_count: 0,
     attachments: [],
   });
   expect(new Date(star.created_at).toISOString()).toBe(star.created_at);
+  expect(star.seen_at).toBe(star.created_at); // 새 별은 넣은 때부터 센다
 
   const long = await post({ type: 'text', body: `${'가'.repeat(50)}\n다음`, planet_id: planet.id });
   expect(long.title).toBe('가'.repeat(40));

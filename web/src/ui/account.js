@@ -10,6 +10,7 @@ import { setInputBlocked } from '../three/controls.js';
 import { ask } from './confirm.js';
 import { registerEscape } from './escape.js';
 import { trapTab, wireBackdrop } from './planetForm.js';
+import { openRemindSettings, remindSettingsBack, saveRemindSettingsChoice } from './remindSettings.js';
 import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
@@ -95,6 +96,7 @@ function openDialog(which) {
     $('acName').value = account?.name ?? '';
     $('acEmail').textContent = account?.email ?? '';
     for (const id of ['acPwNow', 'acPwNew', 'acPwNew2']) $(id).value = '';
+    openRemindSettings(); // 잠든 별 블랙홀 칸(기간 · 알림 끈 별)
     boxOf(which).querySelector('.card').scrollTop = 0;
     $('acName').focus();
   }
@@ -143,6 +145,7 @@ function onSaveAccount(e) {
 
   closeDialog();
   setAccount({ ...account, name });
+  saveRemindSettingsChoice(); // 잠든 별 기간이 바뀌었으면 저장(실패하면 따로 알린다)
   toast(changingPw ? '저장했어요. 비밀번호도 바꿨어요(시연용)' : '저장했어요');
 }
 
@@ -196,6 +199,7 @@ export function initAccount() {
 // Esc = 닫기(행성 꾸미기 창과 같은 자리). 열려 있는 동안 비행 키를 막는다.
 registerEscape(70, () => {
   if (!open) return false;
+  if (open === 'account' && remindSettingsBack()) return true; // 알림 끈 별 전체 목록이면 설정으로 돌아간다
   closeDialog();
   return true;
 });

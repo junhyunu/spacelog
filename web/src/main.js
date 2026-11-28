@@ -14,6 +14,7 @@ import './styles/chat.css';
 import './styles/account.css';
 import './styles/home.css';
 import './styles/landing.css';
+import './styles/remind.css';
 import './styles/select.css'; // 선택 상자 화살표: 각 창의 선택 상자 규칙 뒤에 와야 한다
 import './styles/press.css'; // 누르는 순간의 반응: 모든 부품 규칙 뒤에 와야 한다
 
@@ -33,6 +34,8 @@ import { initLongPress } from './ui/longPress.js';
 import { initSearch } from './ui/search.js';
 import { initTopbar } from './ui/topbar.js';
 import { initPanel } from './ui/panel.js';
+import { initRemind } from './ui/remind.js';
+import { initRemindTransition } from './ui/remindTransition.js';
 import { closePlanetDelete } from './ui/planetDelete.js';
 import { closePlanetForm, openPlanetForm } from './ui/planetForm.js';
 import { openSave } from './ui/saveModal.js';
@@ -138,6 +141,9 @@ $('goHome').addEventListener('click', () => leaveWorld());
 // W-01 조작 UI. 우주 안에서 'data'가 올 때마다 다시 그리고 3D를 맞춘다(손님 별 포함).
 initHud();
 initSearch();
+// 잠든 별 블랙홀: 잠든 별 수를 센다('data' · 'seen' 때마다). 화면은 우주의 블랙홀('blackHole') · 홈 안내가 연다
+initRemind();
+initRemindTransition({ enter: enterWorld });
 
 // Esc 순서(escape.js): 확인 창 → 행성 꾸미기 창 → 저장 창 → 전환 건너뛰기 → 좁은 화면의 왼쪽 서랍 → 상세에서 목록 → 챗봇 창 닫기 → 패널 닫기
 setEscapeGuards({ isAskOpen, isTransitioning });

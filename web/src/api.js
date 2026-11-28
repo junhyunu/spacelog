@@ -104,6 +104,19 @@ export const api = {
   moveStars: (ids, planetId) => request('POST', '/stars/move', { ids, planet_id: planetId }),
   deleteStars: (ids) => request('POST', '/stars/delete', { ids }),
   deleteStar: (starId) => request('DELETE', `/stars/${id(starId)}`),
+  /** 봤음(상세를 열거나 챗봇 출처를 누름). 잠든 별 화면의 "나중에 다시"도 이것이다. → { id, seen_at } */
+  seenStar: (starId) => request('POST', `/stars/${id(starId)}/seen`),
+
+  /* ---------- 잠든 별 블랙홀(리마인드) ---------- */
+  /** 오래 안 본 별, 오래된 순. → { days, total, stars } (days 0 = 끄기) */
+  remind: ({ limit } = {}) => request('GET', `/remind${qs({ limit })}`),
+  /** 알림 끈 별, 최근에 끈 순. → { stars } */
+  remindOff: () => request('GET', '/remind/off'),
+  /** off: true = 알림 끄기, false = 다시 알림 받기(다시 날짜를 센다). → { changed } */
+  setRemindOff: (ids, off) => request('POST', '/remind/off', { ids, off }),
+  /** → { days } 7 · 14 · 30, 0 = 끄기 */
+  remindSettings: () => request('GET', '/remind/settings'),
+  saveRemindSettings: (days) => request('PUT', '/remind/settings', { days }),
 
   /**
    * 별 하나를 만든다: 글 + 첨부 파일 + 링크(스펙 6-9). → { star, skipped: [{ file_name, reason }] }

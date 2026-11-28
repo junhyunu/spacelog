@@ -17,6 +17,7 @@ import { api } from '../api.js';
 import { store } from '../store.js';
 import { esc, periodRange } from '../util.js';
 import { accountName, isSignedIn } from './account.js';
+import { drawBlackHole } from './blackholeArt.js';
 import { registerEscape } from './escape.js';
 import { initHomeList, renderHomeList } from './homeList.js';
 import { initLanding } from './landing.js';
@@ -280,6 +281,8 @@ function onClick(e) {
   if (el.id === 'enterBtn') {
     if (isSignedIn()) onEnter({});
     else showLoginHint();
+  } else if (el.id === 'hRemind') {
+    if (isSignedIn()) store.emit('remindFromHome'); // remindTransition.js: 우주로 들어간 뒤 블랙홀로 빨려 들어간다
   } else if (el.id === 'hLogin' || el.dataset.act === 'login') store.emit('openLogin');
   else if (el.id === 'hLogout') store.emit('signOut');
   else if (el.id === 'hMe') setMeMenu($('hMeMenu').hidden);
@@ -316,5 +319,36 @@ export function initHome({ enter } = {}) {
   store.on('data', () => {
     if (!store.state.inWorld && !home.hidden && !home.inert) renderHome();
   });
+  // 잠든 별 블랙홀 안내(블랙홀 아래 안내문 자리)
+  store.on('remind', paintRemind);
+  store.on('authChange', paintRemind);
+  paintRemind();
   resumeEmblem();
+}
+
+/* ---------- 잠든 별 안내 ---------- */
+let remindIconDrawn = false;
+
+/** 잠든 별이 있으면(설정이 끄기가 아니면) 안내문 대신 "잠든 별 n개가 블랙홀에 모였어요 · 보러 가기 ›"를 보인다. */
+function paintRemind() {
+  const r = store.state.remind;
+  const n = r && r.days > 0 ? Number(r.total) || 0 : 0;
+  const show = n > 0 && isSignedIn();
+  $('hRemind').hidden = !show;
+  $('hHint').hidden = show;
+  if (!show) return;
+  $('hRemindN').textContent = n.toLocaleString('ko-KR');
+  if (!remindIconDrawn) {
+    remindIconDrawn = true;
+    const cv = $('hRemind').querySelector('.hr-ico');
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#05030d';
+    ctx.beginPath();
+    ctx.arc(32, 32, 32, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.save();
+    ctx.clip();
+    drawBlackHole(ctx, 32, 32, 10, 2);
+    ctx.restore();
+  }
 }

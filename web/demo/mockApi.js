@@ -90,6 +90,12 @@ function attachmentJson(a) {
 
 const attsOf = (st, starId) => st.attachments.filter((a) => a.star_id === starId).sort((a, b) => a.position - b.position);
 
+// 잠든 별 블랙홀: 마지막으로 본 때. 기능이 생기기 전에 저장된 체험판 상태의 별은 기능이 생긴 때(remind_since)부터 센다
+const seenOf = (st, s) => s.seen_at ?? st.remind_since ?? s.created_at;
+const REMIND_DAYS = [0, 7, 14, 30];
+const DAY_MS = 24 * 60 * 60 * 1000;
+const remindDays = (st) => (REMIND_DAYS.includes(st.remind?.days) ? st.remind.days : 14);
+
 function starJson(st, s) {
   const atts = attsOf(st, s.id);
   const thumb = atts.find((a) => a.kind === 'image' && a.thumb);
@@ -102,6 +108,8 @@ function starJson(st, s) {
     fav: Boolean(s.fav),
     planet_id: s.planet_id,
     created_at: s.created_at,
+    seen_at: seenOf(st, s),
+    remind_off: Boolean(s.remind_off_at),
     has_thumb: Boolean(thumb),
     thumb_attachment_id: thumb ? thumb.id : null,
     attachment_count: atts.length,
@@ -198,6 +206,11 @@ export function createMockApi({
   function ready() {
     readyP ??= Promise.resolve(store ?? openStore()).then((s) => {
       current = s;
+      // 잠든 별 블랙홀이 생기기 전의 상태: 지금부터 센다(오래된 별이 한꺼번에 블랙홀로 몰리지 않게. 서버의 판 6 옮기기와 같다)
+      if (!s.state.remind_since) {
+        s.state.remind_since = new Date().toISOString();
+        s.commit().catch(() => {});
+      }
       chat.recover(s); // 새로 고침으로 끊긴 답은 failed / interrupted(서버를 켤 때와 같다)
       s.on('storage-error', (e) => notice(e.message));
       if (s.storageError) notice(s.storageError.message);
@@ -444,9 +457,78 @@ export function createMockApi({
         if (!planetExists(s.state, src.planet_id)) throw fail(400, 'unknown_planet');
         out.planet_id = src.planet_id;
       }
+      if (src.seen_at !== undefined) {
+        const t = typeof src.seen_at === 'string' ? Date.parse(src.seen_at) : NaN;
+        if (Number.isNaN(t)) throw fail(400, 'invalid_seen_at');
+        out.seen_at = new Date(t).toISOString();
+      }
+      if (src.remind_off !== undefined) {
+        if (typeof src.remind_off !== 'boolean') throw fail(400, 'invalid_remind_off');
+        out.remind_off_at = src.remind_off ? new Date().toISOString() : null;
+      }
       Object.assign(star, out);
       await s.commit();
       return starJson(s.state, star);
+    }),
+
+    seenStar: route(async (s, starId) => {
+      const star = findStar(s.state, String(starId));
+      if (!star) throw fail(404, 'not_found');
+      star.seen_at = new Date().toISOString();
+      await s.commit();
+      return { id: star.id, seen_at: star.seen_at };
+    }),
+
+    /* ---------- 잠든 별 블랙홀(server/remind.js) ---------- */
+    remind: route((s, { limit } = {}) => {
+      const lim = q(limit);
+      let n = 20;
+      if (lim !== undefined) {
+        if (!/^[1-9]\d{0,2}$/.test(lim) || Number(lim) > 100) throw fail(400, 'invalid_query');
+        n = Number(lim);
+      }
+      const st = s.state;
+      const days = remindDays(st);
+      if (!days) return { days, total: 0, stars: [] };
+      const cutoff = new Date(Date.now() - days * DAY_MS).toISOString();
+      const list = st.stars
+        .filter((x) => !x.remind_off_at && seenOf(st, x) < cutoff)
+        .sort((a, b) => (seenOf(st, a) < seenOf(st, b) ? -1 : seenOf(st, a) > seenOf(st, b) ? 1 : a.row - b.row));
+      return { days, total: list.length, stars: list.slice(0, n).map((x) => starJson(st, x)) };
+    }),
+
+    remindOff: route((s) => ({
+      stars: s.state.stars
+        .filter((x) => x.remind_off_at)
+        .sort((a, b) => (a.remind_off_at < b.remind_off_at ? 1 : a.remind_off_at > b.remind_off_at ? -1 : b.row - a.row))
+        .map((x) => starJson(s.state, x)),
+    })),
+
+    setRemindOff: route(async (s, ids, off) => {
+      const body = json({ ids, off }) ?? {};
+      checkIds(body.ids);
+      if (typeof body.off !== 'boolean') throw fail(400, 'invalid_off');
+      const at = new Date().toISOString();
+      let changed = 0;
+      for (const id of new Set(body.ids)) {
+        const star = findStar(s.state, id);
+        if (!star) continue;
+        if (body.off) star.remind_off_at = at;
+        else if (star.remind_off_at) Object.assign(star, { remind_off_at: null, seen_at: at });
+        else continue;
+        changed += 1;
+      }
+      if (changed) await s.commit();
+      return { changed };
+    }),
+
+    remindSettings: route((s) => ({ days: remindDays(s.state) })),
+
+    saveRemindSettings: route(async (s, days) => {
+      if (!REMIND_DAYS.includes(days)) throw fail(400, 'invalid_remind_settings');
+      s.state.remind = { days };
+      await s.commit();
+      return { days };
     }),
 
     moveStars: route(async (s, ids, planetId) => {
@@ -546,7 +628,7 @@ export function createMockApi({
       });
       const star = {
         id, title: starTitle, body: parsed.body, memo: parsed.memo ?? '', fav: false, planet_id: parsed.planet_id,
-        created_at: created, row: s.nextRow(),
+        created_at: created, seen_at: created, row: s.nextRow(),
       };
       st.stars.push(star);
       await s.commit();

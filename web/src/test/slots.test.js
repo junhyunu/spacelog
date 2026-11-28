@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { UNSORTED_POSITION, UNSORTED_SLOT, overviewDistance, slotPosition } from '../three/slots.js';
+import { BLACK_HOLE_POSITION, UNSORTED_POSITION, UNSORTED_SLOT, overviewDistance, slotPosition } from '../three/slots.js';
 
 test('first four slots are the prototype sample positions', () => {
   expect(slotPosition(0)).toEqual([0, 0, -34]);
@@ -46,6 +46,13 @@ test('no two of the first 40 slots are closer than 14', () => {
       const d = Math.hypot(all[a][0] - all[b][0], all[a][1] - all[b][1], all[a][2] - all[b][2]);
       expect(d, `slot ${a} vs ${b}`).toBeGreaterThanOrEqual(14);
     }
+  }
+});
+
+test('the remind black hole is more than 14 away from the first 40 slots and the unsorted planet', () => {
+  for (const p of [...[...Array(40)].map((_, i) => slotPosition(i)), [...UNSORTED_POSITION]]) {
+    const d = Math.hypot(p[0] - BLACK_HOLE_POSITION[0], p[1] - BLACK_HOLE_POSITION[1], p[2] - BLACK_HOLE_POSITION[2]);
+    expect(d, String(p)).toBeGreaterThan(14);
   }
 });
 

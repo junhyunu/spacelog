@@ -307,26 +307,33 @@ function linkRow(att) {
   );
 }
 
-function topHtml(ctx, star) {
-  const date = fullDate(star.created_at);
-  const kind = contentLabel(star);
-  const na = (text, unknown) => (unknown ? `<span class="na">${esc(text)}</span>` : esc(text));
+function attsHtml(ctx, star) {
   const { images, files, links } = groupAttachments(star);
   const viewing = images.find((a) => same(a.id, ctx.view)) ?? null;
   const count = images.length + files.length + links.length;
-  const atts = count
+  return count
     ? `<div class="atts"><div class="lbl">첨부 ${count.toLocaleString('ko-KR')}개</div>` +
       (viewing ? viewerHtml(ctx, viewing) : '') +
       (images.length ? `<div class="igrid">${images.map((a) => imageTile(ctx, a)).join('')}</div>` : '') +
       (files.length || links.length ? `<ul class="arows">${files.map(fileRow).join('')}${links.map(linkRow).join('')}</ul>` : '') +
       '</div>'
     : '';
-  // 본문은 여기 그리지 않는다: 아래 "메모" 칸이 본문을 보여 주고 고친다
+}
+
+// extra: 정보 칸 끝에 더할 줄(잠든 별 화면의 "마지막으로 본 날")
+function metaHtml(star, extra = '') {
+  const date = fullDate(star.created_at);
+  const kind = contentLabel(star);
+  const na = (text, unknown) => (unknown ? `<span class="na">${esc(text)}</span>` : esc(text));
   return (
-    atts +
     `<dl class="meta"><dt>종류</dt><dd>${na(kind, kind === '미확인')}</dd>` +
-    `<dt>넣은 날짜</dt><dd class="mono">${na(date, date.includes('미확인'))}</dd></dl>`
+    `<dt>넣은 날짜</dt><dd class="mono">${na(date, date.includes('미확인'))}</dd>${extra}</dl>`
   );
+}
+
+// 본문은 여기 그리지 않는다: 아래 "메모" 칸이 본문을 보여 주고 고친다
+function topHtml(ctx, star) {
+  return attsHtml(ctx, star) + metaHtml(star);
 }
 
 function bottomHtml(star, home) {
@@ -617,6 +624,50 @@ function showCount(ctx) {
 }
 
 /**
+ * 잠든 별 화면(remind.js)의 카드 = 읽기 전용 상세. 우주 상세 패널과 같은 칸(첨부 · 메모 · 정보)을 그리고,
+ * 원본 열기 · 폴더에서 보기 · 이미지 크게 보기만 된다(이름 고치기 · ☆ · 행성 옮기기 · 지우기 · 메모 고치기는 없다).
+ * 이 카드는 "봤음"을 보내지 않는다(잠든 별 화면에서는 고르기 전까지 그대로 둔다).
+ * @param {HTMLElement} el  카드 안쪽 칸(.rdt). 별마다 새로 만든 칸을 준다
+ * @param {object} star
+ * @param {string} [extraMeta]  정보 칸 끝에 더할 <dt><dd>
+ */
+export function renderReadOnlyDetail(el, star, extraMeta = '') {
+  const ctx = { id: String(star.id), star, container: el, busy: false, view: null, viewNote: '', memoEl: { isConnected: false } };
+  const body = typeof star.body === 'string' && star.body.trim() ? `<div class="lbl">메모</div><div class="rmemo">${esc(star.body)}</div>` : '';
+  const draw = () => {
+    el.querySelector('[data-ro="top"]').innerHTML = attsHtml(ctx, star);
+  };
+  el.innerHTML = `<div data-ro="top"></div>${body}${metaHtml(star, extraMeta)}`;
+  draw();
+  el.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-a], [data-d="unview"]');
+    if (!t || !el.contains(t)) return;
+    if (t.dataset.d === 'unview') {
+      ctx.view = null;
+      draw();
+      return;
+    }
+    const [kind, attId] = String(t.dataset.a).split(':');
+    if (kind === 'view') {
+      ctx.view = same(ctx.view, attId) ? null : attId;
+      draw();
+    } else if (kind === 'open' || kind === 'reveal') openOrReveal(ctx, kind, attId, t);
+  });
+}
+
+// 잠든 별 블랙홀: 상세를 새로 열면 "봤음"을 보낸다(홈 · 우주 · 챗봇 출처 모두 여기를 지난다). 실패해도 상세는 그대로다.
+// 'seen' 을 알려 잠든 별 수(우주의 블랙홀 · 홈 안내)를 다시 세게 한다.
+function markSeen(star) {
+  api
+    .seenStar(star.id)
+    .then((res) => {
+      if (res?.seen_at) star.seen_at = res.seen_at;
+      store.emit('seen', String(star.id));
+    })
+    .catch(() => {});
+}
+
+/**
  * 별 상세를 그린다.
  * @param {HTMLElement} container  #panel. 머리까지 통째로 바꾼다
  * @param {object} star            별(서버가 준 모양)
@@ -679,6 +730,7 @@ export function renderDetail(container, star, planet, { onBack, onClose, home = 
   ctx.countEl = container.querySelector('#memoCnt');
   ctx.memoEl.value = saver.value(); // 저장하지 못하고 떠났던 별이면 쓰던 글이 그대로 있다
   current = ctx;
+  markSeen(star);
   for (const part of ['head', 'top', 'bottom']) renderPart(ctx, part);
   growMemo(ctx);
   showCount(ctx);

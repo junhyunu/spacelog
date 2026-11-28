@@ -9,6 +9,7 @@ import { defaultOpener } from './opener.js';
 import { registerPlanets } from './planets.js';
 import { registerChat } from './rag/chat.js';
 import { createSync } from './rag/sync.js';
+import { registerRemind } from './remind.js';
 import { registerStars } from './stars.js';
 import { sweepVault } from './vault.js';
 
@@ -31,6 +32,8 @@ export function buildApp({
   ragSync: ragSyncOptions = {},
   // 답 작업 옵션(테스트가 시계 · 저장 간격 · 하트비트 간격을 넣는다). server/rag/chat.js 의 registerChat 참고.
   chat: chatOptions = {},
+  // 잠든 별 블랙홀 옵션(테스트가 가짜 시계 now 를 넣는다). server/remind.js 참고.
+  remind: remindOptions = {},
 } = {}) {
   if (!dataDir) throw new Error('buildApp: dataDir is required');
 
@@ -113,6 +116,7 @@ export function buildApp({
   registerAttachments(app);
   registerCharacter(app);
   registerChat(app, chatOptions);
+  registerRemind(app, remindOptions);
 
   return app;
 }

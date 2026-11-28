@@ -18,7 +18,10 @@ export class ApiError extends Error {
   }
 }
 
-const STAR_COLUMNS = ['id', 'type', 'title', 'body', 'memo', 'planet_id', 'created_at', 'search_text'];
+const STAR_COLUMNS = ['id', 'type', 'title', 'body', 'memo', 'planet_id', 'created_at', 'search_text', 'seen_at'];
+
+// 잠든 별 블랙홀(server/remind.js)이 보는 칸. 이 칸만 바꾸는 고치기는 챗봇 색인과 상관없다.
+const INDEX_FREE_KEYS = new Set(['fav', 'seen_at', 'remind_off']);
 const ATTACHMENT_COLUMNS = [
   'id', 'star_id', 'kind', 'position', 'file_name', 'file_ext', 'file_size', 'file_hash',
   'vault_path', 'thumb_path', 'url', 'link_title', 'created_at',
@@ -59,6 +62,8 @@ export function toStarJson(row, attachments = []) {
     fav: row.fav === 1 || row.fav === true, // 자주 찾음(홈 목록의 ☆)
     planet_id: row.planet_id,
     created_at: row.created_at,
+    seen_at: row.seen_at ?? row.created_at, // 마지막으로 본 때(잠든 별 블랙홀)
+    remind_off: Boolean(row.remind_off_at), // 알림을 끈 별(잠든 별 블랙홀에 모으지 않는다)
     has_thumb: Boolean(thumb),
     thumb_attachment_id: thumb ? thumb.id : null,
     attachment_count: atts.length,
@@ -124,6 +129,7 @@ export function insertStar(db, fields) {
     memo: fields.memo ?? '',
     planet_id: fields.planet_id,
     created_at: created,
+    seen_at: fields.seen_at ?? created, // 새 별은 넣은 때부터 센다
   };
   row.search_text = buildSearchText(row, atts);
   const insStar = db.prepare(
@@ -208,7 +214,20 @@ function parsePatch(db, body) {
     if (!planetExists(db, src.planet_id)) throw new ApiError(400, 'unknown_planet');
     out.planet_id = src.planet_id;
   }
+  // 잠든 별 화면의 되돌리기가 쓴다: 본 때를 이전 값으로, 알림 끄기를 이전 상태로
+  if (src.seen_at !== undefined) out.seen_at = checkTime(src.seen_at, 'invalid_seen_at');
+  if (src.remind_off !== undefined) {
+    if (typeof src.remind_off !== 'boolean') throw new ApiError(400, 'invalid_remind_off');
+    out.remind_off_at = src.remind_off ? new Date().toISOString() : null;
+  }
   return out;
+}
+
+// 시각 문자열 → ISO. 읽을 수 없으면 400.
+export function checkTime(value, code) {
+  const t = typeof value === 'string' ? Date.parse(value) : NaN;
+  if (Number.isNaN(t)) throw new ApiError(400, code);
+  return new Date(t).toISOString();
 }
 
 export function registerStars(app) {
@@ -259,17 +278,28 @@ export function registerStars(app) {
         next.attachments = attachmentsOf(db, id);
         next.search_text = buildSearchText(next, next.attachments);
         db.prepare(
-          'UPDATE stars SET title = @title, body = @body, memo = @memo, fav = @fav, planet_id = @planet_id, search_text = @search_text WHERE id = @id',
-        ).run({ id, title: next.title, body: next.body ?? null, memo: next.memo, fav: next.fav ? 1 : 0, planet_id: next.planet_id, search_text: next.search_text });
+          'UPDATE stars SET title = @title, body = @body, memo = @memo, fav = @fav, planet_id = @planet_id, search_text = @search_text, seen_at = @seen_at, remind_off_at = @remind_off_at WHERE id = @id',
+        ).run({
+          id, title: next.title, body: next.body ?? null, memo: next.memo, fav: next.fav ? 1 : 0, planet_id: next.planet_id,
+          search_text: next.search_text, seen_at: next.seen_at ?? null, remind_off_at: next.remind_off_at ?? null,
+        });
         return next;
       })();
-      // 자주 찾음만 바꾼 요청은 챗봇 색인과 상관없다(글 · 제목 · 행성이 그대로다)
+      // 자주 찾음 · 본 때 · 알림 끄기만 바꾼 요청은 챗봇 색인과 상관없다(글 · 제목 · 행성이 그대로다)
       const keys = Object.keys(req.body && typeof req.body === 'object' ? req.body : {});
-      if (!(keys.length === 1 && keys[0] === 'fav')) app.ragSync?.markStars([id], 'patch');
+      if (!(keys.length > 0 && keys.every((k) => INDEX_FREE_KEYS.has(k)))) app.ragSync?.markStars([id], 'patch');
       return toStarJson(updated, updated.attachments);
     } catch (err) {
       return fail(reply, err);
     }
+  });
+
+  // 봤음: 상세를 열거나 챗봇 출처를 누르면 화면이 보낸다. 시각은 서버 시계로 적는다(잠든 별 블랙홀의 기준).
+  app.post('/api/stars/:id/seen', async (req, reply) => {
+    const seenAt = new Date().toISOString();
+    const res = db.prepare('UPDATE stars SET seen_at = ? WHERE id = ?').run(seenAt, req.params.id);
+    if (res.changes === 0) return reply.code(404).send({ error: 'not_found' });
+    return { id: req.params.id, seen_at: seenAt };
   });
 
   // 별 여러 개를 한꺼번에 지운다. 없는 별 · 중복은 건너뛰고 실제로 지운 수를 돌려준다.

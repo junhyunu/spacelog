@@ -16,7 +16,7 @@ import { STORAGE_ERROR_TOAST, buildEmptyState, memoryAdapter, openStore } from '
 
 const HOST = { host: '127.0.0.1:4747' };
 const ID_KEYS = new Set(['id', 'planet_id', 'thumb_attachment_id']);
-const TIME_KEYS = new Set(['created_at']);
+const TIME_KEYS = new Set(['created_at', 'seen_at']);
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
 // id · 시각은 타입만, 그 밖의 값은 그대로 남긴 비교용 모양
@@ -216,6 +216,39 @@ describe('계약: 실제 서버와 같은 응답 모양 · 오류 코드', () =>
     await bothFail(['PATCH', `/api/stars/${S.text[0]}`, { body: null }], () => api.patchStar(S.text[1], { body: null }), err(400, 'invalid_body'));
     await bothFail(['PATCH', `/api/stars/${S.text[0]}`, { planet_id: 'nope' }], () => api.patchStar(S.text[1], { planet_id: 'nope' }), err(400, 'unknown_planet'));
     await bothFail(['PATCH', '/api/stars/nope', { fav: true }], () => api.patchStar('nope', { fav: true }), err(404, 'not_found'));
+  });
+
+  test('잠든 별 블랙홀: 봤음 · 목록 · 알림 끄기 · 설정 · 오류 코드', async () => {
+    await both(['GET', '/api/remind'], () => api.remind());
+    await both(['GET', '/api/remind/settings'], () => api.remindSettings());
+    // 오래전에 본 것으로 돌려 두면(되돌리기와 같은 요청) 블랙홀에 모인다
+    for (const [key, at] of [['text', '2026-01-01T00:00:00.000Z'], ['link', '2026-02-01T00:00:00.000Z']]) {
+      await both(['PATCH', `/api/stars/${S[key][0]}`, { seen_at: at }], () => api.patchStar(S[key][1], { seen_at: at }));
+    }
+    const [rs, rm] = await both(['GET', '/api/remind?limit=1'], () => api.remind({ limit: 1 }));
+    expect([rs.total, rm.total]).toEqual([2, 2]);
+    expect(rm.stars[0].title).toBe(rs.stars[0].title); // 오래 안 본 순
+    await both(['POST', `/api/stars/${S.link[0]}/seen`], () => api.seenStar(S.link[1]));
+    await both(['GET', '/api/remind'], () => api.remind());
+    await both(['POST', '/api/remind/off', { ids: [S.text[0], 'nope'], off: true }], () => api.setRemindOff([S.text[1], 'nope'], true));
+    await both(['GET', '/api/remind/off'], () => api.remindOff());
+    await both(['GET', '/api/remind'], () => api.remind());
+    await both(['PATCH', `/api/stars/${S.text[0]}`, { remind_off: false }], () => api.patchStar(S.text[1], { remind_off: false }));
+    await both(['POST', '/api/remind/off', { ids: [S.text[0]], off: true }], () => api.setRemindOff([S.text[1]], true));
+    await both(['POST', '/api/remind/off', { ids: [S.text[0]], off: false }], () => api.setRemindOff([S.text[1]], false));
+    await both(['GET', '/api/remind'], () => api.remind());
+    for (const days of [0, 7, 30, 14]) {
+      await both(['PUT', '/api/remind/settings', { days }], () => api.saveRemindSettings(days));
+      await both(['GET', '/api/remind'], () => api.remind());
+    }
+    await bothFail(['PUT', '/api/remind/settings', { days: 5 }], () => api.saveRemindSettings(5), err(400, 'invalid_remind_settings'));
+    await bothFail(['GET', '/api/remind?limit=0'], () => api.remind({ limit: 0 }), err(400, 'invalid_query'));
+    await bothFail(['GET', '/api/remind?limit=101'], () => api.remind({ limit: 101 }), err(400, 'invalid_query'));
+    await bothFail(['POST', '/api/remind/off', { ids: [], off: true }], () => api.setRemindOff([], true), err(400, 'invalid_ids'));
+    await bothFail(['POST', '/api/remind/off', { ids: [S.text[0]] }], () => api.setRemindOff([S.text[1]]), err(400, 'invalid_off'));
+    await bothFail(['PATCH', `/api/stars/${S.text[0]}`, { seen_at: 'x' }], () => api.patchStar(S.text[1], { seen_at: 'x' }), err(400, 'invalid_seen_at'));
+    await bothFail(['PATCH', `/api/stars/${S.text[0]}`, { remind_off: 1 }], () => api.patchStar(S.text[1], { remind_off: 1 }), err(400, 'invalid_remind_off'));
+    await bothFail(['POST', '/api/stars/nope/seen'], () => api.seenStar('nope'), err(404, 'not_found'));
   });
 
   test('여러 개 옮기기 · 지우기(500개 제한 포함)', async () => {
@@ -428,6 +461,24 @@ describe('동작: 더미 데이터 · 상대 날짜 · 저장소', () => {
     // 대화 기록 4개(Task 2 가 쓴다)
     expect(store.state.conversations).toHaveLength(CONVERSATIONS.length);
     expect(await a.character()).toEqual({ kind: 'astronaut', suit: 0, accent: 0, flame: 'orange' });
+  });
+
+  test('잠든 별: 처음 상태에서는 sleep 을 준 별만(14일 기준) 블랙홀에 모인다. 기능 전에 저장된 상태는 지금부터 센다', async () => {
+    const store = await openStore({ adapter: memoryAdapter(), now: () => new Date() });
+    const a = createMockApi({ store, notify: () => {} });
+    const res = await a.remind();
+    const sleepy = STARS.filter((s) => typeof s.sleep === 'number' && s.sleep > 14);
+    expect(res).toMatchObject({ days: 14, total: sleepy.length });
+    expect(res.total).toBe(6);
+    expect(res.stars.map((s) => s.seen_at)).toEqual([...res.stars.map((s) => s.seen_at)].sort());
+    // 기능이 생기기 전의 상태(별에 seen_at 이 없다): 지금을 본 때로 쳐서 아무것도 모이지 않는다
+    const adapter = memoryAdapter();
+    const old = await openStore({ adapter, now: () => new Date() });
+    for (const s of old.state.stars) delete s.seen_at;
+    delete old.state.remind_since;
+    const b = createMockApi({ store: old, notify: () => {} });
+    expect((await b.remind()).total).toBe(0);
+    expect(old.state.remind_since).toEqual(expect.any(String));
   });
 
   test('다시 열어도(다음 날) 기준 시각이 그대로라 날짜가 밀리지 않고, 처음 상태로 때만 다시 계산한다', async () => {

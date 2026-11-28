@@ -100,7 +100,7 @@ test('a fresh data folder gets the new schema at the current version and no back
   const dataDir = tempDir();
   const db = openDb(dataDir);
   expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
-  expect(SCHEMA_VERSION).toBe(5);
+  expect(SCHEMA_VERSION).toBe(6);
   const cols = db.prepare("SELECT name FROM pragma_table_info('attachments')").all().map((r) => r.name);
   expect(cols).toEqual([
     'id', 'star_id', 'kind', 'position', 'file_name', 'file_ext', 'file_size', 'file_hash',
@@ -504,8 +504,7 @@ test('v4 → v5: stars get fav (0), existing stars are kept as they were, backs 
   db0.close();
 
   const db = openDb(dataDir);
-  expect(SCHEMA_VERSION).toBe(5);
-  expect(db.pragma('user_version', { simple: true })).toBe(5);
+  expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
   expect(db.prepare("SELECT title, body, planet_id, created_at, search_text, fav FROM stars WHERE id = 's1'").get()).toEqual({
     title: '제목', body: '글', planet_id: 'p1', created_at: '2026-11-02T00:00:00.000Z', search_text: '제목 글', fav: 0,
   });
@@ -518,6 +517,31 @@ test('v4 → v5: stars get fav (0), existing stars are kept as they were, backs 
   bak.close();
 });
 
+// --- 판 5 → 6 (잠든 별 블랙홀) ---
+test('v5 → v6: stars get seen_at (= migration time, not created_at) and remind_off_at (null), backs up to bak-6, re-opening is a no-op', () => {
+  const dataDir = tempDir();
+  const db0 = openDb(dataDir);
+  db0.exec("INSERT INTO planets (id, name, color_index, deco, slot, created_at) VALUES ('p1', '행성', 1, 'town', 0, '2026-11-01T00:00:00.000Z')");
+  db0.exec("INSERT INTO stars (id, type, title, body, planet_id, created_at, search_text, fav) VALUES ('s1', 'text', '제목', '글', 'p1', '2026-01-02T00:00:00.000Z', '제목 글', 1)");
+  db0.exec('ALTER TABLE stars DROP COLUMN seen_at');
+  db0.exec('ALTER TABLE stars DROP COLUMN remind_off_at');
+  db0.pragma('user_version = 5');
+  db0.close();
+
+  const before = Date.now();
+  const db = openDb(dataDir);
+  expect(db.pragma('user_version', { simple: true })).toBe(6);
+  const row = db.prepare("SELECT title, created_at, fav, seen_at, remind_off_at FROM stars WHERE id = 's1'").get();
+  expect(row).toMatchObject({ title: '제목', created_at: '2026-01-02T00:00:00.000Z', fav: 1, remind_off_at: null });
+  // 옛 별은 옮긴 때를 본 때로 친다(오래된 별이 업데이트 첫날 한꺼번에 블랙홀로 가지 않게)
+  expect(Date.parse(row.seen_at)).toBeGreaterThanOrEqual(before - 1000);
+  db.close();
+  const again = openDb(dataDir);
+  expect(again.prepare("SELECT seen_at FROM stars WHERE id = 's1'").get().seen_at).toBe(row.seen_at);
+  again.close();
+  expect(fs.readdirSync(dataDir).filter((n) => n.includes('bak'))).toEqual(['spacelog.db.bak-6']);
+});
+
 test('opening a database without the unsorted planet adds exactly one, and reopening keeps one', () => {
   const dataDir = tempDir();
   const first = openDb(dataDir);
@@ -528,7 +552,7 @@ test('opening a database without the unsorted planet adds exactly one, and reope
     const rows = db.prepare("SELECT id, name, slot FROM planets WHERE id = 'unsorted'").all();
     expect(rows).toEqual([{ id: 'unsorted', name: '미분류', slot: -1 }]);
     expect(db.prepare('SELECT COUNT(*) AS c FROM planets').get().c).toBe(1);
-    expect(db.pragma('user_version', { simple: true })).toBe(5);
+    expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
     db.close();
   }
 });

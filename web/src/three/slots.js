@@ -30,6 +30,9 @@ export const UNSORTED_SLOT = -1;
 /** 미분류 행성의 고정 좌표. 다른 자리와 조망에서 겹치지 않는다(slots.test.js). */
 export const UNSORTED_POSITION = Object.freeze([14, 3, 0]);
 
+/** 잠든 별 블랙홀(three/blackhole.js)의 고정 좌표: 행성들 오른쪽 위. 행성 자리와 14 넘게 떨어진다(slots.test.js). */
+export const BLACK_HOLE_POSITION = Object.freeze([50, 22, 6]);
+
 const RING_SIZE = 8; // 고리 하나에 놓는 행성 수
 const RING_RADIUS = 80; // 첫 고리 반지름
 const RING_STEP = 28; // 고리마다 늘어나는 반지름

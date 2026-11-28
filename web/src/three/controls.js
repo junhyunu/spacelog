@@ -15,6 +15,7 @@ import { store } from '../store.js';
 import { toast } from '../ui/toast.js';
 import { esc } from '../util.js';
 import { initCharacter, player, resetCharacter, updateCharacter } from './character.js';
+import { blackHoleFraming, blackHoleTargets, updateBlackHole } from './blackhole.js';
 import { eachPlanet, hasPlanet, layoutVersion, pickTargets, planetInfo, planetPositions, updateUniverse } from './planets.js';
 import { camera, initScene, renderer, scene } from './scene.js';
 import { BASE_OVERVIEW, CENTER as CENTER_XYZ, overviewDistance } from './slots.js';
@@ -95,14 +96,15 @@ function isBlocked() {
 // 행성 자리(syncUniverse 뒤) · 창 크기 · 시야각이 바뀌면 다시 계산한다. 프레임마다 불러도 된다.
 // 조망 거리 그대로 보고 있었다면 새 거리로 부드럽게 따라간다(camDist는 건드리지 않는다).
 function refreshOverview(force) {
-  const v = layoutVersion();
+  // 잠든 별 블랙홀이 생기거나 사라져도 다시 잰다(조망에 함께 담는다)
+  const v = `${layoutVersion()}:${blackHoleFraming().length}`;
   const aspect = camera && camera.aspect > 0 ? camera.aspect : 16 / 9;
   const fovDeg = camera && camera.fov > 0 ? camera.fov : 58;
   if (!force && v === ovVersion && aspect === ovAspect && fovDeg === ovFov) return;
   ovVersion = v;
   ovAspect = aspect;
   ovFov = fovDeg;
-  const next = overviewDistance(planetPositions(), { aspect, fovDeg, pitch: OV_PITCH, yaw: OV_YAW });
+  const next = overviewDistance([...planetPositions(), ...blackHoleFraming()], { aspect, fovDeg, pitch: OV_PITCH, yaw: OV_YAW });
   const followed = mode === 'overview' && camDistTarget === OV; // 조망 거리 그대로 보고 있었다
   OV = next;
   if (followed) camDistTarget = OV;
@@ -213,6 +215,12 @@ function pick(e) {
   const m = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
   ray.setFromCamera(m, camera);
   const hit = ray.intersectObjects(pickTargets(), false)[0];
+  // 잠든 별 블랙홀(행성보다 앞에 있을 때만)
+  const hole = ray.intersectObjects(blackHoleTargets(), false)[0];
+  if (hole && (!hit || hole.distance < hit.distance)) {
+    store.emit('blackHole');
+    return;
+  }
   if (!hit) return;
   const { planetId } = hit.object.userData;
   const panelId = store.state.panelPlanetId;
@@ -355,6 +363,7 @@ function step() {
 
   // 자전 · 크기 · 별 공전 · 날아가는 별
   updateUniverse(dt);
+  updateBlackHole(dt, t);
 
   // 행성 충돌(표면 + 1.6) · 가까운 행성(표면에서 8 안)
   let bestId = null;

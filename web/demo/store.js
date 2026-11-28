@@ -201,6 +201,9 @@ export async function buildSeedState(anchor) {
     chat: { enabled: true, consented: true, excluded_planets: [] },
     conversations: [],
     messages: [],
+    // 잠든 별 블랙홀: 기간 설정(14일)과 기능이 생긴 때(별마다 seen_at 이 있어 쓰이지 않지만, 옛 상태와 구분하는 표시)
+    remind: { days: 14 },
+    remind_since: seed.anchor,
   };
   const blobs = new Map();
   const planetId = { unsorted: UNSORTED_ID };
@@ -245,7 +248,8 @@ export async function buildSeedState(anchor) {
     });
     state.row += 1;
     const star = {
-      id, title, body, memo: '', fav: Boolean(s.fav), planet_id: planetId[s.p ?? 'unsorted'], created_at: s.created_at, row: state.row,
+      id, title, body, memo: '', fav: Boolean(s.fav), planet_id: planetId[s.p ?? 'unsorted'], created_at: s.created_at,
+      seen_at: s.seen_at, row: state.row,
     };
     state.stars.push(star);
     if (s.key) byKey.set(s.key, { star, atts });
@@ -279,6 +283,7 @@ export async function buildEmptyState(anchor) {
     state: {
       version: STATE_VERSION, anchor: at, planet_seq: 0, row: 0, planets: [unsortedPlanet(at)], stars: [], attachments: [],
       character: null, chat: { enabled: false, consented: false, excluded_planets: [] }, conversations: [], messages: [],
+      remind: { days: 14 }, remind_since: at,
     },
     blobs: new Map(),
   };
