@@ -29,7 +29,7 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var
 /* W-01 왼쪽 패널(스펙 6-8): 로고 · 요약 · 바로 날아가기 목록 · 조작 안내를 한 카드로. 아래 "W-01 왼쪽 패널"에 이어진다 */
 #help kbd{font-family:var(--f-mono);font-size:11px;background:var(--ink);color:var(--panel);border-radius:5px;padding:1px 6px;margin-right:3px}
 /* 방향키: 키보드에 놓인 순서(← ↑ ↓ →)로, 화살표 넷이 따로 읽히게 사이를 띄운다(붙이면 ←→가 ↔ 한 글자처럼 보인다) */
-#help kbd.arrows{font-family:var(--f-body);font-weight:600;font-size:13px;line-height:1;letter-spacing:.3em;padding:2px calc(6px - .3em) 2px 6px;vertical-align:-1px}
+#help kbd.arrows{font-family:var(--f-body);font-weight:500;letter-spacing:.22em;padding-right:calc(6px - .22em)}
 .dock button{display:flex;align-items:center;gap:10px;font:600 14px var(--f-body);color:var(--ink);background:var(--panel);border:var(--line-row) solid var(--row-line);border-radius:14px;padding:7px 12px 7px 8px;box-shadow:none;cursor:pointer;text-align:left;white-space:nowrap}
 /* 올림: 줄 위 어디든(⋯ 위 포함) 줄 바탕이 연보라. ⋯는 rowmenu.css가 따로(--hover-2) */
 @media (hover:hover){:is(.dock button:hover,.drow:hover > button):not(.more):not(.here):not([aria-pressed="true"]){background:var(--hover)}}
