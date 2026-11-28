@@ -11,6 +11,7 @@ import { universe } from './planets.js';
 import { BLACK_HOLE_POSITION } from './slots.js';
 const HOLE_R = 2.4; // 구멍 반지름(월드). 잠든 별 수 배율을 곱한다
 const TEX = 512;
+const LABEL_H = 2.35; // 이름표 높이(월드). 블랙홀 크기와 상관없이 같다
 const LABEL_FONT = '"Black Han Sans","Malgun Gothic",sans-serif';
 const SUB_FONT = '700 40px "Pretendard Variable",Pretendard,"Malgun Gothic",sans-serif';
 
@@ -44,6 +45,7 @@ function ensure() {
   disk.sprite.scale.set(size, size, 1);
   group.add(disk.sprite);
   label = canvasSprite(768, 200);
+  label.sprite.frustumCulled = false; // 기준점을 내려 띄우므로 구멍이 화면 밖이어도 이름표는 보일 수 있다
   group.add(label.sprite);
   hit = new THREE.Mesh(new THREE.SphereGeometry(HOLE_R * 3.2, 12, 8), new THREE.MeshBasicMaterial({ visible: false }));
   hit.userData.blackHole = true;
@@ -109,8 +111,10 @@ export function updateBlackHole(dt, t) {
   if (!group.visible) return;
   group.scale.setScalar(scale);
   // 이름표는 블랙홀 크기와 상관없이 행성 이름표와 같은 크기로, 원반 위에
-  label.sprite.scale.set(9 / scale, 2.35 / scale, 1);
-  label.sprite.position.y = HOLE_R * 2.1 + 2.2 / scale;
+  label.sprite.scale.set(9 / scale, LABEL_H / scale, 1);
+  // 공간의 위쪽이 아니라 화면의 위쪽으로 올린다(판의 기준점을 내린다). 까닭: 카메라가 기울어 있어
+  // 공간에서 위로 올리면 화면 가장자리에서 이름표가 바깥쪽으로 밀려 구멍 가운데와 어긋난다
+  label.sprite.center.y = 0.5 - (HOLE_R * 2.1 * scale + 2.2) / LABEL_H;
   if (t - lastDraw >= 1 / 30 || t < lastDraw) {
     lastDraw = t;
     const g = disk.ctx;
