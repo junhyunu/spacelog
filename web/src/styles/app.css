@@ -269,7 +269,7 @@ body{word-break:keep-all}
 #confirm{position:fixed;inset:0;z-index:45;background:rgba(10,6,30,.6);display:grid;place-items:center;padding:16px}
 #confirm .card{width:min(400px,100%);padding:18px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box}
 #confirm h3{margin:0;font-size:17px;line-height:1.4;overflow-wrap:anywhere}
-#confirm p{margin:0;font-size:13.5px;color:var(--mute);line-height:1.6}
+#confirm p{margin:0;font-size:13.5px;color:var(--mute);line-height:1.6;white-space:pre-line} /* 설명은 문장마다 줄을 바꾼다(confirm.js setAskDesc) */
 #confirm .row{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
 #confirm input,#confirm select{font:600 14px var(--f-body);border:var(--line) solid var(--ink);border-radius:10px;padding:8px 10px;background:var(--white);color:var(--ink);width:100%;min-height:44px;box-sizing:border-box}
 .btn.yellow{background:var(--yellow);color:var(--ink)}

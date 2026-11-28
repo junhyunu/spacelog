@@ -64,6 +64,11 @@ function wire() {
   $('cYes').addEventListener('click', () => current?.confirm());
 }
 
+/** 설명을 문장마다 줄을 바꿔 넣는다("…요." · "…다." 뒤. #cBody 는 white-space: pre-line). 창이 떠 있는 동안 설명을 바꿀 때도 이것을 쓴다. */
+export function setAskDesc(desc) {
+  $('cBody').textContent = String(desc ?? '').replace(/(?<=[요다]\.)\s+(?=\S)/g, '\n');
+}
+
 /** 확인 창이 떠 있는지. 비행 키 · 끌어다 놓기를 막을 때 본다. */
 export function isAskOpen() {
   return current !== null;
@@ -92,7 +97,7 @@ export function ask({ title, desc = '', confirmLabel = '확인', confirmKind = '
   const box = $('confirm');
   const prevFocus = document.activeElement;
   $('cTitle').textContent = title ?? '';
-  $('cBody').textContent = desc ?? '';
+  setAskDesc(desc);
 
   const extra = $('cExtra');
   extra.textContent = '';

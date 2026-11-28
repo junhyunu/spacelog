@@ -46,9 +46,11 @@ const INDEX_POLL_MS = 2_000;
 const faceOf = (p) => planetFace(p);
 
 const NOTICE = '챗봇을 켜면 질문에 필요한 기록 내용이 OpenAI로 보내져요.';
-const PRIVACY =
-  '파일과 기록은 내 PC에 있고, 챗봇을 켜면 질문에 필요한 내용과 챗봇이 읽어 둘 내용만 OpenAI로 보내져요. 빼 둔 행성의 별은 읽지 않아요.';
-const HISTORY_NOTE = '행성을 빼도, 그 전에 같은 대화에서 나눈 내용은 이어 묻기에 쓰일 수 있어요. 새 대화를 시작하면 쓰이지 않아요.';
+// 챗봇 창의 안내 글(설정 탭 · 처음 켤 때 · 홈 탭)은 문장마다 줄을 바꾼다(좁은 창에서 문장이 줄 가운데서 이어지면 읽기 어렵다). 줄 배열 → sentences()
+const PRIVACY = ['파일과 기록은 내 PC에 있어요.', '챗봇을 켜면 질문에 필요한 내용과 챗봇이 읽어 둘 내용만 OpenAI로 보내져요.', '빼 둔 행성의 별은 읽지 않아요.'];
+const HISTORY_NOTE = ['행성을 빼도, 그 전에 같은 대화에서 나눈 내용은 이어 묻기에 쓰일 수 있어요.', '새 대화를 시작하면 쓰이지 않아요.'];
+const REREAD_HELP = ['답이 엉뚱하거나 예전 내용으로 답하면 눌러 보세요.', '챗봇이 모든 별을 새로 읽어요.'];
+const sentences = (lines) => lines.map(esc).join('<br>');
 
 let btn = null;
 let open = false;
@@ -410,7 +412,7 @@ function renderConsent(body) {
   body.innerHTML =
     '<div class="cp-consent">' +
     `<p class="cp-lead">${esc(NOTICE)}</p>` +
-    '<p class="cp-sub">켜기를 누른 뒤에 기록을 읽기 시작해요. 챗봇이 읽지 않을 행성은 체크해 두세요.</p>' +
+    `<p class="cp-sub">${sentences(['켜기를 누른 뒤에 기록을 읽기 시작해요.', '챗봇이 읽지 않을 행성은 체크해 두세요.'])}</p>` +
     '<div class="lbl" id="cpExLbl">챗봇이 읽지 않을 행성</div>' +
     `<div role="group" aria-labelledby="cpExLbl">${planetChecks(settings?.excluded_planets)}</div>` +
     '<div class="row"><button type="button" class="btn ghost" data-act="cancel">취소</button><button type="button" class="btn yellow" data-act="on">켜기</button></div>' +
@@ -474,7 +476,7 @@ function renderHome(body) {
     '<div class="cp-home">' +
     blockBanner() +
     '<div class="cp-intro"><h3 class="cp-hi">무엇을 찾아 드릴까요</h3>' +
-    '<p class="cp-sub">띄운 별에서 찾아 답해요. 답 아래에 근거가 된 별이 보여요.</p></div>' +
+    `<p class="cp-sub">${sentences(['띄운 별에서 찾아 답해요.', '답 아래에 근거가 된 별이 보여요.'])}</p></div>` +
     '<div class="cp-quick">' +
     qs.map((q, i) => `<button type="button" class="btn ghost" data-q="${i}"${blocked ? ' disabled' : ''}>${esc(q)}</button>`).join('') +
     '</div>' +
@@ -563,9 +565,9 @@ function renderSettings(body) {
       ? `<div class="cp-idx"><span class="cp-line">${esc(failed)}</span><button type="button" class="btn sm" data-act="retry">${ico('refresh-cw', 14)} 다시 시도</button></div>`
       : '') +
     '</section>' +
-    `<section><div class="lbl">내 기록은 어디로 가나요</div><p class="cp-sub">${esc(PRIVACY)}</p><p class="cp-sub">${esc(HISTORY_NOTE)}</p></section>` +
+    `<section><div class="lbl">내 기록은 어디로 가나요</div><p class="cp-sub">${sentences(PRIVACY)}</p><p class="cp-sub">${sentences(HISTORY_NOTE)}</p></section>` +
     '<section><div class="lbl">답이 이상한가요?</div>' +
-    '<p class="cp-sub">답이 엉뚱하거나 예전 내용으로 답하면 눌러 보세요. 챗봇이 모든 별을 새로 읽어요.</p>' +
+    `<p class="cp-sub">${sentences(REREAD_HELP)}</p>` +
     '<div class="cp-idx"><button type="button" class="btn ghost sm" data-act="all">모든 별 다시 읽기</button></div></section>' +
     '</div>';
 

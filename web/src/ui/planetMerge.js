@@ -3,7 +3,7 @@
 // 합친 뒤 패널을 닫거나(우주) 받은 행성으로 거르기를 옮기는(홈) 것은 부르는 쪽이 정한다.
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { ask } from './confirm.js';
+import { ask, setAskDesc } from './confirm.js';
 import { mergeDesc, mergeErrorText, mergeFailure } from './planetLogic.js';
 import { toast } from './toast.js';
 
@@ -30,7 +30,7 @@ export async function mergePlanet(planet) {
   // 고른 행성에 맞춰 설명의 이름을 바꾼다(textContent라 esc가 필요 없다)
   const sel = document.querySelector('#cExtra select');
   sel?.addEventListener('change', () => {
-    document.getElementById('cBody').textContent = mergeDesc(planet.count_total, nameOf(sel.value));
+    setAskDesc(mergeDesc(planet.count_total, nameOf(sel.value)));
   });
   const into = await answer;
   if (!into) return null;
