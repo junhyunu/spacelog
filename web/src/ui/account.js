@@ -1,5 +1,8 @@
-// 로그인 · 계정 설정(시연용). 서버에 계정 기능이 아직 없어서 화면만 보여 준다.
+// 로그인 · 회원가입 · 계정 설정. 서버에 계정 기능이 아직 없어서 화면만 보여 준다(화면은 배포된 서비스처럼 쓴다).
 // - 로그인: 아무 이메일 · 비밀번호로 들어간다. 상태는 이 브라우저(localStorage)에만 남는다.
+// - 회원가입: 로그인 창이 같은 자리에서 모드를 바꾼다(이름 · 비밀번호 확인 칸이 더 보인다). 칸만 검사하고 바로 들어간다.
+// - Google 계정으로 계속하기: 구글 창을 띄우지 않고 바로 들어간다(보여 주기용 계정).
+// - 비밀번호를 잊으셨나요?: 아직 준비 중이라고만 알린다.
 // - 계정 설정: 우주선장 이름은 실제로 바뀐다(이 브라우저에서). 비밀번호 변경 · 회원 탈퇴는 확인 문구만 보여 준다.
 // - 로그인 전에는 body.signed-out: 기록과 관련된 것을 숨긴다(account.css).
 //
@@ -20,6 +23,9 @@ const PW_MIN = 8;
 
 let account = read(); // { email, name } | null
 let open = null; // 'login' | 'account' | null
+let mode = 'login'; // 로그인 창의 모드: 'login' | 'signup'
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const GOOGLE_DEMO_EMAIL = 'google-user@gmail.com';
 let prevFocus = null;
 
 function read() {
@@ -89,8 +95,8 @@ function openDialog(which) {
   showError(which, '');
   boxOf(which).hidden = false;
   if (which === 'login') {
-    $('lgEmail').value = '';
-    $('lgPw').value = '';
+    for (const id of ['lgName', 'lgEmail', 'lgPw', 'lgPw2']) $(id).value = '';
+    setMode('login');
     $('lgEmail').focus();
   } else {
     $('acName').value = account?.name ?? '';
@@ -112,17 +118,48 @@ function closeDialog() {
   prevFocus = null;
 }
 
-/* ---------- 로그인 ---------- */
+/* ---------- 로그인 · 회원가입 ---------- */
+// 같은 창에서 모드만 바꾼다: 제목 · 확정 버튼 · 아래 한 줄이 바뀌고, 가입일 때만 이름 · 비밀번호 확인 칸이 보인다.
+// 적어 둔 이메일 · 비밀번호는 남긴다(잘못 들어왔다가 돌아가도 다시 쓰지 않게)
+function setMode(next) {
+  mode = next;
+  const up = mode === 'signup';
+  $('lgTitle').textContent = up ? '회원가입' : '로그인';
+  $('lgYes').textContent = up ? '가입하기' : '로그인';
+  $('lgNameFld').hidden = !up;
+  $('lgPw2Fld').hidden = !up;
+  $('lgForgot').hidden = up;
+  $('lgPw').autocomplete = up ? 'new-password' : 'current-password';
+  $('lgSwitchText').textContent = up ? '이미 계정이 있나요?' : '처음이신가요?';
+  $('lgSwitch').textContent = up ? '로그인' : '회원가입';
+  showError('login', '');
+}
+
+function enter(next) {
+  closeDialog();
+  setAccount(next);
+  toast(`${account.name}님, 반가워요`);
+}
+
 function onLogin(e) {
   e.preventDefault();
+  const up = mode === 'signup';
+  const name = $('lgName').value.trim();
   const email = $('lgEmail').value.trim();
   const pw = $('lgPw').value;
+  if (up && !name) return showError('login', '우주선장 이름을 적어 주세요');
+  if (up && [...name].length > NAME_MAX) return showError('login', `이름은 ${NAME_MAX}자까지 쓸 수 있어요`);
   if (!email) return showError('login', '이메일을 적어 주세요');
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showError('login', '이메일 모양이 아니에요. 예: name@example.com');
+  if (!EMAIL_RE.test(email)) return showError('login', '이메일 모양이 아니에요. 예: name@example.com');
   if (!pw) return showError('login', '비밀번호를 적어 주세요');
-  closeDialog();
-  setAccount({ email, name: account?.name || '우주선장' });
-  toast(`${account.name}님, 반가워요`);
+  if (up && [...pw].length < PW_MIN) return showError('login', `비밀번호는 ${PW_MIN}자 이상이어야 해요`);
+  if (up && pw !== $('lgPw2').value) return showError('login', '비밀번호 두 칸이 서로 달라요');
+  return enter({ email, name: up ? name : account?.name || '우주선장' });
+}
+
+// 보여 주기용: 구글 창을 띄우지 않고 바로 들어간다
+function onGoogle() {
+  enter({ email: GOOGLE_DEMO_EMAIL, name: account?.name || '우주선장' });
 }
 
 /* ---------- 계정 설정 ---------- */
@@ -179,6 +216,12 @@ export function initAccount() {
   $('lgForm').addEventListener('submit', onLogin);
   $('lgX').addEventListener('click', closeDialog);
   $('lgNo').addEventListener('click', closeDialog);
+  $('lgGoogle').addEventListener('click', onGoogle);
+  $('lgForgot').addEventListener('click', () => toast('비밀번호 찾기는 아직 준비 중이에요'));
+  $('lgSwitch').addEventListener('click', () => {
+    setMode(mode === 'signup' ? 'login' : 'signup');
+    (mode === 'signup' ? $('lgName') : $('lgEmail')).focus();
+  });
   $('acForm').addEventListener('submit', onSaveAccount);
   $('acX').addEventListener('click', closeDialog);
   $('acNo').addEventListener('click', closeDialog);

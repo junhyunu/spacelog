@@ -54,6 +54,7 @@ body:not(.signed-out) .auth-out{display:none!important}
 .authdlg header{display:flex;align-items:center;gap:var(--gap-3)}
 .authdlg h3{flex:1;min-width:0;margin:0;font-family:var(--f-display);font-weight:400;font-size:20px;line-height:1.2}
 .authdlg header .x{width:34px;height:34px;padding:0;flex:none;display:grid;place-items:center}
+.authdlg .fld[hidden]{display:none}
 .authdlg .fld{display:flex;flex-direction:column;gap:var(--gap-1);min-width:0;margin:0;padding:0;border:0}
 .authdlg .lbl{font-size:13px;font-weight:700;padding:0}
 .authdlg input{font:600 14px var(--f-body);border:var(--line) solid var(--ink);border-radius:10px;padding:8px 10px;background:var(--white);color:var(--ink);width:100%;min-height:44px;box-sizing:border-box}
@@ -73,3 +74,17 @@ body:not(.signed-out) .auth-out{display:none!important}
   .authdlg{padding:8px}
   .authdlg .card{padding:14px}
 }
+/* 로그인 · 회원가입 창: Google 버튼 · "또는" 구분 줄 · 글자 링크(비밀번호를 잊으셨나요? · 회원가입 / 로그인) */
+/* Google 버튼은 구글의 모양을 따른다(흰 바탕 · 4색 G · 정해진 문구). 테두리 · 모서리 · 높이만 우리 버튼에 맞춘다 */
+.authdlg .gbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:46px;box-sizing:border-box;padding:8px 14px;border:var(--line) solid var(--ink);border-radius:var(--r-btn);background:var(--white);color:var(--ink);font:700 14.5px var(--f-body);cursor:pointer}
+.authdlg .gbtn .g{flex:none}
+@media (hover:hover){.authdlg .gbtn:hover{background:var(--hover)}}
+.authdlg .gbtn:active{transform:translateY(1px);box-shadow:inset 0 0 0 100vmax rgba(20,12,50,.10)}
+.authdlg .or{display:flex;align-items:center;gap:10px;font-size:12px;font-weight:700;color:var(--mute)}
+.authdlg .or::before,.authdlg .or::after{content:"";flex:1;border-top:1.5px solid var(--row-line)}
+.authdlg .tlink{position:relative;border:0;background:transparent;padding:0;font:700 13px var(--f-body);color:var(--violet-text);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.authdlg .tlink::after{content:"";position:absolute;left:-6px;right:-6px;top:50%;height:44px;transform:translateY(-50%)} /* 누르는 영역 44px */
+.authdlg .tlink[hidden]{display:none}
+.authdlg .forgot{align-self:flex-end;margin-top:-4px;font-weight:600;font-size:12.5px;color:var(--mute)}
+.authdlg .switch{margin:2px 0 0;text-align:center;font-size:13px;color:var(--mute)}
+@media (prefers-reduced-motion:reduce){.authdlg .gbtn:active{transform:none}}
